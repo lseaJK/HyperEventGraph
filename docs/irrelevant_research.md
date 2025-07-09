@@ -13,3 +13,11 @@
 - **ICText**:
   - **链接**: `https://github.com/chunchet-ng/ICText-AGCL`
   - **描述**: 一个用于集成电路（IC）芯片上文字检测与识别的大型数据集。其应用场景是自动光学检测（AOI）中的质量控制，与金融事件无关。
+
+
+
+## 待调研仓库
+
+- https://github.com/liuhuanyong/EventPredictBasedOnEG
+- https://github.com/liuhuanyong/ComplexEventExtraction
+- https://github.com/liuhuanyong/CausalCollocation

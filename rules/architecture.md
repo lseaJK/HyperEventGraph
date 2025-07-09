@@ -15,13 +15,71 @@
         - `高管变动 (Executive Change)`: `公司`, `变动高管`, `职位`, `变动类型(上任/离职)`
         - `法律诉讼 (Legal Proceeding)`: `原告`, `被告`, `诉讼原因`, `涉及金额`, `判决结果`
         - `业绩报告 (Financial Report)`: `公司`, `报告期`, `营收`, `净利润`, `同比增长率`
-    - **集成电路领域**: 由于缺乏统一标准，将根据行业知识（如：供应链、制造流程、市场动态等）自定义事件类型及属性。
+    - **集成电路领域**: 由于缺乏统一标准，将根据行业知识（如：供应链、制造流程、市场动态等）自定义事件类型及属性。经过细化，更新后的 Schema 如下：
       - **事件类型**:
-        - `产能扩张 (Capacity Expansion)`: `公司`, `工厂地点`, `投资金额`, `新增产能`, `技术节点`
-        - `技术突破 (Technological Breakthrough)`: `公司/研究机构`, `技术名称`, `关键指标`, `应用领域`
-        - `供应链风险 (Supply Chain Risk)`: `公司`, `风险类型(断供/涨价)`, `影响环节`, `涉及物料`
-        - `新产品发布 (New Product Launch)`: `公司`, `产品型号`, `性能参数`, `目标市场`
-        - `行业政策 (Industry Policy)`: `发布机构`, `政策名称`, `核心内容`, `影响范围`
+        - `产能扩张 (Capacity Expansion)`: `公司`, `工厂地点`, `投资金额`, `新增产能`, `技术节点`, `预计投产时间`
+        - `技术突破 (Technological Breakthrough)`: `公司/研究机构`, `技术名称`, `关键指标(如制程、良率)`, `应用领域`, `发布日期`
+        - `供应链动态 (Supply Chain Dynamics)`: `公司`, `动态类型(断供/涨价/合作/事故)`, `影响环节`, `涉及物料`, `影响对象(上/下游)`
+        - `新产品发布 (New Product Launch)`: `公司`, `产品型号`, `性能参数`, `目标市场`, `发布日期`
+        - `行业政策 (Industry Policy)`: `发布机构`, `政策名称`, `核心内容`, `影响范围`, `生效日期`
+        - `合作合资 (Collaboration/Joint Venture)`: 
+          - **Schema**:
+            ```json
+            {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "title": "合作合资事件",
+              "description": "描述两个或多个实体之间的合作或合资事件",
+              "type": "object",
+              "properties": {
+                "event_type": {
+                  "description": "事件类型，固定为‘合作合资’",
+                  "type": "string",
+                  "enum": ["合作合资"]
+                },
+                "trigger_words": {
+                  "description": "触发事件的关键动词或短语",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "partners": {
+                  "description": "合作或合资的参与方列表",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "domain": {
+                  "description": "合作或合资所属的业务领域或行业",
+                  "type": "string"
+                },
+                "method": {
+                  "description": "合作的具体方式，如技术授权、共同研发、成立合资公司等",
+                  "type": "string"
+                },
+                "goal": {
+                  "description": "合作旨在达成的目标",
+                  "type": "string"
+                },
+                "validity_period": {
+                  "description": "合作协议的有效期",
+                  "type": "string"
+                },
+                "source": {
+                  "description": "信息来源，如新闻链接或公告名称",
+                  "type": "string"
+                },
+                "publish_date": {
+                  "description": "信息发布的日期",
+                  "type": "string",
+                  "format": "date"
+                }
+              },
+              "required": ["event_type", "partners", "domain", "source", "publish_date"]
+            }
+            ```
+        - `知识产权 (Intellectual Property)`: `公司`, `IP类型(专利诉讼/授权/收购)`, `IP详情`, `涉及金额`, `判决结果`
 3.  **事件抽取与图谱构建**: 
     - **数据预处理**: 设计一个统一的模块，负责处理不同来源的语料，如纯文本、PDF、网页等，将其转化为统一的文本格式。
     - **事件抽取 (Prompt-based)**: 
@@ -102,7 +160,24 @@
     - [ ] 根据评估结果，迭代优化Prompt设计、事件Schema和处理流程。
     - [ ] 完善文档和代码，确保可复现性和可扩展性。
 
-## 四、 提交规范
+## 四、 核心技术路径探索 (弱监督/无监督)
+
+- **调研节点**: 002
+- **使用工具**: `Sequential Thinking`, `DuckDuckGo Search Server`, `GitHub`
+- **策略**:
+  1.  **初步探索**: 借助 `DuckDuckGo` 搜索 "financial event extraction dataset"、"sentece embedding financial" 等关键词，寻找公开的数据集和前沿方法。
+  2.  **深入分析**: 针对有价值的 GitHub 仓库（如 `SentiFM`），分析其实现方法、数据来源和核心思想。
+  3.  **总结归纳**: 整合搜索结果，明确当前技术主流，识别现有工具的优缺点，并为本项目制定清晰的技术选型和实施路径。
+- **结论与洞察**:
+  1.  **LLM + Prompt 是主流**: 当前，利用大型语言模型（LLM）结合精心设计的提示（Prompt）进行事件抽取，是学术界和工业界的主流方案。此方法在零样本（Zero-shot）和少样本（Few-shot）场景下表现优越，适合本项目当前缺乏大规模标注数据的现状。
+  2.  **弱监督/无监督是关键**: 直接获取覆盖目标领域的、高质量的标注数据成本高昂。因此，探索弱监督（Weak Supervision）或无监督（Unsupervised）方法，自动化地从海量无结构文本中构建训练语料，是项目成功的关键。例如，可以利用 `spaCy`、`Flair` 等工具进行命名实体识别（NER），再结合规则或远程监督（Distant Supervision）构建伪标签数据。
+  3.  **`SentiFM` 的启示**: `acorn-datasets/sentifm` 数据集及其相关研究，为我们提供了宝贵的参考。它不仅定义了一套清晰的金融事件分类体系，还验证了“句子嵌入（Sentence Embeddings）+ 分类器”的技术路径在金融情绪分析任务上的有效性。这启发我们可以借鉴此思路，将事件抽取任务部分转化为一个分类问题。
+- **下一步行动计划**:
+  - [ ] **细化事件 Schema**: 参考 `SentiFM` 和其他金融知识，完善 `architecture.md` 中定义的事件类型和属性。
+  - [ ] **技术原型开发 (弱监督)**: 启动一个技术原型，重点评估 `spaCy`, `Flair`, `OpenNRE` 等NLP库在实体识别、关系抽取任务上的表现，并搭建一个初步的伪标签数据生成流水线。
+  - [ ] **知识图谱集成**: 规划如何将抽取的结构化事件数据，高效地存入 `HyperGraphRAG`，并同步更新本文档。
+
+## 五、 提交规范
 
 - 代码、测试、文档分支提交，Commit 规范：
   ```
