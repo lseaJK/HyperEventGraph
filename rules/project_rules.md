@@ -21,5 +21,13 @@
 - `/rules/architecture.md`：规划与决策  
 - `/rules/project_rules.md`：规则总览
 
+## 5. 文档存放
+- `/rules/todo.md`：任务拆解与状态
+- `/rules/architecture.md`：规划与决策
+- `/rules/project_rules.md`：规则总览
+
+## 6. 目录结构说明
+- `/materials`: 存放项目附加的程序，需要同步到github但是在项目构建时可以不用考虑。
+
 ## 特别说明
-总是用中文回复
+- 总是用中文回复

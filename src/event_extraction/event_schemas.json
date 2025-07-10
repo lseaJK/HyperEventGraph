@@ -1,0 +1,175 @@
+{
+    "financial_domain": {
+        "company_merger_and_acquisition": {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "公司并购事件",
+            "description": "描述一家公司收购另一家公司的事件",
+            "type": "object",
+            "properties": {
+                "event_type": {
+                    "description": "事件类型，固定为‘公司并购’",
+                    "type": "string",
+                    "enum": ["公司并购"]
+                },
+                "acquirer": {
+                    "description": "收购方公司",
+                    "type": "string"
+                },
+                "acquired": {
+                    "description": "被收购方公司",
+                    "type": "string"
+                },
+                "deal_amount": {
+                    "description": "交易金额",
+                    "type": "number"
+                },
+                "status": {
+                    "description": "并购状态，如进行中、已完成",
+                    "type": "string"
+                },
+                "announcement_date": {
+                    "description": "公告日期",
+                    "type": "string",
+                    "format": "date"
+                },
+                "source": {
+                    "description": "信息来源",
+                    "type": "string"
+                }
+            },
+            "required": ["event_type", "acquirer", "acquired", "announcement_date", "source"]
+        },
+        "investment_and_financing": {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "投融资事件",
+            "description": "描述公司获得投资或进行融资的事件",
+            "type": "object",
+            "properties": {
+                "event_type": {
+                    "description": "事件类型，固定为‘投融资’",
+                    "type": "string",
+                    "enum": ["投融资"]
+                },
+                "investors": {
+                    "description": "投资方列表",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "company": {
+                    "description": "融资方公司",
+                    "type": "string"
+                },
+                "funding_amount": {
+                    "description": "融资金额",
+                    "type": "number"
+                },
+                "round": {
+                    "description": "融资轮次，如A轮、B轮",
+                    "type": "string"
+                },
+                "related_products": {
+                    "description": "相关产品",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "publish_date": {
+                    "description": "发布日期",
+                    "type": "string",
+                    "format": "date"
+                },
+                "source": {
+                    "description": "信息来源",
+                    "type": "string"
+                }
+            },
+            "required": ["event_type", "investors", "company", "funding_amount", "round", "publish_date", "source"]
+        },
+        "executive_change": {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "高管变动事件",
+            "description": "描述公司高管职位发生变动的事件",
+            "type": "object",
+            "properties": {
+                "event_type": {
+                    "description": "事件类型，固定为‘高管变动’",
+                    "type": "string",
+                    "enum": ["高管变动"]
+                },
+                "company": {
+                    "description": "相关公司",
+                    "type": "string"
+                },
+                "executive_name": {
+                    "description": "变动的高管姓名",
+                    "type": "string"
+                },
+                "position": {
+                    "description": "相关职位",
+                    "type": "string"
+                },
+                "change_type": {
+                    "description": "变动类型，如上任、离职",
+                    "type": "string",
+                    "enum": ["上任", "离职"]
+                },
+                "change_date": {
+                    "description": "变动日期",
+                    "type": "string",
+                    "format": "date"
+                },
+                "source": {
+                    "description": "信息来源",
+                    "type": "string"
+                }
+            },
+            "required": ["event_type", "company", "executive_name", "position", "change_type", "change_date", "source"]
+        },
+        "legal_proceeding": {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "法律诉讼事件",
+            "description": "描述公司涉及的法律诉讼事件",
+            "type": "object",
+            "properties": {
+                "event_type": {
+                    "description": "事件类型，固定为‘法律诉讼’",
+                    "type": "string",
+                    "enum": ["法律诉讼"]
+                },
+                "plaintiff": {
+                    "description": "原告方",
+                    "type": "string"
+                },
+                "defendant": {
+                    "description": "被告方",
+                    "type": "string"
+                },
+                "cause_of_action": {
+                    "description": "诉讼原因",
+                    "type": "string"
+                },
+                "amount_involved": {
+                    "description": "涉及金额",
+                    "type": "number"
+                },
+                "judgment": {
+                    "description": "判决结果",
+                    "type": "string"
+                },
+                "filing_date": {
+                    "description": "立案日期",
+                    "type": "string",
+                    "format": "date"
+                },
+                "source": {
+                    "description": "信息来源",
+                    "type": "string"
+                }
+            },
+            "required": ["event_type", "plaintiff", "defendant", "cause_of_action", "filing_date", "source"]
+        }
+    }
+}

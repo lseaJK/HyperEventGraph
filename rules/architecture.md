@@ -11,17 +11,394 @@
     - **金融领域**: 基于金融行业业务本体论 (FIBO) 进行设计。
       - **事件类型**: 
         - `公司并购 (Merger & Acquisition)`: `收购方`, `被收购方`, `交易金额`, `并购状态`, `公告日期`
+          - **Schema**:
+            ```json
+            {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "title": "公司并购事件",
+              "description": "描述一家公司收购另一家公司的事件",
+              "type": "object",
+              "properties": {
+                "event_type": {
+                  "description": "事件类型，固定为‘公司并购’",
+                  "type": "string",
+                  "enum": ["公司并购"]
+                },
+                "acquirer": {
+                  "description": "收购方公司",
+                  "type": "string"
+                },
+                "acquired": {
+                  "description": "被收购方公司",
+                  "type": "string"
+                },
+                "deal_amount": {
+                  "description": "交易金额",
+                  "type": "number"
+                },
+                "status": {
+                  "description": "并购状态，如进行中、已完成",
+                  "type": "string"
+                },
+                "announcement_date": {
+                  "description": "公告日期",
+                  "type": "string",
+                  "format": "date"
+                },
+                "source": {
+                  "description": "信息来源",
+                  "type": "string"
+                }
+              },
+              "required": ["event_type", "acquirer", "acquired", "announcement_date", "source"]
+            }
+            ```
         - `投融资 (Investment & Financing)`: `投资方`, `融资方`, `融资金额`, `轮次`, `相关产品`
+          - **Schema**:
+            ```json
+            {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "title": "投融资事件",
+              "description": "描述公司获得投资或进行融资的事件",
+              "type": "object",
+              "properties": {
+                "event_type": {
+                  "description": "事件类型，固定为‘投融资’",
+                  "type": "string",
+                  "enum": ["投融资"]
+                },
+                "investors": {
+                  "description": "投资方列表",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "company": {
+                  "description": "融资方公司",
+                  "type": "string"
+                },
+                "funding_amount": {
+                  "description": "融资金额",
+                  "type": "number"
+                },
+                "round": {
+                  "description": "融资轮次，如A轮、B轮",
+                  "type": "string"
+                },
+                "related_products": {
+                  "description": "相关产品",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "publish_date": {
+                  "description": "发布日期",
+                  "type": "string",
+                  "format": "date"
+                },
+                "source": {
+                  "description": "信息来源",
+                  "type": "string"
+                }
+              },
+              "required": ["event_type", "investors", "company", "funding_amount", "round", "publish_date", "source"]
+            }
+            ```
         - `高管变动 (Executive Change)`: `公司`, `变动高管`, `职位`, `变动类型(上任/离职)`
+          - **Schema**:
+            ```json
+            {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "title": "高管变动事件",
+              "description": "描述公司高管职位发生变动的事件",
+              "type": "object",
+              "properties": {
+                "event_type": {
+                  "description": "事件类型，固定为‘高管变动’",
+                  "type": "string",
+                  "enum": ["高管变动"]
+                },
+                "company": {
+                  "description": "相关公司",
+                  "type": "string"
+                },
+                "executive_name": {
+                  "description": "变动的高管姓名",
+                  "type": "string"
+                },
+                "position": {
+                  "description": "相关职位",
+                  "type": "string"
+                },
+                "change_type": {
+                  "description": "变动类型，如上任、离职",
+                  "type": "string",
+                  "enum": ["上任", "离职"]
+                },
+                "change_date": {
+                  "description": "变动日期",
+                  "type": "string",
+                  "format": "date"
+                },
+                "source": {
+                  "description": "信息来源",
+                  "type": "string"
+                }
+              },
+              "required": ["event_type", "company", "executive_name", "position", "change_type", "change_date", "source"]
+            }
+            ```
         - `法律诉讼 (Legal Proceeding)`: `原告`, `被告`, `诉讼原因`, `涉及金额`, `判决结果`
+          - **Schema**:
+            ```json
+            {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "title": "法律诉讼事件",
+              "description": "描述公司涉及的法律诉讼事件",
+              "type": "object",
+              "properties": {
+                "event_type": {
+                  "description": "事件类型，固定为‘法律诉讼’",
+                  "type": "string",
+                  "enum": ["法律诉讼"]
+                },
+                "plaintiff": {
+                  "description": "原告方",
+                  "type": "string"
+                },
+                "defendant": {
+                  "description": "被告方",
+                  "type": "string"
+                },
+                "cause_of_action": {
+                  "description": "诉讼原因",
+                  "type": "string"
+                },
+                "amount_involved": {
+                  "description": "涉及金额",
+                  "type": "number"
+                },
+                "judgment": {
+                  "description": "判决结果",
+                  "type": "string"
+                },
+                "filing_date": {
+                  "description": "立案日期",
+                  "type": "string",
+                  "format": "date"
+                },
+                "source": {
+                  "description": "信息来源",
+                  "type": "string"
+                }
+              },
+              "required": ["event_type", "plaintiff", "defendant", "cause_of_action", "filing_date", "source"]
+            }
+            ```
         - `业绩报告 (Financial Report)`: `公司`, `报告期`, `营收`, `净利润`, `同比增长率`
+        - `合作合资 (Cooperation & Joint Venture)`: `合作方`, `合作领域`, `合作方式`, `合作目标`, `合作期限`
+          - **Schema**:
+            ```json
+            {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "title": "合作合资事件",
+              "description": "描述公司之间进行合作或成立合资公司的事件",
+              "type": "object",
+              "properties": {
+                "event_type": {
+                  "description": "事件类型，固定为‘合作合资’",
+                  "type": "string",
+                  "enum": ["合作合资"]
+                },
+                "partners": {
+                  "description": "合作方列表",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "domain": {
+                  "description": "合作领域",
+                  "type": "string"
+                },
+                "method": {
+                  "description": "合作方式",
+                  "type": "string"
+                },
+                "goal": {
+                  "description": "合作目标",
+                  "type": "string"
+                },
+                "validity_period": {
+                  "description": "合作期限",
+                  "type": "string"
+                },
+                "source": {
+                  "description": "信息来源",
+                  "type": "string"
+                },
+                "publish_date": {
+                  "description": "发布日期",
+                  "type": "string",
+                  "format": "date"
+                }
+              },
+              "required": ["event_type", "partners", "domain", "publish_date", "source"]
+            }
+            ```
+          - **Schema**:
+            ```json
+            {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "title": "业绩报告事件",
+              "description": "描述公司发布业绩报告的事件",
+              "type": "object",
+              "properties": {
+                "event_type": {
+                  "description": "事件类型，固定为‘业绩报告’",
+                  "type": "string",
+                  "enum": ["业绩报告"]
+                },
+                "company": {
+                  "description": "发布报告的公司",
+                  "type": "string"
+                },
+                "reporting_period": {
+                  "description": "报告期，如2023年Q4",
+                  "type": "string"
+                },
+                "revenue": {
+                  "description": "营业收入",
+                  "type": "number"
+                },
+                "net_profit": {
+                  "description": "净利润",
+                  "type": "number"
+                },
+                "year_on_year_growth": {
+                  "description": "同比增长率",
+                  "type": "string"
+                },
+                "publish_date": {
+                  "description": "发布日期",
+                  "type": "string",
+                  "format": "date"
+                },
+                "source": {
+                  "description": "信息来源",
+                  "type": "string"
+                }
+              },
+              "required": ["event_type", "company", "reporting_period", "revenue", "net_profit", "publish_date", "source"]
+            }
+            ```
     - **集成电路领域**: 由于缺乏统一标准，将根据行业知识（如：供应链、制造流程、市场动态等）自定义事件类型及属性。经过细化，更新后的 Schema 如下：
       - **事件类型**:
         - `产能扩张 (Capacity Expansion)`: `公司`, `工厂地点`, `投资金额`, `新增产能`, `技术节点`, `预计投产时间`
+          - **Schema**:
+            ```json
+            {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "title": "产能扩张事件",
+              "description": "描述公司扩大生产能力的事件",
+              "type": "object",
+              "properties": {
+                "event_type": {
+                  "description": "事件类型，固定为‘产能扩张’",
+                  "type": "string",
+                  "enum": ["产能扩张"]
+                },
+                "company": {
+                  "description": "进行产能扩张的公司",
+                  "type": "string"
+                },
+                "location": {
+                  "description": "工厂地点",
+                  "type": "string"
+                },
+                "investment_amount": {
+                  "description": "投资金额",
+                  "type": "number"
+                },
+                "new_capacity": {
+                  "description": "新增产能详情",
+                  "type": "string"
+                },
+                "technology_node": {
+                  "description": "技术节点，如28nm",
+                  "type": "string"
+                },
+                "estimated_production_time": {
+                  "description": "预计投产时间",
+                  "type": "string",
+                  "format": "date"
+                },
+                "source": {
+                  "description": "信息来源",
+                  "type": "string"
+                }
+              },
+              "required": ["event_type", "company", "location", "new_capacity", "estimated_production_time", "source"]
+            }
+            ```
         - `技术突破 (Technological Breakthrough)`: `公司/研究机构`, `技术名称`, `关键指标(如制程、良率)`, `应用领域`, `发布日期`
+          - **Schema**:
+            ```json
+            {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "title": "技术突破事件",
+              "description": "描述在技术上取得重要进展的事件",
+              "type": "object",
+              "properties": {
+                "event_type": {
+                  "description": "事件类型，固定为‘技术突破’",
+                  "type": "string",
+                  "enum": ["技术突破"]
+                },
+                "organization": {
+                  "description": "取得技术突破的公司或研究机构",
+                  "type": "string"
+                },
+                "technology_name": {
+                  "description": "技术名称",
+                  "type": "string"
+                },
+                "key_metrics": {
+                  "description": "关键指标，如制程、良率",
+                  "type": "string"
+                },
+                "application_field": {
+                  "description": "应用领域",
+                  "type": "string"
+                },
+                "release_date": {
+                  "description": "发布日期",
+                  "type": "string",
+                  "format": "date"
+                },
+                "source": {
+                  "description": "信息来源",
+                  "type": "string"
+                }
+              },
+              "required": ["event_type", "organization", "technology_name", "release_date", "source"]
+            }
+            ```
         - `供应链动态 (Supply Chain Dynamics)`: `公司`, `动态类型(断供/涨价/合作/事故)`, `影响环节`, `涉及物料`, `影响对象(上/下游)`
-        - `新产品发布 (New Product Launch)`: `公司`, `产品型号`, `性能参数`, `目标市场`, `发布日期`
-        - `行业政策 (Industry Policy)`: `发布机构`, `政策名称`, `核心内容`, `影响范围`, `生效日期`
+          - **Schema**:
+            ```json
+            {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "title": "供应链动态事件",
+              "description": "描述供应链中发生的动态变化事件",
+              "type": "object",
+              "properties": {
+                "event_type": {
+                  "description": "事件类型，固定为‘供应链动态’",
+                  "type": "string",
+                  "enum
         - `合作合资 (Collaboration/Joint Venture)`: 
           - **Schema**:
             ```json
@@ -80,6 +457,140 @@
             }
             ```
         - `知识产权 (Intellectual Property)`: `公司`, `IP类型(专利诉讼/授权/收购)`, `IP详情`, `涉及金额`, `判决结果`
+        - `领域事件 (Domain Event)`:
+          - **Schema**:
+            ```json
+            {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "title": "领域事件",
+              "description": "描述一个通用的领域事件，作为具体事件类型的基础模板，并增强了对复杂、因果和时空信息的支持。",
+              "type": "object",
+              "properties": {
+                "event_id": {
+                  "description": "事件的唯一标识符，可使用UUID",
+                  "type": "string"
+                },
+                "event_type": {
+                  "description": "具体的事件类型，如‘产能扩张’、‘技术突破’等",
+                  "type": "string"
+                },
+                "trigger": {
+                  "description": "触发事件的关键词或短语",
+                  "type": "string"
+                },
+                "arguments": {
+                  "description": "事件的核心参与元素（论元），以键值对形式存储",
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "sub_events": {
+                  "description": "构成复杂事件的子事件列表，每个子事件遵循此schema",
+                  "type": "array",
+                  "items": {
+                    "$ref": "#"
+                  }
+                },
+                "description": {
+                  "description": "对事件的自然语言描述",
+                  "type": "string"
+                },
+                "timestamp": {
+                  "description": "事件发生的精确时间或日期",
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "location": {
+                  "description": "事件发生的地理位置",
+                  "type": "string"
+                },
+                "status": {
+                  "description": "事件的当前状态",
+                  "type": "string",
+                  "enum": [
+                    "潜在",
+                    "已确认",
+                    "进行中",
+                    "已完成",
+                    "已取消"
+                  ]
+                },
+                "confidence_score": {
+                  "description": "事件提取或预测的可信度评分，范围0到1",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "source": {
+                  "description": "信息来源，如新闻链接或公告名称",
+                  "type": "string"
+                },
+                "publish_date": {
+                  "description": "信息发布的日期",
+                  "type": "string",
+                  "format": "date"
+                }
+              },
+              "required": [
+                "event_id",
+                "event_type",
+                "arguments",
+                "source",
+                "publish_date"
+              ]
+            }
+            ```
+        - `领域事件关系 (Domain Event Relation)`:
+          - **Schema**:
+            ```json
+            {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "title": "领域事件关系",
+              "description": "描述两个或多个领域事件之间的因果、时序或逻辑关系",
+              "type": "object",
+              "properties": {
+                "event_type": {
+                  "description": "事件类型，固定为‘领域事件关系’",
+                  "type": "string",
+                  "enum": ["领域事件关系"]
+                },
+                "source_event_id": {
+                  "description": "源事件的唯一标识符",
+                  "type": "string"
+                },
+                "target_event_id": {
+                  "description": "目标事件的唯一标识符",
+                  "type": "string"
+                },
+                "relation_type": {
+                  "description": "两个事件之间的关系类型",
+                  "type": "string",
+                  "enum": ["因果关系", "时序关系", "条件关系", "关联关系"]
+                },
+                "description": {
+                  "description": "对事件关系的文字描述",
+                  "type": "string"
+                },
+                "confidence_score": {
+                  "description": "关系的可信度评分，范围0到1",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "source": {
+                  "description": "信息来源，如新闻链接或公告名称",
+                  "type": "string"
+                },
+                "publish_date": {
+                  "description": "信息发布的日期",
+                  "type": "string",
+                  "format": "date"
+                }
+              },
+              "required": ["event_type", "source_event_id", "target_event_id", "relation_type", "source", "publish_date"]
+            }
+            ```
 3.  **事件抽取与图谱构建**: 
     - **数据预处理**: 设计一个统一的模块，负责处理不同来源的语料，如纯文本、PDF、网页等，将其转化为统一的文本格式。
     - **事件抽取 (Prompt-based)**: 
@@ -120,6 +631,10 @@
       - [acorn-datasets/sentifm](https://huggingface.co/datasets/acorn-datasets/sentifm)
       - [hi-alice/FNER](https://github.com/hi-alice/FNER)
       - [midas-research/financial-event-dataset](https://github.com/midas-research/financial-event-dataset)
+      - [iss-lab/FinancialRiskDetection](https://github.com/iss-lab/FinancialRiskDetection)
+      - [ChanceFocus/ma-dataset](https://github.com/ChanceFocus/ma-dataset)
+      - [yangna111/FinCorpus](https://github.com/yangna111/FinCorpus)
+      - [zheshen-ot/Financial-Disaster-Analysis](https://github.com/zheshen-ot/Financial-Disaster-Analysis)
 
 ## 会话存档 (2024-07-29)
 
@@ -177,7 +692,11 @@
   - [ ] **技术原型开发 (弱监督)**: 启动一个技术原型，重点评估 `spaCy`, `Flair`, `OpenNRE` 等NLP库在实体识别、关系抽取任务上的表现，并搭建一个初步的伪标签数据生成流水线。
   - [ ] **知识图谱集成**: 规划如何将抽取的结构化事件数据，高效地存入 `HyperGraphRAG`，并同步更新本文档。
 
-## 五、 提交规范
+## 五、 目录结构说明
+
+- `/materials`: 存放项目附加的程序，例如绘图的原始文件、思维导图等。这些文件需要同步到GitHub，但在项目构建或部署时可以忽略。
+
+## 六、 提交规范
 
 - 代码、测试、文档分支提交，Commit 规范：
   ```
