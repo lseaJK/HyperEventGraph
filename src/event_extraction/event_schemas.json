@@ -171,5 +171,354 @@
             },
             "required": ["event_type", "plaintiff", "defendant", "cause_of_action", "filing_date", "source"]
         }
+    },
+    "circuit_domain": {
+        "capacity_expansion": {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "产能扩张事件",
+            "description": "描述公司扩大生产能力的事件",
+            "type": "object",
+            "properties": {
+                "event_type": {
+                    "description": "事件类型，固定为‘产能扩张’",
+                    "type": "string",
+                    "enum": ["产能扩张"]
+                },
+                "company": {
+                    "description": "进行产能扩张的公司",
+                    "type": "string"
+                },
+                "location": {
+                    "description": "工厂地点",
+                    "type": "string"
+                },
+                "investment_amount": {
+                    "description": "投资金额",
+                    "type": "number"
+                },
+                "new_capacity": {
+                    "description": "新增产能详情",
+                    "type": "string"
+                },
+                "technology_node": {
+                    "description": "技术节点，如28nm",
+                    "type": "string"
+                },
+                "estimated_production_time": {
+                    "description": "预计投产时间",
+                    "type": "string",
+                    "format": "date"
+                },
+                "source": {
+                    "description": "信息来源",
+                    "type": "string"
+                }
+            },
+            "required": ["event_type", "company", "location", "new_capacity", "estimated_production_time", "source"]
+        },
+        "technological_breakthrough": {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "技术突破事件",
+            "description": "描述在技术上取得重要进展的事件",
+            "type": "object",
+            "properties": {
+                "event_type": {
+                    "description": "事件类型，固定为‘技术突破’",
+                    "type": "string",
+                    "enum": ["技术突破"]
+                },
+                "organization": {
+                    "description": "取得技术突破的公司或研究机构",
+                    "type": "string"
+                },
+                "technology_name": {
+                    "description": "技术名称",
+                    "type": "string"
+                },
+                "key_metrics": {
+                    "description": "关键指标，如制程、良率",
+                    "type": "string"
+                },
+                "application_field": {
+                    "description": "应用领域",
+                    "type": "string"
+                },
+                "release_date": {
+                    "description": "发布日期",
+                    "type": "string",
+                    "format": "date"
+                },
+                "source": {
+                    "description": "信息来源",
+                    "type": "string"
+                }
+            },
+            "required": ["event_type", "organization", "technology_name", "release_date", "source"]
+        },
+        "supply_chain_dynamics": {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "供应链动态事件",
+            "description": "描述供应链中发生的动态变化事件",
+            "type": "object",
+            "properties": {
+                "event_type": {
+                    "description": "事件类型，固定为‘供应链动态’",
+                    "type": "string",
+                    "enum": ["供应链动态"]
+                },
+                "company": {
+                    "description": "相关公司",
+                    "type": "string"
+                },
+                "dynamic_type": {
+                    "description": "动态类型(断供/涨价/合作/事故)",
+                    "type": "string"
+                },
+                "affected_link": {
+                    "description": "影响环节",
+                    "type": "string"
+                },
+                "involved_materials": {
+                    "description": "涉及物料",
+                    "type": "string"
+                },
+                "affected_objects": {
+                    "description": "影响对象(上/下游)",
+                    "type": "string"
+                },
+                "source": {
+                    "description": "信息来源",
+                    "type": "string"
+                },
+                "publish_date": {
+                    "description": "发布日期",
+                    "type": "string",
+                    "format": "date"
+                }
+            },
+            "required": ["event_type", "company", "dynamic_type", "affected_link", "involved_materials", "affected_objects", "source", "publish_date"]
+        },
+        "collaboration_joint_venture": {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "合作合资事件",
+            "description": "描述两个或多个实体之间的合作或合资事件",
+            "type": "object",
+            "properties": {
+                "event_type": {
+                    "description": "事件类型，固定为‘合作合资’",
+                    "type": "string",
+                    "enum": ["合作合资"]
+                },
+                "trigger_words": {
+                    "description": "触发事件的关键动词或短语",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "partners": {
+                    "description": "合作或合资的参与方列表",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "domain": {
+                    "description": "合作或合资所属的业务领域或行业",
+                    "type": "string"
+                },
+                "method": {
+                    "description": "合作的具体方式，如技术授权、共同研发、成立合资公司等",
+                    "type": "string"
+                },
+                "goal": {
+                    "description": "合作旨在达成的目标",
+                    "type": "string"
+                },
+                "validity_period": {
+                    "description": "合作协议的有效期",
+                    "type": "string"
+                },
+                "source": {
+                    "description": "信息来源，如新闻链接或公告名称",
+                    "type": "string"
+                },
+                "publish_date": {
+                    "description": "信息发布的日期",
+                    "type": "string",
+                    "format": "date"
+                }
+            },
+            "required": ["event_type", "partners", "domain", "source", "publish_date"]
+        },
+        "intellectual_property": {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "知识产权事件",
+            "description": "描述公司涉及的知识产权相关事件，如专利诉讼、授权、收购等",
+            "type": "object",
+            "properties": {
+                "event_type": {
+                    "description": "事件类型，固定为‘知识产权’",
+                    "type": "string",
+                    "enum": ["知识产权"]
+                },
+                "company": {
+                    "description": "相关公司",
+                    "type": "string"
+                },
+                "ip_type": {
+                    "description": "IP类型(专利诉讼/授权/收购)",
+                    "type": "string"
+                },
+                "ip_details": {
+                    "description": "IP详情",
+                    "type": "string"
+                },
+                "amount_involved": {
+                    "description": "涉及金额",
+                    "type": "number"
+                },
+                "judgment_result": {
+                    "description": "判决结果",
+                    "type": "string"
+                },
+                "source": {
+                    "description": "信息来源",
+                    "type": "string"
+                },
+                "publish_date": {
+                    "description": "信息发布的日期",
+                    "type": "string",
+                    "format": "date"
+                }
+            },
+            "required": ["event_type", "company", "ip_type", "ip_details", "source", "publish_date"]
+        },
+        "domain_event": {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "领域事件",
+            "description": "描述一个通用的领域事件，作为具体事件类型的基础模板，并增强了对复杂、因果和时空信息的支持。",
+            "type": "object",
+            "properties": {
+                "event_id": {
+                    "description": "事件的唯一标识符，可使用UUID",
+                    "type": "string"
+                },
+                "event_type": {
+                    "description": "具体的事件类型，如‘产能扩张’、‘技术突破’等",
+                    "type": "string"
+                },
+                "trigger": {
+                    "description": "触发事件的关键词或短语",
+                    "type": "string"
+                },
+                "arguments": {
+                    "description": "事件的核心参与元素（论元），以键值对形式存储",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "sub_events": {
+                    "description": "构成复杂事件的子事件列表，每个子事件遵循此schema",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#"
+                    }
+                },
+                "description": {
+                    "description": "对事件的自然语言描述",
+                    "type": "string"
+                },
+                "timestamp": {
+                    "description": "事件发生的精确时间或日期",
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "location": {
+                    "description": "事件发生的地理位置",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "事件的当前状态",
+                    "type": "string",
+                    "enum": [
+                        "潜在",
+                        "已确认",
+                        "进行中",
+                        "已完成",
+                        "已取消"
+                    ]
+                },
+                "confidence_score": {
+                    "description": "事件提取或预测的可信度评分，范围0到1",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                },
+                "source": {
+                    "description": "信息来源，如新闻链接或公告名称",
+                    "type": "string"
+                },
+                "publish_date": {
+                    "description": "信息发布的日期",
+                    "type": "string",
+                    "format": "date"
+                }
+            },
+            "required": [
+                "event_id",
+                "event_type",
+                "arguments",
+                "source",
+                "publish_date"
+            ]
+        },
+        "domain_event_relation": {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "领域事件关系",
+            "description": "描述两个或多个领域事件之间的因果、时序或逻辑关系",
+            "type": "object",
+            "properties": {
+                "event_type": {
+                    "description": "事件类型，固定为‘领域事件关系’",
+                    "type": "string",
+                    "enum": ["领域事件关系"]
+                },
+                "source_event_id": {
+                    "description": "源事件的唯一标识符",
+                    "type": "string"
+                },
+                "target_event_id": {
+                    "description": "目标事件的唯一标识符",
+                    "type": "string"
+                },
+                "relation_type": {
+                    "description": "两个事件之间的关系类型",
+                    "type": "string",
+                    "enum": ["因果关系", "时序关系", "条件关系", "关联关系"]
+                },
+                "description": {
+                    "description": "对事件关系的文字描述",
+                    "type": "string"
+                },
+                "confidence_score": {
+                    "description": "关系的可信度评分，范围0到1",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                },
+                "source": {
+                    "description": "信息来源，如新闻链接或公告名称",
+                    "type": "string"
+                },
+                "publish_date": {
+                    "description": "信息发布的日期",
+                    "type": "string",
+                    "format": "date"
+                }
+            },
+            "required": ["event_type", "source_event_id", "target_event_id", "relation_type", "source", "publish_date"]
+        }
     }
 }
