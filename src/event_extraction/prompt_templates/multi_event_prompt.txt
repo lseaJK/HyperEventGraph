@@ -78,7 +78,7 @@
     {
         "event_id": "evt_{domain}_{type}_{timestamp}_{sequence}",
         "extraction_info": {
-            "extracted_at": "2025-07-10T20:27:09.481025",
+            "extracted_at": "2025-07-10T20:39:24.228933",
             "extractor_version": "1.0.0",
             "confidence_score": 0.0,
             "extraction_method": "llm_based"

@@ -25,7 +25,7 @@
 - plaintiff: 原告方 [必需]
 - defendant: 被告方 [必需]
 - cause_of_action: 诉讼原因 [必需]
-- amount_involved: 涉及金额 [可选]
+- amount_involved: 涉及金额（单位：万元，默认人民币。如为其他货币请在数值后注明：USD美元、EUR欧元、JPY日元、KRW韩元、GBP英镑、HKD港币、TWD新台币） [可选]
 - judgment: 判决结果 [可选]
 - filing_date: 立案日期 [必需]
 - source: 信息来源 [必需]
@@ -36,7 +36,7 @@
 
 {
     "extraction_info": {
-        "extracted_at": "2025-07-10T20:27:09.476954",
+        "extracted_at": "2025-07-10T20:39:24.214588",
         "extractor_version": "1.0.0",
         "confidence_score": 0.0,
         "extraction_method": "llm_based"

@@ -182,6 +182,7 @@ class IndexManager:
 - **格式标准**：统一的JSON输出格式，包含元数据和置信度
 - **示例支持**：内置Few-shot学习机制
 - **模块化设计**：易于扩展新的事件类型和领域
+- **金额标准化**：所有金额字段统一以万元为单位，默认人民币，支持美元、韩元、日元等常见货币类型
 
 **生成的模板类型**
 - 金融领域：company_merger_and_acquisition, investment_and_financing, executive_change, legal_proceeding

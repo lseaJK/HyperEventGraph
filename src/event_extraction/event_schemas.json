@@ -20,7 +20,7 @@
                     "type": "string"
                 },
                 "deal_amount": {
-                    "description": "交易金额",
+                    "description": "交易金额（单位：万元，默认人民币。如为其他货币请在数值后注明：USD美元、EUR欧元、JPY日元、KRW韩元、GBP英镑、HKD港币、TWD新台币）",
                     "type": "number"
                 },
                 "status": {
@@ -62,7 +62,7 @@
                     "type": "string"
                 },
                 "funding_amount": {
-                    "description": "融资金额",
+                    "description": "融资金额（单位：万元，默认人民币。如为其他货币请在数值后注明：USD美元、EUR欧元、JPY日元、KRW韩元、GBP英镑、HKD港币、TWD新台币）",
                     "type": "number"
                 },
                 "round": {
@@ -152,7 +152,7 @@
                     "type": "string"
                 },
                 "amount_involved": {
-                    "description": "涉及金额",
+                    "description": "涉及金额（单位：万元，默认人民币。如为其他货币请在数值后注明：USD美元、EUR欧元、JPY日元、KRW韩元、GBP英镑、HKD港币、TWD新台币）",
                     "type": "number"
                 },
                 "judgment": {
@@ -193,7 +193,7 @@
                     "type": "string"
                 },
                 "investment_amount": {
-                    "description": "投资金额",
+                    "description": "投资金额（单位：万元，默认人民币。如为其他货币请在数值后注明：USD美元、EUR欧元、JPY日元、KRW韩元、GBP英镑、HKD港币、TWD新台币）",
                     "type": "number"
                 },
                 "new_capacity": {

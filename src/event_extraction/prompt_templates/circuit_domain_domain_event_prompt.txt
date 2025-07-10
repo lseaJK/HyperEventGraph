@@ -40,7 +40,7 @@
 
 {
     "extraction_info": {
-        "extracted_at": "2025-07-10T20:27:09.479940",
+        "extracted_at": "2025-07-10T20:39:24.225189",
         "extractor_version": "1.0.0",
         "confidence_score": 0.0,
         "extraction_method": "llm_based"
