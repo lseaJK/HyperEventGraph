@@ -1,34 +1,32 @@
-# 事件提取与 Schema 定义 - 待办事项
-
-- [ ] 1. 需求分析：定义事件抽取的输入数据源与格式。
-- [ ] 2. Schema 设计：设计事件的 JSON Schema 并创建 `src/schema.json`。
-- [ ] 3. 核心模块：创建 `src/data_processor.py` 用于处理数据。
-- [ ] 4. TDD - 事件抽取：在 `tests/test_data_processor.py` 中编写测试用例。
-- [ ] 5. 功能实现 - 事件抽取：在 `src/data_processor.py` 中实现核心逻辑。
-- [ ] 6. TDD - Schema 验证：在 `tests/test_data_processor.py` 中编写测试用例。
-- [ ] 7. 功能实现 - Schema 验证：在 `src/data_processor.py` 中实现验证逻辑。
-- [ ] 8. 文档：更新 `rules/architecture.md` 以反映最终的设计。
 
 
-## 阶段目标
-根据用户反馈，明确任务为定义事件提取的 Schema、创建示例，并完善项目规则文档。
+## 八、 HyperGraphRAG 知识图谱规范化任务
 
-## 任务列表
+### 阶段一：规范设计与分析
+- [ ] 1.1 分析当前 HyperGraphRAG 项目的节点和边结构问题
+- [ ] 1.2 设计实体节点标准格式（Company, Person, Product, Event 等类型）
+- [ ] 1.3 设计关系边标准格式（reports, invests, cooperates 等关系类型）
+- [ ] 1.4 设计事件超边标准格式（BusinessEvent, TechEvent 等事件类型）
+- [ ] 1.5 制定实体ID命名规范和属性标准
 
-- [ ] **任务1：完善项目规则**
-    - [ ] 创建 `rules/project_rules.md` 文件，并写入项目规范。
+### 阶段二：数据转换模块开发
+- [ ] 2.1 创建 `src/graph_normalizer.py` 实体抽取模块
+- [ ] 2.2 创建 `src/relation_extractor.py` 关系识别模块
+- [ ] 2.3 创建 `src/hypergraph_converter.py` 格式转换模块
+- [ ] 2.4 实现实体去重和标准化功能
+- [ ] 2.5 实现关系类型一致性检查功能
 
-- [ ] **任务2：定义“合作合资”事件 Schema**
-    - [ ] 在 `rules/architecture.md` 中为“合作合资”事件类型定义详细的 JSON Schema。
-    - [ ] Schema 应包含 `event_type`, `trigger_words`, `partners`, `domain`, `method`, `goal`, `validity_period`, `source`, `publish_date` 等字段。
+### 阶段三：测试与验证
+- [ ] 3.1 编写 `tests/test_graph_normalizer.py` 实体抽取测试
+- [ ] 3.2 编写 `tests/test_relation_extractor.py` 关系识别测试
+- [ ] 3.3 编写 `tests/test_hypergraph_converter.py` 格式转换测试
+- [ ] 3.4 创建测试数据集，验证转换模块正确性
+- [ ] 3.5 测试图结构连通性和完整性
 
-- [ ] **任务3：创建事件提取示例**
-    - [ ] 创建 `data` 目录用于存放提取的事件数据。
-    - [ ] 根据定义的“合作合资” Schema，从一条示例新闻中提取信息。
-    - [ ] 将提取的事件以 JSON 格式写入 `data/cooperation_joint_venture.jsonl` 文件。
-
-- [ ] **任务4：知识库归档**
-    - [ ] 将“合作合资”的 Schema 定义保存到长期知识库中，方便后续调用。
-
-
+### 阶段四：集成与优化
+- [ ] 4.1 集成规范化模块至主要图谱构建流程
+- [ ] 4.2 优化数据存储方案，提升查询效率
+- [ ] 4.3 实现质量控制和监控机制
+- [ ] 4.4 编写规范化模块使用文档
+- [ ] 4.5 性能测试和优化调整
 ```
