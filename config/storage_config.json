@@ -1,0 +1,234 @@
+{
+    "storage_config": {
+        "version": "1.0.0",
+        "last_updated": "2024-01-15T12:00:00Z",
+        "data_root": "e:/HyperEventGraph/data",
+        "config_root": "e:/HyperEventGraph/config",
+        "logs_root": "e:/HyperEventGraph/logs",
+        
+        "raw_texts": {
+            "base_path": "data/raw_texts",
+            "structure": {
+                "levels": ["domain", "year", "month", "source_type", "source_name"],
+                "domains": ["financial", "circuit"],
+                "source_types": ["news", "announcements", "reports", "industry_reports", "patent_documents"]
+            },
+            "file_naming": {
+                "pattern": "{domain}_{source}_{date}_{sequence}_{hash}.{ext}",
+                "date_format": "YYYYMMDD",
+                "sequence_digits": 3,
+                "hash_length": 8
+            },
+            "supported_formats": ["txt", "pdf", "html", "json"],
+            "encoding": "utf-8",
+            "max_file_size_mb": 100,
+            "metadata_required": true
+        },
+        
+        "processed_texts": {
+            "base_path": "data/processed_texts",
+            "structure": {
+                "mirror_raw_structure": true,
+                "additional_levels": ["processing_stage"]
+            },
+            "processing_stages": ["cleaned", "segmented", "annotated"],
+            "output_format": "json",
+            "preserve_original": true
+        },
+        
+        "extracted_events": {
+            "base_path": "data/extracted_events",
+            "structure": {
+                "levels": ["domain", "event_type", "year", "month"],
+                "event_types": {
+                    "financial": [
+                        "company_merger_and_acquisition",
+                        "investment_and_financing", 
+                        "executive_change",
+                        "legal_proceeding"
+                    ],
+                    "circuit": [
+                        "capacity_expansion",
+                        "technological_breakthrough",
+                        "supply_chain_dynamics",
+                        "collaboration_joint_venture",
+                        "intellectual_property"
+                    ]
+                }
+            },
+            "file_format": "jsonl",
+            "file_naming": "events_{date}.jsonl",
+            "max_events_per_file": 10000,
+            "schema_validation": true,
+            "schema_file": "src/event_extraction/event_schemas.json"
+        },
+        
+        "unique_contexts": {
+            "base_path": "data/unique_contexts",
+            "structure": {
+                "levels": ["domain", "year", "month"],
+                "aggregation_levels": ["daily", "weekly", "monthly"]
+            },
+            "file_format": "json",
+            "file_naming": "contexts_{date}.json",
+            "max_contexts_per_file": 5000,
+            "hyperedge_validation": true,
+            "content_generation": {
+                "template_based": true,
+                "natural_language": true,
+                "preserve_entities": true
+            }
+        },
+        
+        "knowledge_graph": {
+            "base_path": "data/knowledge_graph",
+            "structure": {
+                "levels": ["domain", "graph_type"],
+                "graph_types": ["entities", "relations", "hyperedges", "temporal"]
+            },
+            "storage_format": "neo4j",
+            "export_formats": ["graphml", "gexf", "json"],
+            "backup_format": "cypher_dump"
+        },
+        
+        "indexes": {
+            "base_path": "data/indexes",
+            "types": {
+                "entity_index": {
+                    "enabled": true,
+                    "update_frequency": "real_time",
+                    "index_fields": ["entity_name", "entity_type", "domain"]
+                },
+                "temporal_index": {
+                    "enabled": true,
+                    "update_frequency": "daily",
+                    "index_fields": ["date", "year", "month", "day"]
+                },
+                "event_type_index": {
+                    "enabled": true,
+                    "update_frequency": "real_time",
+                    "index_fields": ["event_type", "domain", "confidence"]
+                },
+                "source_index": {
+                    "enabled": true,
+                    "update_frequency": "daily",
+                    "index_fields": ["source_name", "source_type", "quality_score"]
+                },
+                "full_text_index": {
+                    "enabled": true,
+                    "update_frequency": "hourly",
+                    "engine": "elasticsearch",
+                    "analyzer": "chinese_analyzer"
+                }
+            },
+            "cache_settings": {
+                "enabled": true,
+                "cache_size_mb": 512,
+                "ttl_seconds": 3600
+            }
+        },
+        
+        "metadata": {
+            "base_path": "data/metadata",
+            "structure": {
+                "levels": ["type", "domain", "year", "month"]
+            },
+            "types": ["file_metadata", "processing_metadata", "quality_metadata"],
+            "retention_policy": {
+                "file_metadata": "permanent",
+                "processing_metadata": "1_year",
+                "quality_metadata": "6_months"
+            }
+        },
+        
+        "performance": {
+            "compression": {
+                "enabled": true,
+                "algorithm": "gzip",
+                "level": 6,
+                "file_size_threshold_mb": 10
+            },
+            "partitioning": {
+                "enabled": true,
+                "strategy": "time_based",
+                "partition_size": "monthly"
+            },
+            "caching": {
+                "enabled": true,
+                "memory_limit_mb": 1024,
+                "disk_cache_mb": 2048
+            },
+            "parallel_processing": {
+                "enabled": true,
+                "max_workers": 8,
+                "batch_size": 100
+            }
+        },
+        
+        "quality_control": {
+            "validation": {
+                "schema_validation": true,
+                "data_type_validation": true,
+                "range_validation": true,
+                "cross_reference_validation": true
+            },
+            "monitoring": {
+                "real_time_monitoring": true,
+                "quality_metrics_calculation": true,
+                "anomaly_detection": true,
+                "alert_thresholds": {
+                    "completeness_min": 0.95,
+                    "accuracy_min": 0.90,
+                    "consistency_min": 0.85
+                }
+            },
+            "cleanup": {
+                "duplicate_detection": true,
+                "orphan_file_cleanup": true,
+                "corrupted_data_handling": "quarantine"
+            }
+        },
+        
+        "security": {
+            "access_control": {
+                "enabled": true,
+                "authentication_required": true,
+                "role_based_access": true
+            },
+            "encryption": {
+                "at_rest": {
+                    "enabled": false,
+                    "algorithm": "AES-256",
+                    "key_management": "local"
+                },
+                "in_transit": {
+                    "enabled": true,
+                    "protocol": "TLS_1.3"
+                }
+            },
+            "audit": {
+                "enabled": true,
+                "log_all_operations": true,
+                "retention_days": 90
+            }
+        },
+        
+        "maintenance": {
+            "cleanup_schedule": {
+                "temp_files": "daily",
+                "old_logs": "weekly",
+                "expired_cache": "hourly"
+            },
+            "optimization_schedule": {
+                "index_rebuild": "monthly",
+                "defragmentation": "weekly",
+                "statistics_update": "daily"
+            },
+            "health_checks": {
+                "disk_space_check": "hourly",
+                "data_integrity_check": "daily",
+                "performance_check": "hourly"
+            }
+        }
+    }
+}

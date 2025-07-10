@@ -77,7 +77,84 @@
   docs: 更新 architecture.md 中 XXX 节点
   ```
 
-## 七、 HyperGraphRAG 知识图谱规范化规划
+## 七、 数据存储结构设计 (已完成)
+
+### 设计概述
+已完成完整的数据存储架构设计，建立了从原始文本到知识图谱的分层存储体系，支持高效的数据管理、版本控制和质量保证。
+
+### 核心架构
+**三层存储结构**：
+1. **原始文本层** (`data/raw_texts/`): 按领域、时间、来源分层存储
+2. **事件JSON层** (`data/extracted_events/`): 基于event_schemas.json的结构化事件数据
+3. **unique_contexts层** (`data/unique_contexts/`): 面向HyperGraphRAG的超关系图格式
+
+### 关键配置文件
+- `config/storage_config.json`: 存储参数和规则配置
+- `config/index_config.json`: 多维度索引策略（实体、时间、事件类型等）
+- `config/backup_config.json`: 备份恢复和灾难恢复方案
+
+### 数据质量控制
+- **元数据管理**: 完整的文件元数据模板和追踪机制
+- **版本管理**: 基于version_manifest.json的版本控制系统
+- **质量监控**: 自动化质量评估和报告生成
+
+### 后续接口需求
+**数据处理接口**：
+```python
+# 文本预处理接口
+class TextPreprocessor:
+    def process_raw_text(self, file_path: str) -> ProcessedText
+    def validate_text_quality(self, text: str) -> QualityMetrics
+
+# 事件抽取接口
+class EventExtractor:
+    def extract_events(self, text: str, domain: str) -> List[EventJSON]
+    def validate_event_schema(self, event: dict) -> ValidationResult
+
+# 格式转换接口
+class ContextConverter:
+    def json_to_unique_contexts(self, events: List[EventJSON]) -> List[UniqueContext]
+    def build_hyperedges(self, event: EventJSON) -> List[Hyperedge]
+```
+
+**存储管理接口**：
+```python
+# 存储管理器
+class StorageManager:
+    def store_raw_text(self, content: str, metadata: dict) -> str
+    def store_events(self, events: List[EventJSON], batch_id: str) -> bool
+    def store_contexts(self, contexts: List[UniqueContext]) -> bool
+    def create_backup(self, backup_type: str) -> BackupResult
+
+# 索引管理器
+class IndexManager:
+    def build_entity_index(self, entities: List[str]) -> bool
+    def build_temporal_index(self, date_range: tuple) -> bool
+    def query_by_entity(self, entity: str) -> List[EventJSON]
+    def query_by_timerange(self, start: str, end: str) -> List[EventJSON]
+```
+
+### 关键提示和注意事项
+1. **数据一致性**: 确保三层存储间的数据一致性，建立完整的数据血缘关系
+2. **性能优化**: 利用多维索引提高查询效率，特别是实体和时间维度的检索
+3. **扩展性设计**: 存储结构支持新领域和新事件类型的动态扩展
+4. **质量保证**: 每个处理环节都需要质量检查和验证机制
+5. **版本兼容**: 数据格式变更时需要提供迁移脚本和向后兼容性
+
+### 实施优先级
+**高优先级**：
+- 实现TextPreprocessor和EventExtractor核心功能
+- 建立基础的存储和索引机制
+- 完善数据质量监控系统
+
+**中优先级**：
+- 优化性能和扩展性
+- 完善备份恢复机制
+- 建立自动化运维工具
+
+**详细设计文档**: `docs/data_storage_design.md`
+
+## 八、 HyperGraphRAG 知识图谱规范化规划
 
 ### 问题分析
 当前 HyperGraphRAG 项目存在以下问题：

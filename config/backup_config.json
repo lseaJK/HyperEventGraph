@@ -1,0 +1,516 @@
+{
+    "backup_config": {
+        "version": "1.0.0",
+        "last_updated": "2024-01-15T12:00:00Z",
+        "backup_root": "data/backups",
+        
+        "backup_strategies": {
+            "full_backup": {
+                "enabled": true,
+                "schedule": {
+                    "frequency": "weekly",
+                    "day_of_week": "sunday",
+                    "time": "02:00",
+                    "timezone": "Asia/Shanghai"
+                },
+                "scope": {
+                    "include_paths": [
+                        "data/raw_texts",
+                        "data/processed_texts",
+                        "data/extracted_events",
+                        "data/unique_contexts",
+                        "data/knowledge_graph",
+                        "data/indexes",
+                        "data/metadata",
+                        "config",
+                        "src/event_extraction/event_schemas.json"
+                    ],
+                    "exclude_patterns": [
+                        "*.tmp",
+                        "*.log",
+                        "**/cache/**",
+                        "**/temp/**"
+                    ]
+                },
+                "storage": {
+                    "format": "tar.gz",
+                    "compression_level": 6,
+                    "split_size_gb": 2,
+                    "naming_pattern": "{date}_full_backup_{sequence}.tar.gz"
+                },
+                "retention": {
+                    "keep_count": 12,
+                    "keep_duration": "3_months",
+                    "cleanup_policy": "oldest_first"
+                }
+            },
+            
+            "incremental_backup": {
+                "enabled": true,
+                "schedule": {
+                    "frequency": "daily",
+                    "time": "01:00",
+                    "timezone": "Asia/Shanghai",
+                    "skip_on_full_backup_day": true
+                },
+                "scope": {
+                    "base_on": "last_full_backup",
+                    "include_paths": [
+                        "data/raw_texts",
+                        "data/processed_texts",
+                        "data/extracted_events",
+                        "data/unique_contexts",
+                        "data/indexes",
+                        "data/metadata"
+                    ],
+                    "change_detection": {
+                        "method": "timestamp_and_checksum",
+                        "checksum_algorithm": "sha256"
+                    }
+                },
+                "storage": {
+                    "format": "tar.gz",
+                    "compression_level": 9,
+                    "naming_pattern": "{date}_incremental_backup.tar.gz"
+                },
+                "retention": {
+                    "keep_count": 30,
+                    "keep_duration": "1_month",
+                    "cleanup_policy": "oldest_first"
+                }
+            },
+            
+            "differential_backup": {
+                "enabled": true,
+                "schedule": {
+                    "frequency": "daily",
+                    "time": "12:00",
+                    "timezone": "Asia/Shanghai",
+                    "skip_on_full_backup_day": true
+                },
+                "scope": {
+                    "base_on": "last_full_backup",
+                    "include_paths": [
+                        "data/extracted_events",
+                        "data/unique_contexts",
+                        "data/indexes"
+                    ],
+                    "change_detection": {
+                        "method": "timestamp_and_size",
+                        "include_new_files": true,
+                        "include_modified_files": true
+                    }
+                },
+                "storage": {
+                    "format": "tar.gz",
+                    "compression_level": 6,
+                    "naming_pattern": "{date}_differential_backup.tar.gz"
+                },
+                "retention": {
+                    "keep_count": 30,
+                    "keep_duration": "1_month",
+                    "cleanup_policy": "oldest_first"
+                }
+            },
+            
+            "real_time_backup": {
+                "enabled": false,
+                "scope": {
+                    "critical_files": [
+                        "config/storage_config.json",
+                        "config/index_config.json",
+                        "config/backup_config.json",
+                        "src/event_extraction/event_schemas.json"
+                    ],
+                    "trigger_events": [
+                        "file_modification",
+                        "file_creation"
+                    ]
+                },
+                "storage": {
+                    "format": "copy",
+                    "versioning": true,
+                    "max_versions": 10
+                }
+            }
+        },
+        
+        "storage_locations": {
+            "local_primary": {
+                "enabled": true,
+                "type": "local",
+                "path": "data/backups/local",
+                "priority": 1,
+                "capacity_gb": 100,
+                "usage_threshold": 0.8
+            },
+            
+            "local_secondary": {
+                "enabled": true,
+                "type": "local",
+                "path": "D:/HyperEventGraph_Backups",
+                "priority": 2,
+                "capacity_gb": 200,
+                "usage_threshold": 0.9
+            },
+            
+            "cloud_storage": {
+                "enabled": false,
+                "type": "aws_s3",
+                "config": {
+                    "bucket_name": "hypereventgraph-backups",
+                    "region": "ap-northeast-1",
+                    "storage_class": "STANDARD_IA",
+                    "encryption": "AES256"
+                },
+                "priority": 3,
+                "capacity_gb": 1000,
+                "usage_threshold": 0.95
+            },
+            
+            "network_storage": {
+                "enabled": false,
+                "type": "network_share",
+                "config": {
+                    "host": "backup-server.local",
+                    "share_path": "/backups/hypereventgraph",
+                    "authentication": {
+                        "method": "username_password",
+                        "username": "backup_user",
+                        "password_env_var": "BACKUP_PASSWORD"
+                    }
+                },
+                "priority": 4,
+                "capacity_gb": 500,
+                "usage_threshold": 0.85
+            }
+        },
+        
+        "backup_verification": {
+            "integrity_check": {
+                "enabled": true,
+                "method": "checksum_verification",
+                "algorithms": ["md5", "sha256"],
+                "schedule": "after_each_backup"
+            },
+            
+            "restore_test": {
+                "enabled": true,
+                "frequency": "monthly",
+                "test_scope": "sample_files",
+                "sample_percentage": 0.1,
+                "test_location": "data/backups/restore_test"
+            },
+            
+            "corruption_detection": {
+                "enabled": true,
+                "scan_frequency": "weekly",
+                "repair_attempts": 3,
+                "quarantine_corrupted": true
+            }
+        },
+        
+        "restore_procedures": {
+            "full_restore": {
+                "steps": [
+                    {
+                        "step": 1,
+                        "action": "stop_services",
+                        "description": "停止所有相关服务"
+                    },
+                    {
+                        "step": 2,
+                        "action": "backup_current_data",
+                        "description": "备份当前数据（如果存在）"
+                    },
+                    {
+                        "step": 3,
+                        "action": "extract_full_backup",
+                        "description": "解压最新的全量备份"
+                    },
+                    {
+                        "step": 4,
+                        "action": "apply_incremental_backups",
+                        "description": "按顺序应用增量备份"
+                    },
+                    {
+                        "step": 5,
+                        "action": "verify_data_integrity",
+                        "description": "验证数据完整性"
+                    },
+                    {
+                        "step": 6,
+                        "action": "rebuild_indexes",
+                        "description": "重建索引文件"
+                    },
+                    {
+                        "step": 7,
+                        "action": "start_services",
+                        "description": "启动所有服务"
+                    },
+                    {
+                        "step": 8,
+                        "action": "run_health_checks",
+                        "description": "运行健康检查"
+                    }
+                ],
+                "estimated_time_minutes": 60,
+                "rollback_plan": "restore_from_pre_restore_backup"
+            },
+            
+            "partial_restore": {
+                "supported_scopes": [
+                    "specific_domain",
+                    "date_range",
+                    "event_type",
+                    "source_type",
+                    "individual_files"
+                ],
+                "steps": [
+                    {
+                        "step": 1,
+                        "action": "identify_backup_files",
+                        "description": "识别包含目标数据的备份文件"
+                    },
+                    {
+                        "step": 2,
+                        "action": "extract_specific_data",
+                        "description": "提取特定数据"
+                    },
+                    {
+                        "step": 3,
+                        "action": "merge_with_existing",
+                        "description": "与现有数据合并"
+                    },
+                    {
+                        "step": 4,
+                        "action": "update_indexes",
+                        "description": "更新相关索引"
+                    },
+                    {
+                        "step": 5,
+                        "action": "verify_consistency",
+                        "description": "验证数据一致性"
+                    }
+                ],
+                "estimated_time_minutes": 15
+            },
+            
+            "point_in_time_restore": {
+                "enabled": true,
+                "granularity": "daily",
+                "max_history_days": 90,
+                "steps": [
+                    {
+                        "step": 1,
+                        "action": "identify_target_backup",
+                        "description": "识别目标时间点的备份"
+                    },
+                    {
+                        "step": 2,
+                        "action": "calculate_restore_chain",
+                        "description": "计算恢复链（全量+增量）"
+                    },
+                    {
+                        "step": 3,
+                        "action": "execute_restore_chain",
+                        "description": "执行恢复链"
+                    },
+                    {
+                        "step": 4,
+                        "action": "truncate_to_target_time",
+                        "description": "截断到目标时间点"
+                    },
+                    {
+                        "step": 5,
+                        "action": "rebuild_indexes",
+                        "description": "重建索引"
+                    }
+                ],
+                "estimated_time_minutes": 45
+            }
+        },
+        
+        "disaster_recovery": {
+            "rpo_target_hours": 24,
+            "rto_target_hours": 4,
+            
+            "scenarios": {
+                "hardware_failure": {
+                    "detection_methods": [
+                        "disk_health_monitoring",
+                        "system_health_checks",
+                        "automated_alerts"
+                    ],
+                    "response_plan": [
+                        "assess_damage_scope",
+                        "activate_backup_location",
+                        "restore_from_latest_backup",
+                        "redirect_traffic",
+                        "monitor_recovery"
+                    ]
+                },
+                
+                "data_corruption": {
+                    "detection_methods": [
+                        "checksum_validation",
+                        "data_integrity_checks",
+                        "user_reports"
+                    ],
+                    "response_plan": [
+                        "isolate_corrupted_data",
+                        "identify_corruption_scope",
+                        "restore_from_clean_backup",
+                        "validate_restored_data",
+                        "investigate_root_cause"
+                    ]
+                },
+                
+                "security_breach": {
+                    "detection_methods": [
+                        "security_monitoring",
+                        "access_log_analysis",
+                        "anomaly_detection"
+                    ],
+                    "response_plan": [
+                        "isolate_affected_systems",
+                        "assess_data_compromise",
+                        "restore_from_pre_breach_backup",
+                        "implement_security_patches",
+                        "conduct_security_audit"
+                    ]
+                },
+                
+                "natural_disaster": {
+                    "detection_methods": [
+                        "facility_monitoring",
+                        "external_alerts",
+                        "communication_loss"
+                    ],
+                    "response_plan": [
+                        "activate_remote_backup_site",
+                        "restore_from_offsite_backups",
+                        "establish_temporary_operations",
+                        "coordinate_with_stakeholders",
+                        "plan_primary_site_recovery"
+                    ]
+                }
+            }
+        },
+        
+        "monitoring_and_alerting": {
+            "backup_monitoring": {
+                "metrics": [
+                    "backup_success_rate",
+                    "backup_duration",
+                    "backup_size",
+                    "storage_utilization",
+                    "verification_results"
+                ],
+                "alert_conditions": [
+                    {
+                        "condition": "backup_failure",
+                        "severity": "critical",
+                        "notification_methods": ["email", "sms"]
+                    },
+                    {
+                        "condition": "backup_duration_exceeded",
+                        "threshold": "2_hours",
+                        "severity": "warning",
+                        "notification_methods": ["email"]
+                    },
+                    {
+                        "condition": "storage_utilization_high",
+                        "threshold": 0.9,
+                        "severity": "warning",
+                        "notification_methods": ["email"]
+                    },
+                    {
+                        "condition": "verification_failure",
+                        "severity": "critical",
+                        "notification_methods": ["email", "sms"]
+                    }
+                ]
+            },
+            
+            "restore_monitoring": {
+                "metrics": [
+                    "restore_success_rate",
+                    "restore_duration",
+                    "data_recovery_percentage",
+                    "downtime_duration"
+                ],
+                "alert_conditions": [
+                    {
+                        "condition": "restore_failure",
+                        "severity": "critical",
+                        "notification_methods": ["email", "sms", "phone"]
+                    },
+                    {
+                        "condition": "restore_duration_exceeded",
+                        "threshold": "4_hours",
+                        "severity": "critical",
+                        "notification_methods": ["email", "sms"]
+                    }
+                ]
+            },
+            
+            "health_monitoring": {
+                "checks": [
+                    {
+                        "name": "backup_storage_health",
+                        "frequency": "hourly",
+                        "timeout_seconds": 30
+                    },
+                    {
+                        "name": "backup_integrity",
+                        "frequency": "daily",
+                        "timeout_seconds": 300
+                    },
+                    {
+                        "name": "restore_capability",
+                        "frequency": "weekly",
+                        "timeout_seconds": 1800
+                    }
+                ]
+            }
+        },
+        
+        "compliance_and_governance": {
+            "data_retention": {
+                "legal_requirements": {
+                    "financial_data": "7_years",
+                    "operational_data": "3_years",
+                    "system_logs": "1_year"
+                },
+                "business_requirements": {
+                    "critical_backups": "1_year",
+                    "regular_backups": "3_months",
+                    "test_backups": "1_month"
+                }
+            },
+            
+            "audit_trail": {
+                "enabled": true,
+                "log_events": [
+                    "backup_started",
+                    "backup_completed",
+                    "backup_failed",
+                    "restore_started",
+                    "restore_completed",
+                    "restore_failed",
+                    "verification_performed",
+                    "cleanup_performed"
+                ],
+                "retention_period": "2_years"
+            },
+            
+            "documentation": {
+                "backup_procedures": "docs/backup_procedures.md",
+                "restore_procedures": "docs/restore_procedures.md",
+                "disaster_recovery_plan": "docs/disaster_recovery_plan.md",
+                "compliance_report": "docs/compliance_report.md"
+            }
+        }
+    }
+}

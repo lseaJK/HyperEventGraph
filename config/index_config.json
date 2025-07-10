@@ -1,0 +1,562 @@
+{
+    "index_config": {
+        "version": "1.0.0",
+        "last_updated": "2024-01-15T12:00:00Z",
+        "index_root": "data/indexes",
+        
+        "entity_indexes": {
+            "companies": {
+                "file_path": "by_entity/companies.json",
+                "structure": {
+                    "primary_key": "company_name",
+                    "fields": [
+                        "company_name",
+                        "company_code",
+                        "industry",
+                        "market",
+                        "aliases",
+                        "first_mentioned",
+                        "last_mentioned",
+                        "mention_count",
+                        "event_types",
+                        "domains"
+                    ]
+                },
+                "indexing": {
+                    "method": "hash_table",
+                    "case_sensitive": false,
+                    "fuzzy_matching": true,
+                    "similarity_threshold": 0.85
+                },
+                "update_policy": {
+                    "frequency": "real_time",
+                    "batch_size": 100,
+                    "merge_strategy": "incremental"
+                },
+                "optimization": {
+                    "compression": true,
+                    "bloom_filter": true,
+                    "cache_size_mb": 64
+                }
+            },
+            
+            "persons": {
+                "file_path": "by_entity/persons.json",
+                "structure": {
+                    "primary_key": "person_name",
+                    "fields": [
+                        "person_name",
+                        "position",
+                        "company",
+                        "aliases",
+                        "first_mentioned",
+                        "last_mentioned",
+                        "mention_count",
+                        "event_types",
+                        "domains"
+                    ]
+                },
+                "indexing": {
+                    "method": "hash_table",
+                    "case_sensitive": false,
+                    "fuzzy_matching": true,
+                    "similarity_threshold": 0.90
+                },
+                "update_policy": {
+                    "frequency": "real_time",
+                    "batch_size": 50,
+                    "merge_strategy": "incremental"
+                },
+                "optimization": {
+                    "compression": true,
+                    "bloom_filter": true,
+                    "cache_size_mb": 32
+                }
+            },
+            
+            "locations": {
+                "file_path": "by_entity/locations.json",
+                "structure": {
+                    "primary_key": "location_name",
+                    "fields": [
+                        "location_name",
+                        "location_type",
+                        "country",
+                        "province",
+                        "city",
+                        "coordinates",
+                        "aliases",
+                        "first_mentioned",
+                        "last_mentioned",
+                        "mention_count",
+                        "event_types",
+                        "domains"
+                    ]
+                },
+                "indexing": {
+                    "method": "spatial_hash",
+                    "case_sensitive": false,
+                    "fuzzy_matching": true,
+                    "similarity_threshold": 0.80,
+                    "spatial_indexing": true
+                },
+                "update_policy": {
+                    "frequency": "real_time",
+                    "batch_size": 100,
+                    "merge_strategy": "incremental"
+                },
+                "optimization": {
+                    "compression": true,
+                    "bloom_filter": true,
+                    "cache_size_mb": 32
+                }
+            }
+        },
+        
+        "temporal_indexes": {
+            "daily_index": {
+                "file_path": "by_time/daily_index.json",
+                "structure": {
+                    "primary_key": "date",
+                    "fields": [
+                        "date",
+                        "year",
+                        "month",
+                        "day",
+                        "weekday",
+                        "event_count",
+                        "event_types",
+                        "domains",
+                        "file_paths",
+                        "quality_score"
+                    ]
+                },
+                "indexing": {
+                    "method": "b_tree",
+                    "sort_order": "descending",
+                    "range_queries": true
+                },
+                "update_policy": {
+                    "frequency": "daily",
+                    "batch_size": 1000,
+                    "merge_strategy": "replace"
+                },
+                "optimization": {
+                    "compression": true,
+                    "cache_size_mb": 128,
+                    "partition_by_year": true
+                }
+            },
+            
+            "monthly_index": {
+                "file_path": "by_time/monthly_index.json",
+                "structure": {
+                    "primary_key": "year_month",
+                    "fields": [
+                        "year_month",
+                        "year",
+                        "month",
+                        "total_events",
+                        "event_distribution",
+                        "domain_distribution",
+                        "quality_metrics",
+                        "storage_stats"
+                    ]
+                },
+                "indexing": {
+                    "method": "b_tree",
+                    "sort_order": "descending",
+                    "range_queries": true
+                },
+                "update_policy": {
+                    "frequency": "monthly",
+                    "batch_size": 100,
+                    "merge_strategy": "replace"
+                },
+                "optimization": {
+                    "compression": true,
+                    "cache_size_mb": 64
+                }
+            },
+            
+            "yearly_index": {
+                "file_path": "by_time/yearly_index.json",
+                "structure": {
+                    "primary_key": "year",
+                    "fields": [
+                        "year",
+                        "total_events",
+                        "monthly_distribution",
+                        "event_type_distribution",
+                        "domain_distribution",
+                        "quality_trends",
+                        "storage_summary"
+                    ]
+                },
+                "indexing": {
+                    "method": "hash_table",
+                    "sort_order": "descending"
+                },
+                "update_policy": {
+                    "frequency": "yearly",
+                    "batch_size": 10,
+                    "merge_strategy": "replace"
+                },
+                "optimization": {
+                    "compression": true,
+                    "cache_size_mb": 32
+                }
+            }
+        },
+        
+        "event_type_indexes": {
+            "event_type_index": {
+                "file_path": "by_type/event_type_index.json",
+                "structure": {
+                    "primary_key": "event_type",
+                    "fields": [
+                        "event_type",
+                        "domain",
+                        "schema_version",
+                        "total_count",
+                        "confidence_distribution",
+                        "temporal_distribution",
+                        "entity_statistics",
+                        "quality_metrics",
+                        "sample_events"
+                    ]
+                },
+                "indexing": {
+                    "method": "hash_table",
+                    "hierarchical": true,
+                    "parent_child_mapping": true
+                },
+                "update_policy": {
+                    "frequency": "real_time",
+                    "batch_size": 200,
+                    "merge_strategy": "incremental"
+                },
+                "optimization": {
+                    "compression": true,
+                    "bloom_filter": true,
+                    "cache_size_mb": 96
+                }
+            },
+            
+            "domain_index": {
+                "file_path": "by_type/domain_index.json",
+                "structure": {
+                    "primary_key": "domain",
+                    "fields": [
+                        "domain",
+                        "event_types",
+                        "total_events",
+                        "entity_counts",
+                        "temporal_coverage",
+                        "source_distribution",
+                        "quality_overview",
+                        "schema_versions"
+                    ]
+                },
+                "indexing": {
+                    "method": "hash_table",
+                    "nested_indexing": true
+                },
+                "update_policy": {
+                    "frequency": "hourly",
+                    "batch_size": 10,
+                    "merge_strategy": "replace"
+                },
+                "optimization": {
+                    "compression": true,
+                    "cache_size_mb": 64
+                }
+            }
+        },
+        
+        "source_indexes": {
+            "source_index": {
+                "file_path": "by_source/source_index.json",
+                "structure": {
+                    "primary_key": "source_name",
+                    "fields": [
+                        "source_name",
+                        "source_type",
+                        "domain",
+                        "url_pattern",
+                        "reliability_score",
+                        "total_documents",
+                        "total_events",
+                        "quality_metrics",
+                        "temporal_activity",
+                        "event_type_distribution"
+                    ]
+                },
+                "indexing": {
+                    "method": "hash_table",
+                    "case_sensitive": false,
+                    "fuzzy_matching": true,
+                    "similarity_threshold": 0.85
+                },
+                "update_policy": {
+                    "frequency": "daily",
+                    "batch_size": 100,
+                    "merge_strategy": "incremental"
+                },
+                "optimization": {
+                    "compression": true,
+                    "bloom_filter": true,
+                    "cache_size_mb": 64
+                }
+            },
+            
+            "quality_index": {
+                "file_path": "by_source/quality_index.json",
+                "structure": {
+                    "primary_key": "quality_tier",
+                    "fields": [
+                        "quality_tier",
+                        "score_range",
+                        "sources",
+                        "event_count",
+                        "reliability_metrics",
+                        "update_frequency",
+                        "validation_results"
+                    ]
+                },
+                "indexing": {
+                    "method": "range_tree",
+                    "sort_order": "descending",
+                    "range_queries": true
+                },
+                "update_policy": {
+                    "frequency": "daily",
+                    "batch_size": 50,
+                    "merge_strategy": "replace"
+                },
+                "optimization": {
+                    "compression": true,
+                    "cache_size_mb": 32
+                }
+            }
+        },
+        
+        "full_text_index": {
+            "elasticsearch_config": {
+                "enabled": true,
+                "host": "localhost",
+                "port": 9200,
+                "index_name": "hypereventgraph",
+                "settings": {
+                    "number_of_shards": 3,
+                    "number_of_replicas": 1,
+                    "refresh_interval": "30s"
+                },
+                "mappings": {
+                    "properties": {
+                        "content": {
+                            "type": "text",
+                            "analyzer": "chinese_analyzer",
+                            "search_analyzer": "chinese_search_analyzer"
+                        },
+                        "title": {
+                            "type": "text",
+                            "analyzer": "chinese_analyzer",
+                            "boost": 2.0
+                        },
+                        "entities": {
+                            "type": "keyword",
+                            "index": true
+                        },
+                        "event_type": {
+                            "type": "keyword",
+                            "index": true
+                        },
+                        "domain": {
+                            "type": "keyword",
+                            "index": true
+                        },
+                        "timestamp": {
+                            "type": "date",
+                            "format": "yyyy-MM-dd'T'HH:mm:ss'Z'"
+                        },
+                        "confidence": {
+                            "type": "float",
+                            "index": true
+                        },
+                        "source": {
+                            "type": "keyword",
+                            "index": true
+                        }
+                    }
+                },
+                "analyzers": {
+                    "chinese_analyzer": {
+                        "type": "custom",
+                        "tokenizer": "ik_max_word",
+                        "filter": ["lowercase", "stop"]
+                    },
+                    "chinese_search_analyzer": {
+                        "type": "custom",
+                        "tokenizer": "ik_smart",
+                        "filter": ["lowercase", "stop"]
+                    }
+                }
+            },
+            "update_policy": {
+                "frequency": "hourly",
+                "batch_size": 1000,
+                "bulk_timeout": "5m"
+            },
+            "search_settings": {
+                "default_size": 20,
+                "max_size": 1000,
+                "highlight": {
+                    "enabled": true,
+                    "fragment_size": 150,
+                    "number_of_fragments": 3
+                },
+                "aggregations": {
+                    "enabled": true,
+                    "max_buckets": 1000
+                }
+            }
+        },
+        
+        "composite_indexes": {
+            "entity_time_index": {
+                "file_path": "composite/entity_time_index.json",
+                "structure": {
+                    "primary_key": ["entity_name", "date"],
+                    "fields": [
+                        "entity_name",
+                        "entity_type",
+                        "date",
+                        "event_ids",
+                        "event_types",
+                        "mention_count",
+                        "sentiment_score",
+                        "importance_score"
+                    ]
+                },
+                "indexing": {
+                    "method": "compound_btree",
+                    "sort_order": ["entity_name:asc", "date:desc"]
+                },
+                "update_policy": {
+                    "frequency": "real_time",
+                    "batch_size": 500,
+                    "merge_strategy": "incremental"
+                },
+                "optimization": {
+                    "compression": true,
+                    "partition_by_entity_type": true,
+                    "cache_size_mb": 128
+                }
+            },
+            
+            "event_relation_index": {
+                "file_path": "composite/event_relation_index.json",
+                "structure": {
+                    "primary_key": ["source_event_id", "target_event_id"],
+                    "fields": [
+                        "source_event_id",
+                        "target_event_id",
+                        "relation_type",
+                        "confidence",
+                        "temporal_distance",
+                        "semantic_similarity",
+                        "entity_overlap",
+                        "causal_strength"
+                    ]
+                },
+                "indexing": {
+                    "method": "graph_index",
+                    "bidirectional": true,
+                    "weight_based": true
+                },
+                "update_policy": {
+                    "frequency": "hourly",
+                    "batch_size": 1000,
+                    "merge_strategy": "incremental"
+                },
+                "optimization": {
+                    "compression": true,
+                    "adjacency_list": true,
+                    "cache_size_mb": 256
+                }
+            }
+        },
+        
+        "index_maintenance": {
+            "rebuild_schedule": {
+                "entity_indexes": "weekly",
+                "temporal_indexes": "monthly",
+                "event_type_indexes": "weekly",
+                "source_indexes": "monthly",
+                "full_text_index": "monthly",
+                "composite_indexes": "weekly"
+            },
+            "optimization_schedule": {
+                "defragmentation": "weekly",
+                "statistics_update": "daily",
+                "cache_warming": "daily",
+                "bloom_filter_rebuild": "monthly"
+            },
+            "monitoring": {
+                "performance_metrics": {
+                    "query_latency": true,
+                    "index_size": true,
+                    "hit_ratio": true,
+                    "update_throughput": true
+                },
+                "health_checks": {
+                    "index_integrity": "daily",
+                    "consistency_check": "weekly",
+                    "corruption_detection": "daily"
+                },
+                "alerts": {
+                    "query_latency_threshold_ms": 100,
+                    "index_size_growth_threshold": 0.2,
+                    "hit_ratio_threshold": 0.8,
+                    "corruption_alert": true
+                }
+            }
+        },
+        
+        "query_optimization": {
+            "caching": {
+                "query_result_cache": {
+                    "enabled": true,
+                    "size_mb": 256,
+                    "ttl_seconds": 1800
+                },
+                "index_cache": {
+                    "enabled": true,
+                    "size_mb": 512,
+                    "preload_hot_indexes": true
+                }
+            },
+            "query_planning": {
+                "cost_based_optimization": true,
+                "index_selection": "automatic",
+                "parallel_execution": true,
+                "max_parallel_threads": 4
+            },
+            "result_optimization": {
+                "pagination": {
+                    "default_page_size": 20,
+                    "max_page_size": 1000
+                },
+                "sorting": {
+                    "default_sort": "relevance",
+                    "max_sort_fields": 3
+                },
+                "filtering": {
+                    "max_filter_conditions": 10,
+                    "filter_pushdown": true
+                }
+            }
+        }
+    }
+}
