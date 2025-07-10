@@ -161,7 +161,7 @@ class PromptTemplateGenerator:
                     prompt += f"输入文本：{example['input']}\n"
                     prompt += f"输出结果：{json.dumps(example['output'], ensure_ascii=False, indent=2)}\n"
         
-        prompt += "\n\n现在请处理以下文本：\n\n{input_text}\n"
+        prompt += "\n\n现在请处理以下文本：\n\n[待抽取文本]\n"
         
         return prompt
     
@@ -259,7 +259,7 @@ class PromptTemplateGenerator:
 
 现在请处理以下文本：
 
-{{input_text}}
+[待抽取文本]
 """
         
         return prompt
