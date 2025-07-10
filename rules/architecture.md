@@ -154,7 +154,70 @@ class IndexManager:
 
 **详细设计文档**: `docs/data_storage_design.md`
 
-## 八、 HyperGraphRAG 知识图谱规范化规划
+## 八、智能事件抽取系统设计
+
+### 8.1 Prompt工程与模板设计
+
+#### 8.1.1 领域特定Prompt模板系统
+
+**设计概述**
+- 基于 `event_schemas.json` 动态生成领域特定的Prompt模板
+- 支持金融和电路两个领域的12种事件类型
+- 实现单事件抽取、多事件抽取和事件验证三种模式
+
+**核心组件**
+1. **PromptTemplateGenerator类**
+   - 位置：`src/event_extraction/prompt_templates.py`
+   - 功能：动态生成、管理和优化Prompt模板
+   - 支持：JSON格式输出、置信度评分、实体识别、关系抽取
+
+2. **模板文件系统**
+   - 位置：`src/event_extraction/prompt_templates/`
+   - 包含：12个领域特定模板文件 + 1个多事件通用模板
+   - 格式：结构化文本模板，支持变量替换
+
+**技术特点**
+- **动态生成**：基于事件模式定义自动生成，确保一致性
+- **字段区分**：自动识别必需字段和可选字段
+- **格式标准**：统一的JSON输出格式，包含元数据和置信度
+- **示例支持**：内置Few-shot学习机制
+- **模块化设计**：易于扩展新的事件类型和领域
+
+**生成的模板类型**
+- 金融领域：company_merger_and_acquisition, investment_and_financing, executive_change, legal_proceeding
+- 电路领域：capacity_expansion, technological_breakthrough, supply_chain_dynamics, collaboration_joint_venture, intellectual_property
+- 通用模板：domain_event, domain_event_relation, multi_event
+
+**后续接口需求**
+1. **LLM集成接口**
+   - 支持多种LLM模型（GPT、Claude、本地模型）
+   - 统一的调用接口和结果解析
+   - 批量处理和异步调用支持
+
+2. **模板优化接口**
+   - 基于抽取效果的自动优化
+   - A/B测试和性能评估
+   - 动态调整和版本管理
+
+3. **质量控制接口**
+   - 抽取结果验证和校正
+   - 置信度阈值管理
+   - 异常检测和处理
+
+**关键提示**
+- Prompt模板需要定期根据实际抽取效果进行优化
+- 不同LLM模型可能需要不同的Prompt策略
+- 需要建立完善的评估体系来衡量抽取质量
+- 考虑实现Prompt版本管理和回滚机制
+
+**实施优先级**
+1. **高优先级**：LLM集成接口开发
+2. **中优先级**：质量控制和评估体系
+3. **低优先级**：自动优化和A/B测试功能
+
+---
+
+## 九、 HyperGraphRAG 知识图谱规范化规划
 
 ### 问题分析
 当前 HyperGraphRAG 项目存在以下问题：

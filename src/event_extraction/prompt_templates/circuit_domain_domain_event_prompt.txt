@@ -1,0 +1,77 @@
+
+
+你是一个专业的事件抽取专家，专门从文本中识别和抽取结构化的事件信息。
+
+核心任务：
+1. 仔细阅读输入文本，识别其中包含的事件
+2. 根据预定义的事件模式，抽取结构化的事件信息
+3. 确保抽取结果的准确性和完整性
+4. 对于不确定的信息，标注置信度
+
+输出要求：
+- 严格按照JSON格式输出
+- 包含所有必需字段
+- 对于可选字段，如果文本中没有相关信息，可以省略或标注为null
+- 为每个抽取结果提供置信度评分（0-1之间）
+
+
+当前任务：从文本中抽取【描述一个通用的领域事件，作为具体事件类型的基础模板，并增强了对复杂、因果和时空信息的支持。】
+
+事件类型：domain_event
+领域：集成电路领域事件，包括产能扩张、技术突破、供应链动态、合作合资、知识产权等
+
+字段说明：
+- event_id: 事件的唯一标识符，可使用UUID [必需]
+- event_type: 具体的事件类型，如‘产能扩张’、‘技术突破’等 [必需]
+- trigger: 触发事件的关键词或短语 [可选]
+- arguments: 事件的核心参与元素（论元），以键值对形式存储 [必需]
+- sub_events: 构成复杂事件的子事件列表，每个子事件遵循此schema [可选]
+- description: 对事件的自然语言描述 [可选]
+- timestamp: 事件发生的精确时间或日期 [可选]
+- location: 事件发生的地理位置 [可选]
+- status: 事件的当前状态 [可选]
+- confidence_score: 事件提取或预测的可信度评分，范围0到1 [可选]
+- source: 信息来源，如新闻链接或公告名称 [必需]
+- publish_date: 信息发布的日期 [必需]
+
+
+输出格式：
+请严格按照以下JSON格式输出，确保所有必需字段都有值：
+
+{
+    "extraction_info": {
+        "extracted_at": "2025-07-10T20:27:09.479940",
+        "extractor_version": "1.0.0",
+        "confidence_score": 0.0,
+        "extraction_method": "llm_based"
+    },
+    "event_data": {
+        // 在这里填入根据schema定义的事件字段
+        "event_id": "请填入event_id的值",
+        "event_type": "请填入event_type的值",
+        "trigger": "请填入trigger的值（可选）",
+        "arguments": "请填入arguments的值",
+        "sub_events": "请填入sub_events的值（可选）",
+        "description": "请填入description的值（可选）",
+        "timestamp": "请填入timestamp的值（可选）",
+        "location": "请填入location的值（可选）",
+        "status": "请填入status的值（可选）",
+        "confidence_score": "请填入confidence_score的值（可选）",
+        "source": "请填入source的值",
+        "publish_date": "请填入publish_date的值",
+    },
+    "entities": {
+        "companies": [],
+        "persons": [],
+        "locations": [],
+        "amounts": []
+    },
+    "relations": [
+        {"subject": "实体1", "predicate": "关系", "object": "实体2", "confidence": 0.0}
+    ]
+}
+
+
+现在请处理以下文本：
+
+{input_text}

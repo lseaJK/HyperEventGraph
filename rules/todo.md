@@ -92,7 +92,7 @@
 **目标**：构建高精度的LLM事件抽取系统
 
 ### 3.1 Prompt工程与优化
-- [ ] 3.1.1 基于event_schemas.json设计领域特定Prompt模板
+- [x] 3.1.1 基于event_schemas.json设计领域特定Prompt模板
 - [ ] 3.1.2 实现动态Prompt生成器（根据事件类型自适应）
 - [ ] 3.1.3 开发Few-shot学习机制（利用标注样本）
 - [ ] 3.1.4 实现Prompt效果评估和A/B测试
