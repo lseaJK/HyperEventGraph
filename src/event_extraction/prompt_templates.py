@@ -15,19 +15,24 @@ import json
 import os
 from typing import Dict, List, Any, Optional
 from datetime import datetime
+from ..config.path_config import get_event_schemas_path
 
 
 class PromptTemplateGenerator:
     """Prompt模板生成器"""
     
-    def __init__(self, schema_file_path: str = None):
+    def __init__(self, schema_file_path: Optional[str] = None):
         """初始化Prompt模板生成器
         
         Args:
-            schema_file_path: event_schemas.json文件路径
+            schema_file_path: event_schemas.json文件路径，如果为None则使用配置文件中的路径
         """
         if schema_file_path is None:
-            schema_file_path = os.path.join(os.path.dirname(__file__), 'event_schemas.json')
+            try:
+                schema_file_path = str(get_event_schemas_path())
+            except ImportError:
+                # 如果导入失败，使用默认路径
+                schema_file_path = os.path.join(os.path.dirname(__file__), 'event_schemas.json')
         
         with open(schema_file_path, 'r', encoding='utf-8') as f:
             self.schemas = json.load(f)

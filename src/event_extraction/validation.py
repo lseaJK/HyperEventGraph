@@ -1,10 +1,15 @@
 import json
 import re
+import os
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 from dataclasses import dataclass
 import jsonschema
 from jsonschema import validate, ValidationError
+try:
+    from ..config.path_config import get_event_schemas_path
+except ImportError:
+    get_event_schemas_path = None
 
 @dataclass
 class ValidationResult:
@@ -23,14 +28,23 @@ class EventExtractionValidator:
     事件抽取结果验证器
     """
     
-    def __init__(self, schemas_file: str = "event_schemas.json"):
+    def __init__(self, schemas_file: Optional[str] = None):
         """
         初始化验证器
         
         Args:
-            schemas_file: 事件模式文件路径
+            schemas_file: 事件模式文件路径，如果为None则使用配置文件中的路径
         """
-        self.schemas_file = schemas_file
+        if schemas_file is None:
+            if get_event_schemas_path is not None:
+                try:
+                    self.schemas_file = str(get_event_schemas_path())
+                except Exception:
+                    self.schemas_file = "event_schemas.json"
+            else:
+                self.schemas_file = "event_schemas.json"
+        else:
+            self.schemas_file = schemas_file
         self.schemas = self._load_schemas()
         self.validation_rules = self._init_validation_rules()
     

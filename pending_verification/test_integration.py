@@ -43,8 +43,7 @@ class IntegrationTester:
             api_key = os.getenv('DEEPSEEK_API_KEY')
             if api_key:
                 self.extractor = DeepSeekEventExtractor(
-                    api_key=api_key,
-                    model="deepseek-chat"
+                    api_key=api_key
                 )
                 print("✅ 事件抽取器初始化成功")
             else:
@@ -54,9 +53,9 @@ class IntegrationTester:
             self.storage = HyperRelationStorage(
                 neo4j_uri="bolt://localhost:7687",
                 neo4j_user="neo4j",
-                neo4j_password="password",
+                neo4j_password="neo123456",
                 chroma_path="./integration_test_chroma",
-                embedding_model="all-MiniLM-L6-v2"
+                embedding_model="/home/kai/all-MiniLM-L6-v2"
             )
             print("✅ 知识图谱存储初始化成功")
             

@@ -16,13 +16,18 @@ import chromadb
 from neo4j import GraphDatabase
 from sentence_transformers import SentenceTransformer
 
-# 导入模型配置管理器
+# 导入配置管理器
 try:
     from ..utils.model_config import get_embedding_model_path
+    from ..config.path_config import get_chroma_db_path, get_models_dir
 except ImportError:
     # 如果导入失败，使用默认路径
     def get_embedding_model_path(model_name=None):
         return model_name or "all-MiniLM-L6-v2"
+    def get_chroma_db_path():
+        return "./chroma_db"
+    def get_models_dir():
+        return "./models"
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +45,7 @@ class HyperRelationStorage:
                  neo4j_uri: str,
                  neo4j_user: str, 
                  neo4j_password: str,
-                 chroma_path: str = "./chroma_db",
+                 chroma_path: Optional[str] = None,
                  embedding_model: str = "all-MiniLM-L6-v2"):
         """
         初始化存储管理器
@@ -49,13 +54,17 @@ class HyperRelationStorage:
             neo4j_uri: Neo4j数据库连接URI
             neo4j_user: Neo4j用户名
             neo4j_password: Neo4j密码
-            chroma_path: ChromaDB存储路径
+            chroma_path: ChromaDB存储路径，如果为None则使用配置文件中的路径
             embedding_model: 句子嵌入模型名称（支持本地路径或HuggingFace名称）
         """
         # 初始化Neo4j连接
         self.neo4j_driver = GraphDatabase.driver(
             neo4j_uri, auth=(neo4j_user, neo4j_password)
         )
+        
+        # 使用配置管理器获取ChromaDB路径
+        if chroma_path is None:
+            chroma_path = str(get_chroma_db_path())
         
         # 初始化ChromaDB
         self.chroma_client = chromadb.PersistentClient(path=chroma_path)
