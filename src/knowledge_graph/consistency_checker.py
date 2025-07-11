@@ -313,21 +313,21 @@ class ConsistencyChecker:
         """检查ID唯一性"""
         issues = []
         
-        # 检查实体ID唯一性
-        entity_ids = [entity.id for entity in entities.values() if hasattr(entity, 'id')]
-        duplicate_entity_ids = [id for id, count in Counter(entity_ids).items() if count > 1]
+        # 检查实体名称唯一性（Entity 类使用 name 作为标识符）
+        entity_names = [entity.name for entity in entities.values() if hasattr(entity, 'name')]
+        duplicate_entity_names = [name for name, count in Counter(entity_names).items() if count > 1]
         
-        for dup_id in duplicate_entity_ids:
+        for dup_name in duplicate_entity_names:
             issues.append(ValidationIssue(
-                issue_id=f"dup_entity_id_{dup_id}",
+                issue_id=f"dup_entity_name_{dup_name}",
                 rule_id='UNIQUE_IDS',
                 severity='error',
-                message=f"重复的实体ID: {dup_id}",
-                context={'duplicate_id': dup_id, 'count': Counter(entity_ids)[dup_id]}
+                message=f"重复的实体名称: {dup_name}",
+                context={'duplicate_name': dup_name, 'count': Counter(entity_names)[dup_name]}
             ))
         
-        # 检查边ID唯一性
-        edge_ids = [edge.edge_id for edge in edges.values() if hasattr(edge, 'edge_id')]
+        # 检查边ID唯一性（HyperEdge 类使用 id 作为标识符）
+        edge_ids = [edge.id for edge in edges.values() if hasattr(edge, 'id')]
         duplicate_edge_ids = [id for id, count in Counter(edge_ids).items() if count > 1]
         
         for dup_id in duplicate_edge_ids:
@@ -344,19 +344,19 @@ class ConsistencyChecker:
     def _check_reference_integrity(self, entities: Dict[str, Entity], edges: Dict[str, HyperEdge]) -> List[ValidationIssue]:
         """检查引用完整性"""
         issues = []
-        entity_ids = set(entities.keys())
+        entity_names = set(entity.name for entity in entities.values() if hasattr(entity, 'name'))
         
         for edge_id, edge in edges.items():
-            if hasattr(edge, 'nodes') and edge.nodes:
-                for node in edge.nodes:
-                    if hasattr(node, 'entity_id') and node.entity_id not in entity_ids:
+            if hasattr(edge, 'connected_entities') and edge.connected_entities:
+                for entity_ref in edge.connected_entities:
+                    if entity_ref not in entity_names:
                         issues.append(ValidationIssue(
-                            issue_id=f"ref_integrity_{edge_id}_{node.entity_id}",
+                            issue_id=f"ref_integrity_{edge_id}_{entity_ref}",
                             rule_id='REF_INTEGRITY',
                             severity='error',
-                            message=f"边 {edge_id} 引用了不存在的实体: {node.entity_id}",
+                            message=f"边 {edge_id} 引用了不存在的实体: {entity_ref}",
                             edge_id=edge_id,
-                            context={'missing_entity_id': node.entity_id}
+                            context={'missing_entity_name': entity_ref}
                         ))
         
         return issues
@@ -404,22 +404,27 @@ class ConsistencyChecker:
         }
         
         for edge_id, edge in edges.items():
-            if hasattr(edge, 'edge_type') and edge.edge_type in relation_entity_rules:
-                allowed_types = relation_entity_rules[edge.edge_type]
+            if hasattr(edge, 'event_type') and edge.event_type in relation_entity_rules:
+                allowed_types = relation_entity_rules[edge.event_type]
                 
-                if hasattr(edge, 'nodes') and edge.nodes:
-                    for node in edge.nodes:
-                        if hasattr(node, 'entity_id') and node.entity_id in entities:
-                            entity = entities[node.entity_id]
-                            if hasattr(entity, 'entity_type') and entity.entity_type not in allowed_types:
-                                issues.append(ValidationIssue(
-                                    issue_id=f"rel_consistency_{edge_id}_{node.entity_id}",
-                                    rule_id='RELATION_TYPE_CONSISTENCY',
-                                    severity='warning',
-                                    message=f"关系 {edge.edge_type} 不兼容实体类型 {entity.entity_type}",
-                                    edge_id=edge_id,
-                                    entity_id=node.entity_id
-                                ))
+                if hasattr(edge, 'connected_entities') and edge.connected_entities:
+                    for entity_name in edge.connected_entities:
+                        # 根据实体名称查找实体对象
+                        entity = None
+                        for ent in entities.values():
+                            if hasattr(ent, 'name') and ent.name == entity_name:
+                                entity = ent
+                                break
+                        
+                        if entity and hasattr(entity, 'entity_type') and entity.entity_type not in allowed_types:
+                            issues.append(ValidationIssue(
+                                issue_id=f"rel_consistency_{edge_id}_{entity_name}",
+                                rule_id='RELATION_TYPE_CONSISTENCY',
+                                severity='warning',
+                                message=f"关系 {edge.event_type} 不兼容实体类型 {entity.entity_type}",
+                                edge_id=edge_id,
+                                entity_id=entity_name
+                            ))
         
         return issues
     
@@ -454,20 +459,20 @@ class ConsistencyChecker:
         # 统计每个实体的连接数
         entity_connections = defaultdict(int)
         for edge in edges.values():
-            if hasattr(edge, 'nodes') and edge.nodes:
-                for node in edge.nodes:
-                    if hasattr(node, 'entity_id'):
-                        entity_connections[node.entity_id] += 1
+            if hasattr(edge, 'connected_entities') and edge.connected_entities:
+                for entity_name in edge.connected_entities:
+                    entity_connections[entity_name] += 1
         
         # 检查孤立实体
-        for entity_id in entities.keys():
-            if entity_connections[entity_id] == 0:
+        for entity_key, entity in entities.items():
+            entity_name = entity.name if hasattr(entity, 'name') else entity_key
+            if entity_connections[entity_name] == 0:
                 issues.append(ValidationIssue(
-                    issue_id=f"cardinality_{entity_id}_isolated",
+                    issue_id=f"cardinality_{entity_name}_isolated",
                     rule_id='CARDINALITY_CONSTRAINTS',
                     severity='info',
-                    message=f"实体 {entity_id} 没有任何连接（孤立节点）",
-                    entity_id=entity_id
+                    message=f"实体 {entity_name} 没有任何连接（孤立节点）",
+                    entity_id=entity_name
                 ))
         
         return issues
