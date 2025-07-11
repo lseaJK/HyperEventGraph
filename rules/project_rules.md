@@ -48,6 +48,13 @@
 - 使用类型提示 (Type Hints)
 - 复杂逻辑必须有注释说明
 
+## 9. 命令行操作规范
+- **PowerShell 环境**: 不支持 `&&` 命令连接符，需要使用分号 `;` 或分别执行命令
+- **跨平台兼容**: 在 Windows PowerShell 中使用 PowerShell 原生命令，避免使用 Unix 风格的命令连接
+- **示例**:
+  - ❌ 错误: `cd path && git status`
+  - ✅ 正确: `cd path; git status` 或分别执行两个命令
+
 ## 特别说明
 - 总是用中文回复
 - 保持文档简洁，避免冗余

@@ -43,3 +43,9 @@ sentence-transformers>=2.2.0
 # 可选：其他LLM支持
 # anthropic>=0.3.0
 # google-generativeai>=0.3.0
+
+aioboto3
+ollama
+
+# 为了和prompt-templates匹配
+prompt-templates

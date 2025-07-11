@@ -95,7 +95,7 @@ def test_neo4j_connection():
         # 默认连接参数，用户需要根据实际情况修改
         uri = "bolt://localhost:7687"
         user = "neo4j"
-        password = "password"
+        password = "neo123456"
         
         print(f"尝试连接到: {uri}")
         print(f"用户名: {user}")
@@ -142,8 +142,12 @@ def test_sentence_transformers():
     try:
         from sentence_transformers import SentenceTransformer
         
-        print("正在加载模型 'all-MiniLM-L6-v2'...")
-        model = SentenceTransformer('all-MiniLM-L6-v2')
+        # 配置本地模型路径
+        local_model_path = "/home/kai/all-MiniLM-L6-v2"
+        print(f"正在加载本地模型: {local_model_path}...")
+        model = SentenceTransformer(local_model_path)
+
+        print("✅ 模型加载成功!")
         
         # 测试编码
         test_text = "This is a test sentence."
@@ -173,9 +177,9 @@ def test_hyperrelation_storage():
         storage = HyperRelationStorage(
             neo4j_uri="bolt://localhost:7687",
             neo4j_user="neo4j",
-            neo4j_password="password",
+            neo4j_password="neo123456",
             chroma_path="./test_hyperrel_chroma",
-            embedding_model="all-MiniLM-L6-v2"
+            embedding_model="/home/kai/all-MiniLM-L6-v2"
         )
         
         # 测试数据

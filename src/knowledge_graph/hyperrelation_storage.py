@@ -16,6 +16,14 @@ import chromadb
 from neo4j import GraphDatabase
 from sentence_transformers import SentenceTransformer
 
+# 导入模型配置管理器
+try:
+    from ..utils.model_config import get_embedding_model_path
+except ImportError:
+    # 如果导入失败，使用默认路径
+    def get_embedding_model_path(model_name=None):
+        return model_name or "all-MiniLM-L6-v2"
+
 logger = logging.getLogger(__name__)
 
 
@@ -42,7 +50,7 @@ class HyperRelationStorage:
             neo4j_user: Neo4j用户名
             neo4j_password: Neo4j密码
             chroma_path: ChromaDB存储路径
-            embedding_model: 句子嵌入模型名称
+            embedding_model: 句子嵌入模型名称（支持本地路径或HuggingFace名称）
         """
         # 初始化Neo4j连接
         self.neo4j_driver = GraphDatabase.driver(
@@ -57,7 +65,16 @@ class HyperRelationStorage:
         )
         
         # 初始化嵌入模型
-        self.embedding_model = SentenceTransformer(embedding_model)
+        # 如果传入的是模型名称，则通过配置管理器获取实际路径
+        if embedding_model.startswith('/') or embedding_model.startswith('./') or embedding_model.startswith('../'):
+            # 如果是路径格式，直接使用
+            model_path = embedding_model
+        else:
+            # 如果是模型名称，通过配置管理器获取路径
+            model_path = get_embedding_model_path(embedding_model)
+        
+        print(f"正在加载嵌入模型: {model_path}")
+        self.embedding_model = SentenceTransformer(model_path)
         
         # 创建Neo4j索引
         self._create_neo4j_indexes()

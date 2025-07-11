@@ -1,0 +1,15 @@
+{
+  "embedding_models": {
+    "all-MiniLM-L6-v2": {
+      "local_path": "/home/kai/all-MiniLM-L6-v2",
+      "huggingface_name": "sentence-transformers/all-MiniLM-L6-v2",
+      "description": "轻量级句子嵌入模型，384维向量",
+      "use_local": true
+    }
+  },
+  "model_settings": {
+    "default_embedding_model": "all-MiniLM-L6-v2",
+    "cache_dir": "/home/kai/model_cache",
+    "device": "cpu"
+  }
+}
