@@ -20,6 +20,7 @@ class EventType(Enum):
     BUSINESS_ACQUISITION = "business.acquisition"  # 企业收购
     PERSONNEL_CHANGE = "personnel.change"  # 人事变动
     COLLABORATION = "collaboration"  # 合作事件
+    BUSINESS_COOPERATION = "business.cooperation"  # 商业合作
     INVESTMENT = "investment"  # 投资事件
     PRODUCT_LAUNCH = "product.launch"  # 产品发布
     MARKET_EXPANSION = "market.expansion"  # 市场扩张
