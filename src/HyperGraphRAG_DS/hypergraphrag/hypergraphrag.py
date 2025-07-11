@@ -290,13 +290,6 @@ class HyperGraphRAG:
         return loop.run_until_complete(self.ainsert(string_or_strings))
 
     async def ainsert(self, string_or_strings):
-#         # xxxxxxxxxxxxxxxxxxxxx
-#         global_config = asdict(self)  # 将当前类实例转为字典
-#         print("ainsert Global Config:", global_config)
-        
-#         global_config = getattr(self, "global_config", asdict(self))  # 从类属性中获取或生成
-#         print("getattr Global Config:", global_config)
-        
         update_storage = False
         try:
             if isinstance(string_or_strings, str):
@@ -342,7 +335,8 @@ class HyperGraphRAG:
                 return
             logger.info(f"[New Chunks] inserting {len(inserting_chunks)} chunks")
 
-            await self.chunks_vdb.upsert(inserting_chunks)
+            # 批量插入chunks到向量数据库
+            await self._batch_upsert_chunks(inserting_chunks)
 
             logger.info("[Entity Extraction]...")
             maybe_new_kg = await extract_entities(
@@ -362,6 +356,42 @@ class HyperGraphRAG:
         finally:
             if update_storage:
                 await self._insert_done()
+
+    async def _batch_upsert_chunks(self, chunks_data):
+        """批量插入chunks到向量数据库"""
+        if hasattr(self.chunks_vdb, 'batch_upsert'):
+            await self.chunks_vdb.batch_upsert(chunks_data)
+        else:
+            await self.chunks_vdb.upsert(chunks_data)
+
+    async def _batch_insert_entities_and_relationships(self, entities_data, relationships_data):
+         """批量插入实体和关系"""
+         # 准备节点数据格式
+         nodes_batch = []
+         for entity_name, node_data in entities_data:
+             nodes_batch.append({
+                 "node_id": entity_name,
+                 "node_data": node_data
+             })
+         
+         # 准备边数据格式
+         edges_batch = []
+         for src_id, tgt_id, edge_data in relationships_data:
+             edges_batch.append({
+                 "source_node_id": src_id,
+                 "target_node_id": tgt_id,
+                 "edge_data": edge_data
+             })
+         
+         # 批量插入实体
+         if nodes_batch and hasattr(self.chunk_entity_relation_graph, 'batch_upsert_nodes'):
+             await self.chunk_entity_relation_graph.batch_upsert_nodes(nodes_batch)
+             logger.info(f"Batch inserted {len(nodes_batch)} entities")
+         
+         # 批量插入关系
+         if edges_batch and hasattr(self.chunk_entity_relation_graph, 'batch_upsert_edges'):
+             await self.chunk_entity_relation_graph.batch_upsert_edges(edges_batch)
+             logger.info(f"Batch inserted {len(edges_batch)} relationships")
 
     async def _insert_done(self):
         tasks = []
@@ -404,111 +434,101 @@ class HyperGraphRAG:
             if self.text_chunks is not None and all_chunks_data:
                 await self.text_chunks.upsert(all_chunks_data)
 
-            # Insert entities into knowledge graph
+            # Prepare entities and relationships data
             all_entities_data = []
+            all_relationships_data = []
+            
+            # Process entities
             for entity_data in custom_kg.get("entities", []):
                 entity_name = f'"{entity_data["entity_name"].upper()}"'
                 entity_type = entity_data.get("entity_type", "UNKNOWN")
                 description = entity_data.get("description", "No description provided")
-                # source_id = entity_data["source_id"]
                 source_chunk_id = entity_data.get("source_id", "UNKNOWN")
                 source_id = chunk_to_source_map.get(source_chunk_id, "UNKNOWN")
 
-                # Log if source_id is UNKNOWN
                 if source_id == "UNKNOWN":
                     logger.warning(
                         f"Entity '{entity_name}' has an UNKNOWN source_id. Please check the source mapping."
                     )
 
-                # Prepare node data
                 node_data = {
                     "entity_type": entity_type,
                     "description": description,
                     "source_id": source_id,
+                    "entity_name": entity_name,
                 }
-                # Insert node data into the knowledge graph
-                await self.chunk_entity_relation_graph.upsert_node(
-                    entity_name, node_data=node_data
-                )
-                node_data["entity_name"] = entity_name
-                all_entities_data.append(node_data)
+                all_entities_data.append((entity_name, node_data))
                 update_storage = True
 
-            # Insert relationships into knowledge graph
-            all_relationships_data = []
+            # Process relationships
             for relationship_data in custom_kg.get("relationships", []):
                 src_id = f'"{relationship_data["src_id"].upper()}"'
                 tgt_id = f'"{relationship_data["tgt_id"].upper()}"'
                 description = relationship_data["description"]
                 keywords = relationship_data["keywords"]
                 weight = relationship_data.get("weight", 1.0)
-                # source_id = relationship_data["source_id"]
                 source_chunk_id = relationship_data.get("source_id", "UNKNOWN")
                 source_id = chunk_to_source_map.get(source_chunk_id, "UNKNOWN")
 
-                # Log if source_id is UNKNOWN
                 if source_id == "UNKNOWN":
                     logger.warning(
                         f"Relationship from '{src_id}' to '{tgt_id}' has an UNKNOWN source_id. Please check the source mapping."
                     )
 
-                # Check if nodes exist in the knowledge graph
-                for need_insert_id in [src_id, tgt_id]:
-                    if not (
-                        await self.chunk_entity_relation_graph.has_node(need_insert_id)
-                    ):
-                        await self.chunk_entity_relation_graph.upsert_node(
-                            need_insert_id,
-                            node_data={
-                                "source_id": source_id,
-                                "description": "UNKNOWN",
-                                "entity_type": "UNKNOWN",
-                            },
-                        )
-
-                # Insert edge into the knowledge graph
-                await self.chunk_entity_relation_graph.upsert_edge(
-                    src_id,
-                    tgt_id,
-                    edge_data={
-                        "weight": weight,
-                        "description": description,
-                        "keywords": keywords,
-                        "source_id": source_id,
-                    },
-                )
                 edge_data = {
-                    "src_id": src_id,
-                    "tgt_id": tgt_id,
+                    "weight": weight,
                     "description": description,
                     "keywords": keywords,
+                    "source_id": source_id,
                 }
-                all_relationships_data.append(edge_data)
+                all_relationships_data.append((src_id, tgt_id, edge_data))
                 update_storage = True
 
+            # 使用批量插入优化
+            if hasattr(self.chunk_entity_relation_graph, 'batch_upsert_nodes') and hasattr(self.chunk_entity_relation_graph, 'batch_upsert_edges'):
+                await self._batch_insert_entities_and_relationships(all_entities_data, all_relationships_data)
+            else:
+                # Fallback to individual inserts
+                for entity_name, node_data in all_entities_data:
+                    await self.chunk_entity_relation_graph.upsert_node(entity_name, node_data=node_data)
+                
+                for src_id, tgt_id, edge_data in all_relationships_data:
+                    # Check if nodes exist in the knowledge graph
+                    for need_insert_id in [src_id, tgt_id]:
+                        if not (await self.chunk_entity_relation_graph.has_node(need_insert_id)):
+                            await self.chunk_entity_relation_graph.upsert_node(
+                                need_insert_id,
+                                node_data={
+                                    "source_id": edge_data["source_id"],
+                                    "description": "UNKNOWN",
+                                    "entity_type": "UNKNOWN",
+                                },
+                            )
+                    await self.chunk_entity_relation_graph.upsert_edge(src_id, tgt_id, edge_data=edge_data)
+
             # Insert entities into vector storage if needed
-            if self.entities_vdb is not None:
+            if self.entities_vdb is not None and all_entities_data:
                 data_for_vdb = {
-                    compute_mdhash_id(dp["entity_name"], prefix="ent-"): {
-                        "content": dp["entity_name"] + dp["description"],
-                        "entity_name": dp["entity_name"],
+                    compute_mdhash_id(node_data["entity_name"], prefix="ent-"): {
+                        "content": node_data["entity_name"] + node_data["description"],
+                        "entity_name": node_data["entity_name"],
                     }
-                    for dp in all_entities_data
+                    for _, node_data in all_entities_data
                 }
                 await self.entities_vdb.upsert(data_for_vdb)
 
             # Insert relationships into vector storage if needed
-            if self.hyperedges_vdb is not None:
+            if self.hyperedges_vdb is not None and all_relationships_data:
                 data_for_vdb = {
-                    compute_mdhash_id(dp["src_id"] + dp["tgt_id"], prefix="rel-"): {
-                        "src_id": dp["src_id"],
-                        "tgt_id": dp["tgt_id"],
-                        "content": dp["keywords"]
-                        + dp["src_id"]
-                        + dp["tgt_id"]
-                        + dp["description"],
+                    compute_mdhash_id(src_id + tgt_id, prefix="rel-"): {
+                        "src_id": src_id,
+                        "tgt_id": tgt_id,
+                        "content": edge_data["keywords"]
+                        + src_id
+                        + tgt_id
+                        + edge_data["description"],
                     }
-                    for dp in all_relationships_data
+                    for src_id, tgt_id, edge_data in all_relationships_data
                 }
                 await self.hyperedges_vdb.upsert(data_for_vdb)
         finally:

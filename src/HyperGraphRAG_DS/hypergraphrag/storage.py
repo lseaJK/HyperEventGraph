@@ -315,3 +315,29 @@ class NetworkXStorage(BaseGraphStorage):
 
         nodes_ids = [self._graph.nodes[node_id]["id"] for node_id in nodes]
         return embeddings, nodes_ids
+    
+    async def batch_upsert_nodes(self, nodes_data: list):
+        """批量插入或更新节点"""
+        for node in nodes_data:
+            node_id = node["node_id"]
+            node_data_dict = node["node_data"]
+            self._graph.add_node(node_id, **node_data_dict)
+        logger.info(f"Batch upserted {len(nodes_data)} nodes to NetworkX graph")
+    
+    async def batch_upsert_edges(self, edges_data: list):
+        """批量插入或更新边"""
+        for edge in edges_data:
+            source_node_id = edge["source_node_id"]
+            target_node_id = edge["target_node_id"]
+            edge_data_dict = edge["edge_data"]
+            self._graph.add_edge(source_node_id, target_node_id, **edge_data_dict)
+        logger.info(f"Batch upserted {len(edges_data)} edges to NetworkX graph")
+    
+    async def get_database_stats(self):
+        """获取图统计信息"""
+        stats = {
+            "node_count": self._graph.number_of_nodes(),
+            "edge_count": self._graph.number_of_edges()
+        }
+        logger.info(f"NetworkX graph stats: {stats}")
+        return stats

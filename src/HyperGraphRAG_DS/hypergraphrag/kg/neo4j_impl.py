@@ -12,6 +12,17 @@ from neo4j import (
     AsyncManagedTransaction,
 )
 
+# 导入配置和性能监控模块
+try:
+    from ..storage_config import get_storage_config
+    from ..performance_monitor import get_performance_monitor
+except ImportError:
+    # 如果导入失败，使用默认配置
+    def get_storage_config():
+        return None
+    def get_performance_monitor():
+        return None
+
 
 from tenacity import (
     retry,
@@ -27,20 +38,53 @@ class Neo4JStorage(BaseGraphStorage):
     def load_nx_graph(file_name):
         print("no preloading of graph with neo4j in production")
 
-    def __init__(self, namespace, global_config, embedding_func):
+    def __init__(self, namespace, global_config, embedding_func, **kwargs):
         super().__init__(
             namespace=namespace,
             global_config=global_config,
             embedding_func=embedding_func,
         )
-        self._driver = None
+        
+        # 获取存储配置
+        storage_config = get_storage_config()
+        neo4j_config = storage_config.neo4j if storage_config else None
+        
+        # 使用配置或环境变量
+        if neo4j_config:
+            self._driver = AsyncGraphDatabase.driver(
+                neo4j_config.uri,
+                auth=(neo4j_config.username, neo4j_config.password),
+                database=neo4j_config.database,
+                max_connection_lifetime=neo4j_config.max_connection_lifetime,
+                max_connection_pool_size=neo4j_config.max_connection_pool_size,
+                connection_acquisition_timeout=neo4j_config.connection_acquisition_timeout,
+                keep_alive=neo4j_config.keep_alive
+            )
+            self.batch_size = neo4j_config.batch_size
+            self._auto_create_indexes = neo4j_config.auto_create_indexes
+        else:
+            # 回退到环境变量
+            URI = os.environ["NEO4J_URI"]
+            USERNAME = os.environ["NEO4J_USERNAME"]
+            PASSWORD = os.environ["NEO4J_PASSWORD"]
+            
+            self._driver = AsyncGraphDatabase.driver(
+                URI, 
+                auth=(USERNAME, PASSWORD),
+                database=os.environ.get("NEO4J_DATABASE", "neo4j"),
+                max_connection_lifetime=3600,  # 1小时
+                max_connection_pool_size=50,   # 最大连接数
+                connection_acquisition_timeout=60,  # 连接获取超时
+                keep_alive=True
+            )
+            self.batch_size = kwargs.get('batch_size', global_config.get('neo4j_batch_size', 1000))
+            self._auto_create_indexes = True
+        
         self._driver_lock = asyncio.Lock()
-        URI = os.environ["NEO4J_URI"]
-        USERNAME = os.environ["NEO4J_USERNAME"]
-        PASSWORD = os.environ["NEO4J_PASSWORD"]
-        self._driver: AsyncDriver = AsyncGraphDatabase.driver(
-            URI, auth=(USERNAME, PASSWORD)
-        )
+        self._indexes_created = False
+        
+        # 获取性能监控器
+        self._monitor = get_performance_monitor()
         return None
 
     def __post_init__(self):
@@ -58,7 +102,36 @@ class Neo4JStorage(BaseGraphStorage):
             await self._driver.close()
 
     async def index_done_callback(self):
+        """创建索引以优化查询性能"""
+        if not self._indexes_created and self._auto_create_indexes:
+            logger.info("Auto-creating Neo4j indexes...")
+            await self._create_indexes()
+            logger.info("Neo4j indexes created successfully")
+            self._indexes_created = True
         print("KG successfully indexed.")
+    
+    async def _create_indexes(self):
+        """创建Neo4j索引以优化查询性能"""
+        async with self._driver.session() as session:
+            try:
+                # 创建节点标签索引
+                await session.run(
+                    "CREATE INDEX node_label_index IF NOT EXISTS FOR (n) ON (n.__label__)"
+                )
+                
+                # 创建关系类型索引
+                await session.run(
+                    "CREATE INDEX relationship_type_index IF NOT EXISTS FOR ()-[r]-() ON (type(r))"
+                )
+                
+                # 创建节点属性索引（如果有通用属性）
+                await session.run(
+                    "CREATE INDEX node_id_index IF NOT EXISTS FOR (n) ON (n.id)"
+                )
+                
+                logger.info("Neo4j indexes created successfully")
+            except Exception as e:
+                logger.warning(f"Failed to create some indexes: {e}")
 
     async def has_node(self, node_id: str) -> bool:
         entity_name_label = node_id.strip('"')
@@ -296,3 +369,116 @@ class Neo4JStorage(BaseGraphStorage):
 
     async def _node2vec_embed(self):
         print("Implemented but never called.")
+    
+    async def batch_upsert_nodes(self, nodes_data: List[Dict[str, Any]]):
+        """批量插入或更新节点"""
+        if not nodes_data:
+            return
+        
+        # 性能监控
+        monitor = self._monitor
+        if monitor:
+            async with monitor.monitor_operation(
+                "neo4j_batch_upsert_nodes", 
+                items_count=len(nodes_data),
+                batch_size=self.batch_size
+            ) as metric:
+                await self._do_batch_upsert_nodes(nodes_data)
+        else:
+            await self._do_batch_upsert_nodes(nodes_data)
+    
+    async def _do_batch_upsert_nodes(self, nodes_data: List[Dict[str, Any]]):
+        """执行批量节点插入的内部方法"""
+        async def _batch_upsert_nodes(tx: AsyncManagedTransaction, batch_data):
+            query = """
+            UNWIND $nodes_data AS node_data
+            MERGE (n {__label__: node_data.label})
+            SET n += node_data.properties
+            """
+            await tx.run(query, nodes_data=batch_data)
+            logger.debug(f"Batch upserted {len(batch_data)} nodes")
+        
+        try:
+            async with self._driver.session() as session:
+                # 分批处理大量数据
+                for i in range(0, len(nodes_data), self.batch_size):
+                    batch = nodes_data[i:i + self.batch_size]
+                    formatted_batch = [
+                        {
+                            "label": node["node_id"].strip('"'),
+                            "properties": node["node_data"]
+                        }
+                        for node in batch
+                    ]
+                    await session.execute_write(_batch_upsert_nodes, formatted_batch)
+        except Exception as e:
+            logger.error(f"Error during batch node upsert: {str(e)}")
+            raise
+    
+    async def batch_upsert_edges(self, edges_data: List[Dict[str, Any]]):
+        """批量插入或更新边"""
+        if not edges_data:
+            return
+        
+        # 性能监控
+        monitor = self._monitor
+        if monitor:
+            async with monitor.monitor_operation(
+                "neo4j_batch_upsert_edges", 
+                items_count=len(edges_data),
+                batch_size=self.batch_size
+            ) as metric:
+                await self._do_batch_upsert_edges(edges_data)
+        else:
+            await self._do_batch_upsert_edges(edges_data)
+    
+    async def _do_batch_upsert_edges(self, edges_data: List[Dict[str, Any]]):
+        """执行批量边插入的内部方法"""
+        async def _batch_upsert_edges(tx: AsyncManagedTransaction, batch_data):
+            query = """
+            UNWIND $edges_data AS edge_data
+            MATCH (source {__label__: edge_data.source_label})
+            WITH source, edge_data
+            MATCH (target {__label__: edge_data.target_label})
+            MERGE (source)-[r:DIRECTED]->(target)
+            SET r += edge_data.properties
+            """
+            await tx.run(query, edges_data=batch_data)
+            logger.debug(f"Batch upserted {len(batch_data)} edges")
+        
+        try:
+            async with self._driver.session() as session:
+                # 分批处理大量数据
+                for i in range(0, len(edges_data), self.batch_size):
+                    batch = edges_data[i:i + self.batch_size]
+                    formatted_batch = [
+                        {
+                            "source_label": edge["source_node_id"].strip('"'),
+                            "target_label": edge["target_node_id"].strip('"'),
+                            "properties": edge["edge_data"]
+                        }
+                        for edge in batch
+                    ]
+                    await session.execute_write(_batch_upsert_edges, formatted_batch)
+        except Exception as e:
+            logger.error(f"Error during batch edge upsert: {str(e)}")
+            raise
+    
+    async def get_database_stats(self):
+        """获取数据库统计信息"""
+        async with self._driver.session() as session:
+            query = """
+            MATCH (n)
+            OPTIONAL MATCH ()-[r]-()
+            RETURN count(DISTINCT n) as node_count, count(DISTINCT r) as edge_count
+            """
+            result = await session.run(query)
+            record = await result.single()
+            if record:
+                stats = {
+                    "node_count": record["node_count"],
+                    "edge_count": record["edge_count"]
+                }
+                logger.info(f"Database stats: {stats}")
+                return stats
+            return {"node_count": 0, "edge_count": 0}
