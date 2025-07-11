@@ -142,10 +142,18 @@ def test_sentence_transformers():
     try:
         from sentence_transformers import SentenceTransformer
         
-        # 配置本地模型路径
-        local_model_path = "/home/kai/all-MiniLM-L6-v2"
-        print(f"正在加载本地模型: {local_model_path}...")
-        model = SentenceTransformer(local_model_path)
+        # 尝试使用配置管理器获取模型路径
+        try:
+            from utils.model_config import get_embedding_model_path
+            model_path = get_embedding_model_path("all-MiniLM-L6-v2")
+            print(f"使用配置管理器获取模型路径: {model_path}")
+        except ImportError:
+            # 如果配置管理器不可用，使用默认本地路径
+            model_path = "/home/kai/all-MiniLM-L6-v2"
+            print(f"配置管理器不可用，使用默认本地路径: {model_path}")
+        
+        print(f"正在加载模型: {model_path}...")
+        model = SentenceTransformer(model_path)
 
         print("✅ 模型加载成功!")
         
@@ -174,12 +182,23 @@ def test_hyperrelation_storage():
     try:
         # 初始化存储管理器
         print("初始化HyperRelationStorage...")
+        
+        # 尝试使用配置管理器获取模型路径
+        try:
+            from utils.model_config import get_embedding_model_path
+            embedding_model = get_embedding_model_path("all-MiniLM-L6-v2")
+            print(f"使用配置管理器获取嵌入模型: {embedding_model}")
+        except ImportError:
+            # 如果配置管理器不可用，使用默认本地路径
+            embedding_model = "/home/kai/all-MiniLM-L6-v2"
+            print(f"配置管理器不可用，使用默认嵌入模型: {embedding_model}")
+        
         storage = HyperRelationStorage(
             neo4j_uri="bolt://localhost:7687",
             neo4j_user="neo4j",
             neo4j_password="neo123456",
             chroma_path="./test_hyperrel_chroma",
-            embedding_model="/home/kai/all-MiniLM-L6-v2"
+            embedding_model=embedding_model
         )
         
         # 测试数据

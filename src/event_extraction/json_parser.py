@@ -398,6 +398,11 @@ class StructuredOutputValidator:
         
         data = parse_result.data
         
+        # 验证JSON schema
+        if expected_schema:
+            if not self._validate_against_schema(data, expected_schema):
+                errors.append("数据不符合预期的JSON模式")
+        
         # 验证必需字段
         if required_fields:
             missing_fields = [field for field in required_fields if field not in data or data[field] is None]
@@ -457,6 +462,19 @@ class StructuredOutputValidator:
             float(value.replace(',', '').replace('万', '').replace('亿', ''))
             return True
         except ValueError:
+            return False
+    
+    def _validate_against_schema(self, data: Dict[str, Any], schema: Dict[str, Any]) -> bool:
+        """
+        根据模式验证数据
+        """
+        try:
+            from jsonschema import validate, ValidationError
+            validate(instance=data, schema=schema)
+            return True
+        except ValidationError:
+            return False
+        except Exception:
             return False
 
 # 便捷函数

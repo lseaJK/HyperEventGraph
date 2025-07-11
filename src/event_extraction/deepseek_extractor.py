@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 import logging
-from prompt_templates import PromptTemplateGenerator
+from .prompt_templates import PromptTemplateGenerator
 # from schemas import EventSchema  # EventSchema不存在，已注释
-from json_parser import EnhancedJSONParser, StructuredOutputValidator, parse_llm_json_response
+from .json_parser import EnhancedJSONParser, StructuredOutputValidator, parse_llm_json_response
 
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent.parent

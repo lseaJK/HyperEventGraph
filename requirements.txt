@@ -47,5 +47,7 @@ sentence-transformers>=2.2.0
 aioboto3
 ollama
 
-# 为了和prompt-templates匹配
-prompt-templates
+# PyTorch 依赖
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0

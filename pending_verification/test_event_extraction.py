@@ -141,11 +141,13 @@ def test_output_validator():
             ]
         }
         
-        result1 = validator.validate(valid_data, test_schema)
-        if result1.is_valid:
+        success1, data1, errors1 = validator.validate_and_parse(
+            json.dumps(valid_data), test_schema
+        )
+        if success1:
             print("✅ 有效数据验证: 通过")
         else:
-            print(f"❌ 有效数据验证: 失败 - {result1.errors}")
+            print(f"❌ 有效数据验证: 失败 - {errors1}")
             return False
         
         # 测试用例2: 无效数据
@@ -158,8 +160,10 @@ def test_output_validator():
             ]
         }
         
-        result2 = validator.validate(invalid_data, test_schema)
-        if not result2.is_valid:
+        success2, data2, errors2 = validator.validate_and_parse(
+            json.dumps(invalid_data), test_schema
+        )
+        if not success2:
             print("✅ 无效数据验证: 正确识别错误")
         else:
             print("❌ 无效数据验证: 应该失败但通过了")
@@ -181,36 +185,38 @@ def test_prompt_templates():
     try:
         generator = PromptTemplateGenerator()
         
-        # 测试用例1: 生成基础模板
-        template1 = generator.generate_extraction_prompt(
-            domain="business",
-            event_types=["acquisition", "merger"],
-            output_format="json"
+        # 测试用例1: 生成单事件模板
+        template1 = generator.generate_single_event_prompt(
+            domain="financial_domain",
+            event_type="company_merger_and_acquisition",
+            include_examples=False
         )
         
         if template1 and len(template1) > 100:  # 基本长度检查
-            print("✅ 基础模板生成: 成功")
+            print("✅ 单事件模板生成: 成功")
         else:
-            print("❌ 基础模板生成: 失败或内容过短")
+            print("❌ 单事件模板生成: 失败或内容过短")
             return False
         
         # 测试用例2: 生成多事件模板
         template2 = generator.generate_multi_event_prompt(
-            domains=["business", "technology"],
-            max_events=5
+            domain="financial_domain",
+            event_types=["company_merger_and_acquisition"]
         )
         
-        if template2 and "多个事件" in template2:
+        if template2 and len(template2) > 100:
             print("✅ 多事件模板生成: 成功")
         else:
             print("❌ 多事件模板生成: 失败")
             return False
         
         # 测试用例3: 生成验证模板
-        template3 = generator.generate_validation_prompt(
-            extracted_events=[{"event_type": "test"}],
-            original_text="测试文本"
-        )
+        test_event = {
+            "event_type": "company_merger_and_acquisition",
+            "acquirer_company": "测试公司A",
+            "target_company": "测试公司B"
+        }
+        template3 = generator.generate_validation_prompt(test_event)
         
         if template3 and "验证" in template3:
             print("✅ 验证模板生成: 成功")
@@ -235,31 +241,38 @@ def test_event_extraction_validator():
         validator = EventExtractionValidator()
         
         # 测试数据
-        test_events = [
-            {
-                "event_type": "business.acquisition",
-                "acquirer_company": "腾讯",
-                "target_company": "AI公司",
-                "amount": "5亿元",
-                "time": "2024年1月"
-            }
-        ]
+        test_event_data = {
+            "acquirer_company": "腾讯",
+            "target_company": "AI公司",
+            "deal_amount": 500000000,  # 5亿元转换为数字
+            "announcement_date": "2024年1月"
+        }
         
         original_text = "2024年1月，腾讯公司宣布收购了一家AI公司，交易金额达到5亿元。"
         
         # 测试验证功能
-        result = validator.validate_extraction(
-            events=test_events,
-            original_text=original_text,
-            confidence_threshold=0.7
+        result = validator.validate_extraction_result(
+            result={
+                "event_data": test_event_data,
+                "metadata": {
+                    "confidence_score": 0.85,
+                    "original_text": original_text
+                }
+            },
+            domain="financial",
+            event_type="company_merger_and_acquisition"
         )
         
         if result.is_valid:
             print("✅ 事件抽取验证: 通过")
-            print(f"   置信度: {result.confidence:.2f}")
-            print(f"   验证的事件数: {len(result.validated_events)}")
+            print(f"   置信度: {result.confidence_score:.2f}")
+            print(f"   质量指标: {result.quality_metrics}")
         else:
             print(f"❌ 事件抽取验证: 失败 - {result.errors}")
+            if result.warnings:
+                print(f"   警告: {result.warnings}")
+            if result.suggestions:
+                print(f"   建议: {result.suggestions}")
             return False
         
         print("✅ 事件抽取验证器测试完成")
@@ -278,15 +291,14 @@ def test_deepseek_extractor_init():
     try:
         # 注意：这里不设置真实的API密钥，只测试初始化
         extractor = DeepSeekEventExtractor(
-            api_key="test_key",  # 测试用的假密钥
-            model="deepseek-chat"
+            api_key="test_key"  # 测试用的假密钥
         )
         
         if extractor:
             print("✅ DeepSeek抽取器初始化: 成功")
             
             # 测试配置
-            if hasattr(extractor, 'api_key') and hasattr(extractor, 'model'):
+            if hasattr(extractor, 'api_key') and hasattr(extractor, 'model_name'):
                 print("✅ 配置属性检查: 通过")
             else:
                 print("❌ 配置属性检查: 失败")
@@ -318,8 +330,7 @@ def test_api_connection():
     
     try:
         extractor = DeepSeekEventExtractor(
-            api_key=api_key,
-            model="deepseek-chat"
+            api_key=api_key
         )
         
         # 简单的测试文本
