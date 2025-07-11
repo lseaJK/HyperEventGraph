@@ -355,6 +355,69 @@ class LayerMapper:
             self.logger.error(f"跨层查询失败: {str(e)}")
             return []
     
+    def query_mappings(self, 
+                      event_id: str = None,
+                      pattern_id: str = None,
+                      mapping_type: str = None,
+                      min_score: float = 0.0,
+                      min_confidence: float = 0.0,
+                      limit: int = None) -> List[EventPatternMapping]:
+        """查询映射
+        
+        Args:
+            event_id: 事件ID过滤
+            pattern_id: 模式ID过滤
+            mapping_type: 映射类型过滤
+            min_score: 最小分数
+            min_confidence: 最小置信度
+            limit: 结果限制
+            
+        Returns:
+            List[EventPatternMapping]: 匹配的映射列表
+        """
+        try:
+            # 获取所有映射
+            all_mappings = list(self._mapping_cache.values())
+            
+            # 应用过滤条件
+            filtered_mappings = []
+            for mapping in all_mappings:
+                # 事件ID过滤
+                if event_id and mapping.event_id != event_id:
+                    continue
+                    
+                # 模式ID过滤
+                if pattern_id and mapping.pattern_id != pattern_id:
+                    continue
+                    
+                # 映射类型过滤
+                if mapping_type and mapping.mapping_type != mapping_type:
+                    continue
+                    
+                # 分数过滤
+                if mapping.mapping_score < min_score:
+                    continue
+                    
+                # 置信度过滤
+                if mapping.confidence < min_confidence:
+                    continue
+                    
+                filtered_mappings.append(mapping)
+            
+            # 按分数排序
+            filtered_mappings.sort(key=lambda x: x.mapping_score, reverse=True)
+            
+            # 应用限制
+            if limit:
+                filtered_mappings = filtered_mappings[:limit]
+            
+            self.logger.info(f"查询到 {len(filtered_mappings)} 个映射")
+            return filtered_mappings
+            
+        except Exception as e:
+            self.logger.error(f"查询映射失败: {str(e)}")
+            return []
+    
     def get_mapping_statistics(self) -> Dict[str, Any]:
         """获取映射统计信息"""
         try:
@@ -635,3 +698,105 @@ class LayerMapper:
             "last_update": self._mapping_stats.get('last_update'),
             "update_frequency": self.config.update_frequency
         }
+    
+    def find_matching_patterns(self, event: Event, threshold: float = 0.7) -> List[Tuple[Any, float]]:
+        """查找与事件匹配的模式
+        
+        Args:
+            event: 目标事件
+            threshold: 匹配阈值
+            
+        Returns:
+            List[Tuple[Pattern, float]]: 匹配的模式和置信度列表
+        """
+        try:
+            # 查询与该事件相关的映射
+            event_id = getattr(event, 'event_id', None) or getattr(event, 'id', None)
+            if not event_id:
+                self.logger.warning("事件对象缺少id或event_id属性")
+                return []
+            
+            mappings = self.query_mappings(event_id=event_id, min_score=threshold)
+            
+            # 返回模式和置信度
+            results = []
+            for mapping in mappings:
+                # 这里应该从存储中获取实际的模式对象
+                # 简化实现，返回模式ID和分数
+                pattern_placeholder = type('Pattern', (), {
+                    'pattern_id': mapping.pattern_id,
+                    'pattern_type': 'unknown'
+                })()
+                results.append((pattern_placeholder, mapping.mapping_score))
+            
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"查找匹配模式失败: {str(e)}")
+            return []
+    
+    def get_statistics(self) -> Dict[str, Any]:
+        """获取映射统计信息"""
+        try:
+            # 获取所有映射
+            all_mappings = list(self._mapping_cache.values())
+            
+            total_mappings = len(all_mappings)
+            if total_mappings == 0:
+                return {
+                    "total_mappings": 0,
+                    "mapping_type_distribution": {},
+                    "score_statistics": {},
+                    "confidence_statistics": {},
+                    "recent_mappings": 0
+                }
+            
+            # 映射类型分布
+            type_distribution = {}
+            scores = []
+            confidences = []
+            
+            for mapping in all_mappings:
+                mapping_type = mapping.mapping_type
+                type_distribution[mapping_type] = type_distribution.get(mapping_type, 0) + 1
+                
+                scores.append(mapping.mapping_score)
+                confidences.append(mapping.confidence)
+            
+            # 分数统计
+            score_stats = {}
+            if scores:
+                score_stats = {
+                    "min": min(scores),
+                    "max": max(scores),
+                    "avg": sum(scores) / len(scores),
+                    "median": sorted(scores)[len(scores) // 2]
+                }
+            
+            # 置信度统计
+            confidence_stats = {}
+            if confidences:
+                confidence_stats = {
+                    "min": min(confidences),
+                    "max": max(confidences),
+                    "avg": sum(confidences) / len(confidences),
+                    "median": sorted(confidences)[len(confidences) // 2]
+                }
+            
+            return {
+                "total_mappings": total_mappings,
+                "mapping_type_distribution": type_distribution,
+                "score_statistics": score_stats,
+                "confidence_statistics": confidence_stats,
+                "recent_mappings": total_mappings  # 简化实现
+            }
+            
+        except Exception as e:
+            self.logger.error(f"获取映射统计失败: {str(e)}")
+            return {
+                "total_mappings": 0,
+                "mapping_type_distribution": {},
+                "score_statistics": {},
+                "confidence_statistics": {},
+                "recent_mappings": 0
+            }

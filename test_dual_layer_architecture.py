@@ -22,7 +22,7 @@ from typing import List, Dict, Any
 # 添加项目根目录到路径
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from src.models.event_data_model import Event, EventType, EventPattern, EventRelation, RelationType
+from src.models.event_data_model import Event, EventType, EventPattern, EventRelation, RelationType, Entity
 from src.storage.neo4j_event_storage import Neo4jEventStorage, Neo4jConfig
 from src.core.dual_layer_architecture import DualLayerArchitecture, ArchitectureConfig
 from src.core.event_layer_manager import EventLayerManager
@@ -94,6 +94,17 @@ def create_test_events() -> List[Event]:
             event_params["text"] = event_params["description"]
             event_params["summary"] = event_params["description"]
             del event_params["description"]
+        
+        # 将participants字符串列表转换为Entity对象列表
+        if "participants" in event_params:
+            participant_entities = []
+            for participant_name in event_params["participants"]:
+                entity = Entity(
+                    name=participant_name,
+                    entity_type="ORGANIZATION" if "公司" in participant_name or "机构" in participant_name else "PERSON"
+                )
+                participant_entities.append(entity)
+            event_params["participants"] = participant_entities
         
         # 添加默认confidence值
         if "confidence" not in event_params:
@@ -326,7 +337,7 @@ def test_dual_layer_architecture():
         arch_config = ArchitectureConfig(
             neo4j_uri="bolt://localhost:7687",
             neo4j_user="neo4j",
-            neo4j_password="password",
+            neo4j_password="neo123456",
             enable_pattern_learning=True,
             auto_mapping=True
         )

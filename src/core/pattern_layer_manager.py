@@ -285,7 +285,7 @@ class PatternLayerManager:
         # 统计因果模式频率
         pattern_counts = Counter()
         for cause, effect in causal_pairs:
-            pattern_key = (cause.event_type, effect.event_type)
+            pattern_key = (str(cause.event_type), str(effect.event_type))
             pattern_counts[pattern_key] += 1
         
         # 生成因果模式
@@ -310,7 +310,7 @@ class PatternLayerManager:
         patterns = []
         
         # 分析事件类型共现
-        event_types = [e.event_type for e in events]
+        event_types = [str(e.event_type) for e in events]
         type_combinations = self._find_frequent_combinations(event_types, min_support)
         
         for combination, count in type_combinations.items():
@@ -334,7 +334,7 @@ class PatternLayerManager:
         sequences = defaultdict(int)
         
         for i in range(len(events) - length + 1):
-            sequence = tuple(e.event_type for e in events[i:i+length])
+            sequence = tuple(str(e.event_type) for e in events[i:i+length])
             sequences[sequence] += 1
         
         return {seq: count for seq, count in sequences.items() if count >= min_support}
@@ -344,12 +344,14 @@ class PatternLayerManager:
         from itertools import combinations
         
         item_combinations = defaultdict(int)
-        unique_items = list(set(items))
+        # 将EventType对象转换为字符串
+        string_items = [str(item) for item in items]
+        unique_items = list(set(string_items))
         
         for r in range(2, min(len(unique_items) + 1, self.config.max_pattern_length + 1)):
             for combo in combinations(unique_items, r):
                 # 计算组合在原始序列中的支持度
-                count = sum(1 for item in items if item in combo)
+                count = sum(1 for item in string_items if item in combo)
                 if count >= min_support:
                     item_combinations[combo] = count
         

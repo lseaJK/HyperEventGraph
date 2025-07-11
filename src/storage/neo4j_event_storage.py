@@ -172,12 +172,13 @@ class Neo4jEventStorage:
                     
                     # 2. 创建实体节点
                     for participant in event.participants:
-                        self._create_entity_node(tx, participant)
+                        if hasattr(participant, 'id'):  # 只有Entity对象才有id属性
+                            self._create_entity_node(tx, participant)
                     
-                    if event.subject:
+                    if event.subject and hasattr(event.subject, 'id'):
                         self._create_entity_node(tx, event.subject)
                     
-                    if event.object:
+                    if event.object and hasattr(event.object, 'id'):
                         self._create_entity_node(tx, event.object)
                     
                     # 3. 创建事件-实体关系
@@ -210,9 +211,12 @@ class Neo4jEventStorage:
         RETURN e
         """
         
+        # 处理event_type，可能是枚举或字符串
+        event_type_value = event.event_type.value if hasattr(event.event_type, 'value') else str(event.event_type)
+        
         tx.run(query, 
                id=event.id,
-               event_type=event.event_type.value,
+               event_type=event_type_value,
                text=event.text,
                summary=event.summary,
                timestamp=event.timestamp.isoformat() if hasattr(event.timestamp, 'isoformat') else event.timestamp,
@@ -247,24 +251,85 @@ class Neo4jEventStorage:
         """创建事件-实体关系"""
         # 主体关系
         if event.subject:
+            if isinstance(event.subject, str):
+                # 如果是字符串，创建简单的实体节点
+                subject_id = f"entity_{hash(event.subject)}"
+                tx.run("""
+                    MERGE (ent:Entity {id: $entity_id})
+                    SET ent.name = $name,
+                        ent.entity_type = 'PERSON',
+                        ent.properties = '{}',
+                        ent.aliases = [],
+                        ent.confidence = 1.0
+                    """, entity_id=subject_id, name=event.subject)
+            else:
+                subject_id = event.subject.id
+            
             tx.run("""
                 MATCH (e:Event {id: $event_id}), (ent:Entity {id: $entity_id})
                 MERGE (e)-[:HAS_SUBJECT]->(ent)
-                """, event_id=event.id, entity_id=event.subject.id)
+                """, event_id=event.id, entity_id=subject_id)
         
         # 客体关系
         if event.object:
+            if isinstance(event.object, str):
+                # 如果是字符串，创建简单的实体节点
+                object_id = f"entity_{hash(event.object)}"
+                tx.run("""
+                    MERGE (ent:Entity {id: $entity_id})
+                    SET ent.name = $name,
+                        ent.entity_type = 'PERSON',
+                        ent.properties = '{}',
+                        ent.aliases = [],
+                        ent.confidence = 1.0
+                    """, entity_id=object_id, name=event.object)
+            else:
+                object_id = event.object.id
+            
             tx.run("""
                 MATCH (e:Event {id: $event_id}), (ent:Entity {id: $entity_id})
                 MERGE (e)-[:HAS_OBJECT]->(ent)
-                """, event_id=event.id, entity_id=event.object.id)
+                """, event_id=event.id, entity_id=object_id)
         
         # 参与者关系
         for participant in event.participants:
+            # 处理参与者可能是字符串或Entity对象的情况
+            if isinstance(participant, str):
+                # 如果是字符串，创建简单的实体节点
+                participant_id = f"entity_{hash(participant)}"
+                tx.run("""
+                    MERGE (ent:Entity {id: $entity_id})
+                    SET ent.name = $name,
+                        ent.entity_type = 'PERSON',
+                        ent.properties = '{}',
+                        ent.aliases = [],
+                        ent.confidence = 1.0
+                    """, entity_id=participant_id, name=participant)
+            else:
+                # 如果是Entity对象，先确保它有id属性
+                if hasattr(participant, 'id') and participant.id:
+                    participant_id = participant.id
+                    # 创建实体节点
+                    self._create_entity_node(tx, participant)
+                else:
+                    # 如果Entity对象没有id，生成一个
+                    participant_id = f"entity_{hash(participant.name if hasattr(participant, 'name') else str(participant))}"
+                    # 创建简单的实体节点
+                    tx.run("""
+                        MERGE (ent:Entity {id: $entity_id})
+                        SET ent.name = $name,
+                            ent.entity_type = $entity_type,
+                            ent.properties = '{}',
+                            ent.aliases = [],
+                            ent.confidence = 1.0
+                        """, entity_id=participant_id, 
+                             name=getattr(participant, 'name', str(participant)),
+                             entity_type=getattr(participant, 'entity_type', 'PERSON'))
+            
             tx.run("""
                 MATCH (e:Event {id: $event_id}), (ent:Entity {id: $entity_id})
                 MERGE (e)-[:HAS_PARTICIPANT]->(ent)
-                """, event_id=event.id, entity_id=participant.id)
+                """, event_id=event.id, entity_id=participant_id)
     
     def store_event_relation(self, relation: EventRelation) -> bool:
         """
@@ -360,6 +425,96 @@ class Neo4jEventStorage:
                 query = "MATCH (ent:Entity {name: $entity_name})<-[:HAS_SUBJECT|HAS_OBJECT|HAS_PARTICIPANT]-(e:Event)"
             else:
                 query = "MATCH (e:Event)"
+    
+    def get_event(self, event_id: str) -> Optional[Event]:
+        """根据ID获取事件"""
+        with self.driver.session() as session:
+            try:
+                query = """
+                MATCH (e:Event {id: $event_id})
+                OPTIONAL MATCH (e)-[:HAS_PARTICIPANT]->(p:Entity)
+                OPTIONAL MATCH (e)-[:HAS_SUBJECT]->(s:Entity)
+                OPTIONAL MATCH (e)-[:HAS_OBJECT]->(o:Entity)
+                RETURN e, collect(DISTINCT p) as participants, s, o
+                """
+                
+                result = session.run(query, event_id=event_id)
+                record = result.single()
+                
+                if not record:
+                    return None
+                
+                # 构建Event对象
+                event_data = record['e']
+                from ..models.event_data_model import Event, Entity, EventType
+                
+                # 处理participants
+                participants = []
+                for p in record['participants']:
+                    if p:
+                        participants.append(Entity(
+                            id=p['id'],
+                            name=p['name'],
+                            entity_type=p['entity_type']
+                        ))
+                
+                # 处理subject和object
+                subject = None
+                if record['s']:
+                    subject = Entity(
+                        id=record['s']['id'],
+                        name=record['s']['name'],
+                        entity_type=record['s']['entity_type']
+                    )
+                
+                obj = None
+                if record['o']:
+                    obj = Entity(
+                        id=record['o']['id'],
+                        name=record['o']['name'],
+                        entity_type=record['o']['entity_type']
+                    )
+                
+                event = Event(
+                    id=event_data['id'],
+                    event_type=EventType(event_data['event_type']),
+                    text=event_data.get('text', ''),
+                    summary=event_data.get('summary', ''),
+                    participants=participants,
+                    subject=subject,
+                    object=obj,
+                    properties=json.loads(event_data.get('properties', '{}')),
+                    confidence=event_data.get('confidence', 1.0)
+                )
+                
+                return event
+                
+            except Exception as e:
+                logger.error(f"获取事件失败: {e}")
+                return None
+    
+    def get_database_statistics(self) -> Dict[str, Any]:
+        """获取数据库统计信息"""
+        with self.driver.session() as session:
+            try:
+                # 统计事件数量
+                event_count = session.run("MATCH (e:Event) RETURN count(e) as count").single()['count']
+                
+                # 统计实体数量
+                entity_count = session.run("MATCH (ent:Entity) RETURN count(ent) as count").single()['count']
+                
+                # 统计关系数量
+                relation_count = session.run("MATCH ()-[r]->() RETURN count(r) as count").single()['count']
+                
+                return {
+                    "total_events": event_count,
+                    "total_entities": entity_count,
+                    "total_relations": relation_count
+                }
+                
+            except Exception as e:
+                logger.error(f"获取数据库统计失败: {e}")
+                return {"total_events": 0, "total_entities": 0, "total_relations": 0}
             
             if conditions and not entity_name:
                 query += " WHERE " + " AND ".join([c for c in conditions if not c.startswith("(")])
@@ -371,7 +526,83 @@ class Neo4jEventStorage:
             query += " RETURN DISTINCT e ORDER BY e.timestamp DESC LIMIT $limit"
             
             result = session.run(query, **params)
-            return [dict(record["e"]) for record in result]
+            events = []
+            for record in result:
+                event_data = dict(record["e"])
+                # 将dict转换为Event对象
+                try:
+                    from ..models.event_data_model import Event, EventType, Entity
+                    # 处理participants字段
+                    participants = []
+                    if 'participants' in event_data and event_data['participants']:
+                        for p in event_data['participants']:
+                            if isinstance(p, str):
+                                participants.append(Entity(name=p, entity_type="UNKNOWN"))
+                            else:
+                                participants.append(p)
+                    
+                    # 处理event_type字段
+                    event_type = event_data.get('event_type', 'UNKNOWN')
+                    if isinstance(event_type, str):
+                        try:
+                            event_type = EventType(event_type)
+                        except ValueError:
+                            event_type = EventType.UNKNOWN
+                    
+                    event = Event(
+                        id=event_data.get('id', event_data.get('event_id')),
+                        text=event_data.get('text', ''),
+                        summary=event_data.get('summary', ''),
+                        event_type=event_type,
+                        timestamp=event_data.get('timestamp'),
+                        participants=participants,
+                        location=event_data.get('location'),
+                        properties=event_data.get('properties', {}),
+                        confidence=event_data.get('confidence', 0.0)
+                    )
+                    events.append(event)
+                except Exception as e:
+                    logger.warning(f"转换事件对象失败: {e}, 返回原始dict")
+                    events.append(event_data)
+            
+            return events
+    
+    def query_event_patterns(self, conditions: Dict[str, Any] = None, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        查询事件模式
+        
+        Args:
+            conditions: 查询条件
+            limit: 返回数量限制
+            
+        Returns:
+            List[Dict]: 模式列表
+        """
+        with self.driver.session() as session:
+            # 构建查询条件
+            where_conditions = []
+            params = {"limit": limit}
+            
+            if conditions:
+                for key, value in conditions.items():
+                    if key == "pattern_type":
+                        where_conditions.append("p.pattern_type = $pattern_type")
+                        params["pattern_type"] = value
+                    elif key == "domain":
+                        where_conditions.append("p.domain = $domain")
+                        params["domain"] = value
+                    elif key == "support":
+                        where_conditions.append("p.support >= $min_support")
+                        params["min_support"] = value
+            
+            # 构建查询语句
+            query = "MATCH (p:EventPattern)"
+            if where_conditions:
+                query += " WHERE " + " AND ".join(where_conditions)
+            query += " RETURN p ORDER BY p.support DESC LIMIT $limit"
+            
+            result = session.run(query, **params)
+            return [dict(record["p"]) for record in result]
     
     def query_events_by_type(self, event_type: EventType, limit: int = 10) -> List[Dict[str, Any]]:
         """

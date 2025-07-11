@@ -30,7 +30,8 @@ class EventLayerManager:
             # 存储事件
             success = self.storage.store_event(event)
             if success:
-                self.logger.info(f"事件已添加到事件层: {event.event_id}")
+                event_id = getattr(event, 'id', getattr(event, 'event_id', 'unknown'))
+                self.logger.info(f"事件已添加到事件层: {event_id}")
             return success
         except Exception as e:
             self.logger.error(f"添加事件失败: {str(e)}")
@@ -75,13 +76,33 @@ class EventLayerManager:
             if properties:
                 query_conditions.update(properties)
             
+            # 处理event_type参数
+            storage_event_type = None
+            if event_type:
+                if isinstance(event_type, str):
+                    # 如果是字符串，尝试转换为EventType枚举
+                    try:
+                        from ..models.event_data_model import EventType
+                        storage_event_type = EventType(event_type)
+                    except ValueError:
+                        # 如果转换失败，保持为字符串
+                        storage_event_type = event_type
+                else:
+                    storage_event_type = event_type
+            
             # 执行查询
             events = self.storage.query_events(
-                conditions=query_conditions,
-                time_range=time_range,
-                participants=participants,
+                event_type=storage_event_type,
+                entity_name=participants[0] if participants else None,
+                properties=properties,
+                start_time=time_range[0] if time_range else None,
+                end_time=time_range[1] if time_range else None,
                 limit=limit
             )
+            
+            # 确保返回值是列表
+            if events is None:
+                events = []
             
             self.logger.info(f"查询到 {len(events)} 个事件")
             return events
@@ -92,25 +113,39 @@ class EventLayerManager:
     
     def find_similar_events(self, target_event: Event, 
                            threshold: float = 0.7,
-                           max_results: int = 10) -> List[Tuple[Event, float]]:
+                           limit: int = 10,
+                           similarity_threshold: float = None) -> List[Tuple[Event, float]]:
         """查找相似事件
         
         Args:
             target_event: 目标事件
-            similarity_threshold: 相似度阈值
-            max_results: 最大结果数
+            threshold: 相似度阈值
+            limit: 最大结果数
             
         Returns:
             List[Tuple[Event, float]]: (事件, 相似度) 列表
         """
         try:
+            # 兼容similarity_threshold参数
+            if similarity_threshold is not None:
+                threshold = similarity_threshold
+                
             # 获取候选事件（同类型或相关类型）
             candidate_events = self._get_candidate_events(target_event)
             
             # 计算相似度
             similar_events = []
             for event in candidate_events:
-                if event.id != target_event.id:
+                # 确保event是Event对象而不是dict
+                if isinstance(event, dict):
+                    logger.warning(f"候选事件是dict格式，跳过相似度计算: {event.get('id', 'unknown')}")
+                    continue
+                    
+                # 获取事件ID，兼容id和event_id字段
+                event_id = getattr(event, 'id', getattr(event, 'event_id', None))
+                target_id = getattr(target_event, 'id', getattr(target_event, 'event_id', None))
+                
+                if event_id and target_id and event_id != target_id:
                     similarity = self._calculate_event_similarity(target_event, event)
                     if similarity >= threshold:
                         similar_events.append((event, similarity))
@@ -118,7 +153,7 @@ class EventLayerManager:
             # 按相似度排序
             similar_events.sort(key=lambda x: x[1], reverse=True)
             
-            return similar_events[:max_results]
+            return similar_events[:limit]
             
         except Exception as e:
             self.logger.error(f"查找相似事件失败: {str(e)}")
@@ -141,6 +176,34 @@ class EventLayerManager:
             
         except Exception as e:
             self.logger.error(f"获取事件时间线失败: {str(e)}")
+            return []
+    
+    def get_events_in_timerange(self, start_time: str, end_time: str) -> List[Event]:
+        """获取时间范围内的事件
+        
+        Args:
+            start_time: 开始时间 (ISO格式字符串)
+            end_time: 结束时间 (ISO格式字符串)
+            
+        Returns:
+            List[Event]: 时间范围内的事件列表
+        """
+        try:
+            # 转换时间字符串为datetime对象
+            start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+            end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+            
+            # 查询时间范围内的事件
+            events = self.query_events(
+                time_range=(start_dt, end_dt),
+                limit=10000
+            )
+            
+            self.logger.info(f"获取到时间范围 {start_time} 到 {end_time} 内的 {len(events)} 个事件")
+            return events
+            
+        except Exception as e:
+            self.logger.error(f"获取时间范围内事件失败: {str(e)}")
             return []
     
     def analyze_event_frequency(self, 
@@ -240,9 +303,9 @@ class EventLayerManager:
         similarity_scores.append((participant_sim, 0.25))
         
         # 3. 描述相似度（简化实现）
-        desc_sim = self._calculate_text_similarity(
-            event1.description, event2.description
-        )
+        text1 = getattr(event1, 'text', getattr(event1, 'summary', ''))
+        text2 = getattr(event2, 'text', getattr(event2, 'summary', ''))
+        desc_sim = self._calculate_text_similarity(text1, text2)
         similarity_scores.append((desc_sim, 0.2))
         
         # 4. 时间相似度

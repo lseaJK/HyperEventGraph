@@ -133,9 +133,12 @@ class DualLayerArchitecture:
             limit=limit
         )
     
-    def find_similar_events(self, event: Event, similarity_threshold: float = 0.7) -> List[Tuple[Event, float]]:
+    def find_similar_events(self, event: Event, threshold: float = 0.7, similarity_threshold: float = None) -> List[Tuple[Event, float]]:
         """查找相似事件"""
-        return self.event_layer.find_similar_events(event, similarity_threshold)
+        # 兼容threshold和similarity_threshold参数
+        if similarity_threshold is None:
+            similarity_threshold = threshold
+        return self.event_layer.find_similar_events(event, limit=10, similarity_threshold=similarity_threshold)
     
     def find_matching_patterns(self, event: Event, threshold: float = None) -> List[Tuple[EventPattern, float]]:
         """查找匹配的事理模式"""
