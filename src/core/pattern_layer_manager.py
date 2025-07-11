@@ -421,12 +421,12 @@ class PatternLayerManager:
         
         # 3. 属性匹配
         attr_match = self._calculate_attribute_pattern_match(
-            event.attributes, pattern.conditions
+            event.properties, pattern.conditions
         )
         match_scores.append((attr_match, 0.2))
         
         # 4. 领域匹配
-        domain_match = 1.0 if pattern.domain and event.attributes.get("domain") == pattern.domain else 0.5
+        domain_match = 1.0 if pattern.domain and event.properties.get("domain") == pattern.domain else 0.5
         match_scores.append((domain_match, 0.1))
         
         # 加权平均
@@ -512,7 +512,7 @@ class PatternLayerManager:
     
     def _infer_domain(self, events: List[Event]) -> str:
         """推断领域"""
-        domains = [e.attributes.get("domain", "general") for e in events]
+        domains = [e.properties.get("domain", "general") for e in events]
         domain_counts = Counter(domains)
         return domain_counts.most_common(1)[0][0] if domain_counts else "general"
     

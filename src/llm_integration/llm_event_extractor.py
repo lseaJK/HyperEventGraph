@@ -176,6 +176,17 @@ class LLMEventExtractor:
                 processing_time=processing_time
             )
     
+    def extract_events_and_entities(self, text: str,
+                                   event_types: List[str] = None,
+                                   entity_types: List[str] = None,
+                                   template_name: str = "default_event_extraction") -> tuple:
+        """从文本中同时抽取事件和实体"""
+        result = self.extract_events(text, event_types, entity_types, template_name)
+        if result.success:
+            return result.events, result.entities
+        else:
+            raise Exception(result.error_message)
+    
     def extract_relations(self, text: str, entities: List[str],
                          relation_types: List[str] = None,
                          template_name: str = "default_relation_extraction") -> ExtractionResult:
@@ -300,24 +311,25 @@ class LLMEventExtractor:
                 event_entities = []
                 for participant in event_data.get("participants", []):
                     entity = Entity(
-                        entity_id=f"entity_{len(entities)}",
+                        id=f"entity_{len(entities)}",
                         name=participant.get("entity_name", ""),
                         entity_type=participant.get("entity_type", "other"),
-                        description=participant.get("description", ""),
-                        attributes=participant.get("attributes", {})
+                        properties=participant.get("attributes", {})
                     )
                     entities.append(entity)
-                    event_entities.append(entity.entity_id)
+                    event_entities.append(entity.id)
                 
                 # 创建事件
                 event = Event(
-                    event_id=event_data.get("event_id", f"event_{len(events)}"),
+                    id=event_data.get("event_id", f"event_{len(events)}"),
                     event_type=EventType(event_data.get("event_type", "other")),
-                    description=event_data.get("description", ""),
+                    text=event_data.get("description", ""),
+                    summary=event_data.get("description", ""),
                     participants=event_entities,
                     timestamp=event_data.get("time"),
                     location=event_data.get("location"),
-                    attributes=event_data.get("attributes", {})
+                    properties=event_data.get("attributes", {}),
+                    confidence=1.0
                 )
                 events.append(event)
             
@@ -343,11 +355,10 @@ class LLMEventExtractor:
             entities = []
             for i, entity_data in enumerate(data.get("entities", [])):
                 entity = Entity(
-                    entity_id=f"entity_{i}",
+                    id=f"entity_{i}",
                     name=entity_data.get("entity_name", ""),
                     entity_type=entity_data.get("entity_type", "other"),
-                    description=entity_data.get("description", ""),
-                    attributes=entity_data.get("attributes", {})
+                    properties=entity_data.get("attributes", {})
                 )
                 entities.append(entity)
             
@@ -373,12 +384,12 @@ class LLMEventExtractor:
             relations = []
             for i, relation_data in enumerate(data.get("relations", [])):
                 relation = EventRelation(
-                    relation_id=f"relation_{i}",
+                    id=f"relation_{i}",
                     source_event_id=relation_data.get("subject", ""),
                     target_event_id=relation_data.get("object", ""),
                     relation_type=relation_data.get("predicate", "related_to"),
                     confidence=relation_data.get("confidence", 1.0),
-                    attributes={
+                    properties={
                         "context": relation_data.get("context", "")
                     }
                 )

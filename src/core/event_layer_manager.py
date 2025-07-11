@@ -49,7 +49,7 @@ class EventLayerManager:
                     time_range: Tuple[datetime, datetime] = None,
                     participants: List[str] = None,
                     location: str = None,
-                    attributes: Dict[str, Any] = None,
+                    properties: Dict[str, Any] = None,
                     limit: int = 100) -> List[Event]:
         """查询事件
         
@@ -58,7 +58,7 @@ class EventLayerManager:
             time_range: 时间范围 (start, end)
             participants: 参与者列表
             location: 地点
-            attributes: 属性过滤
+            properties: 属性过滤
             limit: 结果限制
             
         Returns:
@@ -72,8 +72,8 @@ class EventLayerManager:
                 query_conditions['event_type'] = event_type
             if location:
                 query_conditions['location'] = location
-            if attributes:
-                query_conditions.update(attributes)
+            if properties:
+                query_conditions.update(properties)
             
             # 执行查询
             events = self.storage.query_events(
@@ -91,7 +91,7 @@ class EventLayerManager:
             return []
     
     def find_similar_events(self, target_event: Event, 
-                           similarity_threshold: float = 0.7,
+                           threshold: float = 0.7,
                            max_results: int = 10) -> List[Tuple[Event, float]]:
         """查找相似事件
         
@@ -110,9 +110,9 @@ class EventLayerManager:
             # 计算相似度
             similar_events = []
             for event in candidate_events:
-                if event.event_id != target_event.event_id:
+                if event.id != target_event.id:
                     similarity = self._calculate_event_similarity(target_event, event)
-                    if similarity >= similarity_threshold:
+                    if similarity >= threshold:
                         similar_events.append((event, similarity))
             
             # 按相似度排序
@@ -259,7 +259,7 @@ class EventLayerManager:
         
         # 6. 属性相似度
         attr_sim = self._calculate_attribute_similarity(
-            event1.attributes, event2.attributes
+            event1.properties, event2.properties
         )
         similarity_scores.append((attr_sim, 0.05))
         

@@ -51,7 +51,12 @@ class DualLayerArchitecture:
         self.event_layer = EventLayerManager(self.storage)
         self.pattern_layer = PatternLayerManager(self.storage)
         self.layer_mapper = LayerMapper(self.storage)
-        self.graph_processor = GraphProcessor(self.storage)
+        self.graph_processor = GraphProcessor(
+            self.storage, 
+            self.event_layer, 
+            self.pattern_layer, 
+            self.layer_mapper
+        )
         
         self.logger.info("双层架构初始化完成")
     
@@ -82,7 +87,7 @@ class DualLayerArchitecture:
             if self.config.auto_mapping:
                 self._auto_map_event_to_patterns(event)
             
-            self.logger.info(f"成功添加事件: {event.event_id}")
+            self.logger.info(f"成功添加事件: {event.id}")
             return True
             
         except Exception as e:
@@ -94,7 +99,7 @@ class DualLayerArchitecture:
         try:
             success = self.pattern_layer.add_pattern(pattern)
             if success:
-                self.logger.info(f"成功添加模式: {pattern.pattern_id}")
+                self.logger.info(f"成功添加模式: {pattern.id}")
             return success
         except Exception as e:
             self.logger.error(f"添加模式失败: {str(e)}")
@@ -195,9 +200,9 @@ class DualLayerArchitecture:
             
             for pattern, confidence in matching_patterns:
                 self.layer_mapper.create_mapping(
-                    event_id=event.event_id,
-                    pattern_id=pattern.pattern_id,
-                    confidence=confidence,
+                    event_id=event.id,
+                    pattern_id=pattern.id,
+                    mapping_score=confidence,
                     mapping_type="auto"
                 )
                 
@@ -232,11 +237,13 @@ if __name__ == "__main__":
     with DualLayerArchitecture(config) as architecture:
         # 示例事件
         event = Event(
-            event_id="test_001",
-            event_type="business_cooperation",
-            description="公司合作事件",
-            participants=["company_a", "company_b"],
-            attributes={"domain": "technology"}
+            id="test_001",
+            event_type=EventType.BUSINESS_COOPERATION,
+            text="公司合作事件",
+            summary="公司合作事件",
+            participants=[],
+            properties={"domain": "technology"},
+            confidence=1.0
         )
         
         # 添加事件

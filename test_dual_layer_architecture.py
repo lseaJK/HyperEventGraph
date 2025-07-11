@@ -46,49 +46,60 @@ def create_test_events() -> List[Event]:
     # 创建一系列相关事件
     event_data = [
         {
-            "event_id": "event_001",
+            "id": "event_001",
             "event_type": EventType.BUSINESS_COOPERATION,
             "description": "公司A与公司B签署合作协议",
             "participants": ["公司A", "公司B"],
             "timestamp": base_time.isoformat(),
-            "attributes": {"合作类型": "技术合作", "金额": "1000万"}
+            "properties": {"合作类型": "技术合作", "金额": "1000万"}
         },
         {
-            "event_id": "event_002",
+            "id": "event_002",
             "event_type": EventType.PRODUCT_LAUNCH,
             "description": "公司A发布新产品",
             "participants": ["公司A"],
             "timestamp": (base_time + timedelta(days=30)).isoformat(),
-            "attributes": {"产品类型": "软件", "目标市场": "企业级"}
+            "properties": {"产品类型": "软件", "目标市场": "企业级"}
         },
         {
-            "event_id": "event_003",
+            "id": "event_003",
             "event_type": EventType.MARKET_EXPANSION,
             "description": "公司B进入新市场",
             "participants": ["公司B"],
             "timestamp": (base_time + timedelta(days=45)).isoformat(),
-            "attributes": {"市场": "东南亚", "投资额": "500万"}
+            "properties": {"市场": "东南亚", "投资额": "500万"}
         },
         {
-            "event_id": "event_004",
+            "id": "event_004",
             "event_type": EventType.FINANCIAL_INVESTMENT,
             "description": "投资机构C投资公司A",
             "participants": ["投资机构C", "公司A"],
             "timestamp": (base_time + timedelta(days=60)).isoformat(),
-            "attributes": {"投资轮次": "B轮", "金额": "5000万"}
+            "properties": {"投资轮次": "B轮", "金额": "5000万"}
         },
         {
-            "event_id": "event_005",
+            "id": "event_005",
             "event_type": EventType.PERSONNEL_CHANGE,
             "description": "公司A任命新CTO",
             "participants": ["公司A", "张三"],
             "timestamp": (base_time + timedelta(days=75)).isoformat(),
-            "attributes": {"职位": "CTO", "背景": "技术专家"}
+            "properties": {"职位": "CTO", "背景": "技术专家"}
         }
     ]
     
     for data in event_data:
-        event = Event(**data)
+        # 修改Event构造参数，使用text和summary替代description
+        event_params = data.copy()
+        if "description" in event_params:
+            event_params["text"] = event_params["description"]
+            event_params["summary"] = event_params["description"]
+            del event_params["description"]
+        
+        # 添加默认confidence值
+        if "confidence" not in event_params:
+            event_params["confidence"] = 1.0
+            
+        event = Event(**event_params)
         events.append(event)
     
     return events
@@ -103,7 +114,7 @@ def test_neo4j_storage():
         config = Neo4jConfig(
             uri="bolt://localhost:7687",
             username="neo4j",
-            password="password",
+            password="neo123456",
             database="neo4j"
         )
         
@@ -138,9 +149,9 @@ def test_event_layer_manager(storage):
         for event in test_events:
             success = event_manager.add_event(event)
             if success:
-                logger.info(f"✅ 事件添加成功: {event.event_id}")
+                logger.info(f"✅ 事件添加成功: {event.id}")
             else:
-                logger.error(f"❌ 事件添加失败: {event.event_id}")
+                logger.error(f"❌ 事件添加失败: {event.id}")
         
         # 查询事件
         all_events = event_manager.query_events(limit=10)
@@ -217,8 +228,8 @@ def test_layer_mapper(storage):
         # 创建配置
         config = MappingConfig(
             auto_mapping_threshold=0.7,
-            confidence_threshold=0.6,
-            max_mappings_per_event=5
+            max_mappings_per_event=5,
+            enable_reverse_mapping=True
         )
         
         # 创建层间映射器
@@ -312,12 +323,6 @@ def test_dual_layer_architecture():
     
     try:
         # 创建配置
-        neo4j_config = Neo4jConfig(
-            uri="bolt://localhost:7687",
-            username="neo4j",
-            password="password"
-        )
-        
         arch_config = ArchitectureConfig(
             neo4j_uri="bolt://localhost:7687",
             neo4j_user="neo4j",
@@ -327,14 +332,8 @@ def test_dual_layer_architecture():
         )
         
         # 创建双层架构
-        architecture = DualLayerArchitecture(neo4j_config, arch_config)
-        
-        # 初始化
-        if architecture.initialize():
-            logger.info("✅ 双层架构初始化成功")
-        else:
-            logger.error("❌ 双层架构初始化失败")
-            return None
+        architecture = DualLayerArchitecture(arch_config)
+        logger.info("✅ 双层架构初始化成功")
         
         # 创建测试事件
         test_events = create_test_events()
@@ -343,7 +342,7 @@ def test_dual_layer_architecture():
         for event in test_events:
             success = architecture.add_event(event)
             if success:
-                logger.info(f"✅ 事件添加到架构: {event.event_id}")
+                logger.info(f"✅ 事件添加到架构: {event.id}")
         
         # 查询事件
         events = architecture.query_events(event_type=EventType.BUSINESS_COOPERATION)
@@ -356,16 +355,16 @@ def test_dual_layer_architecture():
         
         # 模式匹配
         if test_events:
-            patterns = architecture.match_patterns(test_events[0])
+            patterns = architecture.find_matching_patterns(test_events[0])
             logger.info(f"✅ 匹配到 {len(patterns)} 个模式")
         
         # 事件预测
         if test_events:
-            predictions = architecture.predict_events(test_events[0])
+            predictions = architecture.predict_next_events(test_events)
             logger.info(f"✅ 预测到 {len(predictions)} 个可能事件")
         
         # 获取架构统计
-        stats = architecture.get_statistics()
+        stats = architecture.get_architecture_statistics()
         logger.info(f"✅ 架构统计: {stats}")
         
         return architecture

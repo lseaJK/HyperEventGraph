@@ -107,11 +107,11 @@ class GraphProcessor:
             # 添加事件节点
             for event in events:
                 graph.add_node(
-                    event.event_id,
+                    event.id,
                     event_type=str(event.event_type),
                     timestamp=event.timestamp,
                     participants=event.participants,
-                    attributes=event.attributes,
+                    properties=event.properties,
                     node_type='event'
                 )
             
@@ -157,7 +157,7 @@ class GraphProcessor:
             # 添加模式节点
             for pattern in patterns:
                 graph.add_node(
-                    pattern.pattern_id,
+                    pattern.id,
                     pattern_type=pattern.pattern_type,
                     event_sequence=pattern.event_sequence,
                     support=pattern.support,

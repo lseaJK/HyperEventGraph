@@ -215,7 +215,7 @@ class Neo4jEventStorage:
                event_type=event.event_type.value,
                text=event.text,
                summary=event.summary,
-               timestamp=event.timestamp.isoformat() if event.timestamp else None,
+               timestamp=event.timestamp.isoformat() if hasattr(event.timestamp, 'isoformat') else event.timestamp,
                location=event.location,
                properties=json.dumps(event.properties),
                confidence=event.confidence,
@@ -313,6 +313,65 @@ class Neo4jEventStorage:
             except Exception as e:
                 logger.error(f"❌ 事件关系存储失败: {e}")
                 return False
+    
+    def query_events(self, event_type: EventType = None, 
+                    entity_name: str = None,
+                    properties: Dict[str, Any] = None,
+                    start_time: str = None,
+                    end_time: str = None,
+                    limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        通用事件查询方法
+        
+        Args:
+            event_type: 事件类型
+            entity_name: 实体名称
+            properties: 属性过滤条件
+            start_time: 开始时间
+            end_time: 结束时间
+            limit: 返回数量限制
+            
+        Returns:
+            List[Dict]: 事件列表
+        """
+        with self.driver.session() as session:
+            # 构建查询条件
+            conditions = []
+            params = {"limit": limit}
+            
+            if event_type:
+                conditions.append("e.event_type = $event_type")
+                params["event_type"] = event_type.value
+            
+            if entity_name:
+                conditions.append("(ent:Entity {name: $entity_name})<-[:HAS_SUBJECT|HAS_OBJECT|HAS_PARTICIPANT]-(e)")
+                params["entity_name"] = entity_name
+            
+            if start_time:
+                conditions.append("e.timestamp >= $start_time")
+                params["start_time"] = start_time
+            
+            if end_time:
+                conditions.append("e.timestamp <= $end_time")
+                params["end_time"] = end_time
+            
+            # 构建查询语句
+            if entity_name:
+                query = "MATCH (ent:Entity {name: $entity_name})<-[:HAS_SUBJECT|HAS_OBJECT|HAS_PARTICIPANT]-(e:Event)"
+            else:
+                query = "MATCH (e:Event)"
+            
+            if conditions and not entity_name:
+                query += " WHERE " + " AND ".join([c for c in conditions if not c.startswith("(")])
+            elif conditions and entity_name:
+                non_entity_conditions = [c for c in conditions if not c.startswith("(")]
+                if non_entity_conditions:
+                    query += " WHERE " + " AND ".join(non_entity_conditions)
+            
+            query += " RETURN DISTINCT e ORDER BY e.timestamp DESC LIMIT $limit"
+            
+            result = session.run(query, **params)
+            return [dict(record["e"]) for record in result]
     
     def query_events_by_type(self, event_type: EventType, limit: int = 10) -> List[Dict[str, Any]]:
         """

@@ -523,7 +523,7 @@ class LayerMapper:
     
     def _calculate_domain_similarity(self, event: Event, pattern: EventPattern) -> float:
         """计算领域相似度"""
-        event_domain = event.attributes.get('domain', 'general')
+        event_domain = event.properties.get('domain', 'general')
         pattern_domain = pattern.domain or 'general'
         
         if event_domain == pattern_domain:
@@ -538,7 +538,7 @@ class LayerMapper:
         completeness_score = 0.0
         
         # 检查必要字段
-        if event.event_id:
+        if event.id:
             completeness_score += 0.2
         if event.event_type:
             completeness_score += 0.2
@@ -546,7 +546,7 @@ class LayerMapper:
             completeness_score += 0.2
         if event.timestamp:
             completeness_score += 0.2
-        if event.attributes:
+        if event.properties:
             completeness_score += 0.2
         
         return completeness_score
