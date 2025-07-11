@@ -47,6 +47,10 @@ sentence-transformers>=2.2.0
 aioboto3
 ollama
 
+
+jieba
+fuzzywuzzy
+
 # PyTorch 依赖
 torch>=2.0.0
 torchvision>=0.15.0
