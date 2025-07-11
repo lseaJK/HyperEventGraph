@@ -59,27 +59,27 @@ class PromptManager:
             system_prompt="""你是一个专业的事件抽取专家。你的任务是从给定的文本中识别和抽取事件信息。
 
 请严格按照以下JSON格式输出结果：
-{
+{{
   "events": [
-    {
+    {{
       "event_type": "事件类型",
       "event_id": "唯一标识符",
       "description": "事件描述",
       "participants": [
-        {
+        {{
           "entity_name": "实体名称",
           "entity_type": "实体类型",
           "role": "在事件中的角色"
-        }
+        }}
       ],
       "time": "事件时间（如果有）",
       "location": "事件地点（如果有）",
-      "attributes": {
+      "attributes": {{
         "key": "value"
-      }
-    }
+      }}
+    }}
   ]
-}
+}}
 
 支持的事件类型包括：{event_types}
 支持的实体类型包括：{entity_types}""",
@@ -130,18 +130,18 @@ class PromptManager:
             system_prompt="""你是一个专业的实体识别专家。你的任务是从给定的文本中识别和抽取实体信息。
 
 请严格按照以下JSON格式输出结果：
-{
+{{
   "entities": [
-    {
+    {{
       "entity_name": "实体名称",
       "entity_type": "实体类型",
       "description": "实体描述",
-      "attributes": {
+      "attributes": {{
         "key": "value"
-      }
-    }
+      }}
+    }}
   ]
-}
+}}
 
 支持的实体类型包括：{entity_types}""",
             user_prompt="""请从以下文本中抽取实体信息：
@@ -185,17 +185,17 @@ class PromptManager:
             system_prompt="""你是一个专业的关系抽取专家。你的任务是从给定的文本中识别实体之间的关系。
 
 请严格按照以下JSON格式输出结果：
-{
+{{
   "relations": [
-    {
+    {{
       "subject": "主体实体",
       "predicate": "关系类型",
       "object": "客体实体",
       "confidence": 0.95,
       "context": "关系上下文"
-    }
+    }}
   ]
-}
+}}
 
 支持的关系类型包括：{relation_types}""",
             user_prompt="""请从以下文本中抽取实体关系：
