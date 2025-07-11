@@ -48,6 +48,7 @@ class IntegrationTester:
                 print("✅ 事件抽取器初始化成功")
             else:
                 print("⚠️  未找到DEEPSEEK_API_KEY，将跳过API相关测试")
+                self.extractor = None
             
             # 初始化知识图谱存储
             self.storage = HyperRelationStorage(
