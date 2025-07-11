@@ -14,7 +14,10 @@ import traceback
 from datetime import datetime
 
 # 添加项目路径
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+src_path = os.path.join(project_root, 'src')
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
 
 try:
     from event_extraction.deepseek_extractor import DeepSeekEventExtractor
@@ -23,6 +26,9 @@ try:
 except ImportError as e:
     print(f"❌ 导入失败: {e}")
     print("请确保项目路径正确且依赖已安装")
+    print(f"当前工作目录: {os.getcwd()}")
+    print(f"项目根目录: {project_root}")
+    print(f"源码路径: {src_path}")
     sys.exit(1)
 
 

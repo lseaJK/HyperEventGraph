@@ -7,6 +7,7 @@
 
 import json
 import uuid
+import re
 from typing import Dict, List, Set, Tuple, Optional, Any
 from dataclasses import dataclass, field
 from datetime import datetime
