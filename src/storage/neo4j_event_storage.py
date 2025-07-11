@@ -11,6 +11,7 @@ import json
 import logging
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
+from dataclasses import dataclass
 
 from neo4j import GraphDatabase
 from neo4j.exceptions import ServiceUnavailable, TransientError
@@ -28,6 +29,29 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class Neo4jConfig:
+    """Neo4j配置类"""
+    uri: str = "bolt://localhost:7687"
+    username: str = "neo4j"
+    password: str = "password"
+    database: str = "neo4j"
+    max_connection_lifetime: int = 3600
+    max_connection_pool_size: int = 50
+    connection_acquisition_timeout: int = 60
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典"""
+        return {
+            "uri": self.uri,
+            "auth": (self.username, self.password),
+            "database": self.database,
+            "max_connection_lifetime": self.max_connection_lifetime,
+            "max_connection_pool_size": self.max_connection_pool_size,
+            "connection_acquisition_timeout": self.connection_acquisition_timeout
+        }
+
+
 class Neo4jEventStorage:
     """
     Neo4j事件存储管理器
@@ -37,17 +61,45 @@ class Neo4jEventStorage:
     - 事理层：抽象事理模式和逻辑关系
     """
     
-    def __init__(self, uri: str, user: str, password: str):
+    def __init__(self, config: Neo4jConfig = None, uri: str = None, user: str = None, password: str = None):
         """
         初始化Neo4j连接
         
         Args:
-            uri: Neo4j连接URI
-            user: 用户名
-            password: 密码
+            config: Neo4j配置对象
+            uri: Neo4j连接URI (向后兼容)
+            user: 用户名 (向后兼容)
+            password: 密码 (向后兼容)
         """
-        self.driver = GraphDatabase.driver(uri, auth=(user, password))
+        if config is not None:
+            self.config = config
+            self.driver = GraphDatabase.driver(
+                config.uri, 
+                auth=(config.username, config.password),
+                max_connection_lifetime=config.max_connection_lifetime,
+                max_connection_pool_size=config.max_connection_pool_size,
+                connection_acquisition_timeout=config.connection_acquisition_timeout
+            )
+        else:
+            # 向后兼容的方式
+            self.config = Neo4jConfig(
+                uri=uri or "bolt://localhost:7687",
+                username=user or "neo4j",
+                password=password or "password"
+            )
+            self.driver = GraphDatabase.driver(self.config.uri, auth=(self.config.username, self.config.password))
+        
         self._create_constraints_and_indexes()
+    
+    def test_connection(self) -> bool:
+        """测试Neo4j连接"""
+        try:
+            with self.driver.session() as session:
+                result = session.run("RETURN 1 as test")
+                return result.single()["test"] == 1
+        except Exception as e:
+            logger.error(f"Neo4j连接测试失败: {str(e)}")
+            return False
     
     def _create_constraints_and_indexes(self):
         """创建约束和索引"""

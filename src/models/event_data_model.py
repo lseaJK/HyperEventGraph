@@ -22,6 +22,7 @@ class EventType(Enum):
     COLLABORATION = "collaboration"  # 合作事件
     BUSINESS_COOPERATION = "business.cooperation"  # 商业合作
     INVESTMENT = "investment"  # 投资事件
+    FINANCIAL_INVESTMENT = "financial.investment"  # 金融投资
     PRODUCT_LAUNCH = "product.launch"  # 产品发布
     MARKET_EXPANSION = "market.expansion"  # 市场扩张
     REGULATORY_CHANGE = "regulatory.change"  # 监管变化
