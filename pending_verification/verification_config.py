@@ -242,7 +242,7 @@ class VerificationConfig:
             "export DEEPSEEK_API_KEY='your_deepseek_api_key_here'",
             "export NEO4J_URI='bolt://localhost:7687'",
             "export NEO4J_USER='neo4j'",
-            "export NEO4J_PASSWORD='your_neo4j_password_here'",
+            "export NEO4J_PASSWORD='neo123456'",
             "export CHROMA_PERSIST_DIRECTORY='./chroma_db'",
             "export EMBEDDING_MODEL='all-MiniLM-L6-v2'",
             "export LOG_LEVEL='INFO'",

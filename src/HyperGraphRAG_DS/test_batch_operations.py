@@ -3,6 +3,7 @@
 import asyncio
 import time
 import logging
+import os
 from typing import List, Dict, Any
 
 # 设置日志
@@ -74,12 +75,34 @@ class BatchOperationTester:
         )
         
         try:
+            # 设置环境变量
+            os.environ["NEO4J_URI"] = config.uri
+            os.environ["NEO4J_USERNAME"] = config.username
+            os.environ["NEO4J_PASSWORD"] = config.password
+            os.environ["NEO4J_DATABASE"] = config.database
+            
+            # 创建模拟的全局配置和嵌入函数
+            global_config = {
+                "working_dir": "./test_data",
+                "neo4j_batch_size": config.batch_size
+            }
+            
+            # 模拟嵌入函数
+            class MockEmbeddingFunc:
+                def __init__(self):
+                    self.embedding_dim = 128
+                
+                async def __call__(self, texts):
+                    import numpy as np
+                    return np.random.rand(len(texts), self.embedding_dim)
+            
+            embedding_func = MockEmbeddingFunc()
+            
             # 创建存储实例
             storage = Neo4JStorage(
-                neo4j_url=config.uri,
-                neo4j_username=config.username,
-                neo4j_password=config.password,
-                neo4j_database=config.database
+                namespace="test",
+                global_config=global_config,
+                embedding_func=embedding_func
             )
             
             # 生成测试数据
@@ -137,8 +160,36 @@ class BatchOperationTester:
         logger.info(f"开始测试NetworkX批量操作，节点数: {node_count}")
         
         try:
+            # 创建模拟的全局配置和嵌入函数
+            global_config = {
+                "working_dir": "./test_data",
+                "node2vec_params": {
+                    "dimensions": 128,
+                    "walk_length": 80,
+                    "num_walks": 10,
+                    "window_size": 10,
+                    "min_count": 1,
+                    "batch_words": 4
+                }
+            }
+            
+            # 模拟嵌入函数
+            class MockEmbeddingFunc:
+                def __init__(self):
+                    self.embedding_dim = 128
+                
+                async def __call__(self, texts):
+                    import numpy as np
+                    return np.random.rand(len(texts), self.embedding_dim)
+            
+            embedding_func = MockEmbeddingFunc()
+            
             # 创建存储实例
-            storage = NetworkXStorage()
+            storage = NetworkXStorage(
+                namespace="test",
+                global_config=global_config,
+                embedding_func=embedding_func
+            )
             
             # 生成测试数据
             test_nodes = self.generate_test_nodes(node_count)
@@ -212,6 +263,10 @@ class BatchOperationTester:
 
 async def main():
     """主测试函数"""
+    # 创建测试目录
+    test_dir = "./test_data"
+    os.makedirs(test_dir, exist_ok=True)
+    
     tester = BatchOperationTester()
     
     # 测试不同规模的数据

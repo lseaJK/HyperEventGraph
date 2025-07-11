@@ -12,6 +12,96 @@ HyperEventGraph 是一个基于大语言模型的事件抽取和知识图谱构�
 - 提供基于知识图谱的智能检索和推理能力
 - 实现端到端的事件知识管理解决方案
 
+### 1.1 事理图谱架构设计
+
+事理图谱是HyperEventGraph的核心知识表示形式，用于描述事件之间的演化规律和逻辑关系。<mcreference link="https://www.jiqizhixin.com/articles/2020-09-28-6" index="1">1</mcreference> <mcreference link="https://cloud.tencent.com/developer/article/1469579" index="3">3</mcreference>
+
+#### 1.1.1 事理图谱定义
+
+事理图谱是一个描述事件之间演化规律和模式的事理逻辑知识库。结构上，事理图谱是一个有向图，其中节点代表事件，有向边代表事件之间的顺承、因果、条件和上下位等事理逻辑关系。<mcreference link="https://www.jiqizhixin.com/articles/2020-09-28-6" index="1">1</mcreference>
+
+**与传统知识图谱的区别：**
+- **知识图谱**：以实体为节点，实体间关系为边，关系多为确定性
+- **事理图谱**：以事件为节点，事件间关系为边，关系多为不确定性概率转移
+
+#### 1.1.2 双层架构设计
+
+事理图谱采用双层架构设计，包含事件层和事理层：
+
+**事件层（Event Layer）：**
+- **节点**：具体事件实例，包含时间、地点、参与者等具体信息
+- **属性**：事件类型、触发词、论元角色、时间戳、置信度等
+- **关系**：事件实例间的直接关联（共指、包含、扩展等）
+- **存储**：Neo4j图数据库，支持复杂查询和事务处理
+
+**事理层（Logic Layer）：**
+- **节点**：抽象事件模式，表示为泛化的谓词短语或结构化元组
+- **属性**：抽象程度、适用场景、统计频次等
+- **关系**：事理逻辑关系（顺承、因果、条件、上下位）
+- **权重**：转移概率、因果强度、条件置信度等
+
+#### 1.1.3 事理逻辑关系类型
+
+基于大规模文本统计分析，系统重点关注四种主要的事理逻辑关系：<mcreference link="https://www.jiqizhixin.com/articles/2020-09-28-6" index="1">1</mcreference> <mcreference link="https://cloud.tencent.com/developer/article/1469579" index="3">3</mcreference>
+
+**1. 顺承关系（Succession）**
+- **定义**：两个事件在时间上相继发生的偏序关系
+- **特征**：前序事件的起始时间早于后序事件的起始时间
+- **权重**：转移概率（0-1之间），表示演化置信度
+- **示例**："公司发布财报" → "股价波动"
+
+**2. 因果关系（Causality）**
+- **定义**：前一事件（原因）的发生导致后一事件（结果）的发生
+- **特征**：满足时间偏序关系，因果关系是顺承关系的子集
+- **权重**：因果强度值（0-1之间），表示因果关系成立的置信度
+- **示例**："央行降息" → "房地产市场活跃"
+
+**3. 条件关系（Condition）**
+- **定义**：前一个事件是后一个事件发生的必要或充分条件
+- **特征**：属于逻辑关系而非客观事实关系
+- **权重**：条件强度，表示条件成立的可能性
+- **示例**："如果通过审核" → "那么获得贷款"
+
+**4. 上下位关系（Hierarchy）**
+- **定义**：事件之间的包含或抽象层次关系
+- **特征**：上位事件包含下位事件，体现不同抽象级别
+- **权重**：包含程度，表示层次关系的强度
+- **示例**："金融危机" ⊃ "银行倒闭"
+
+#### 1.1.4 事件表示格式
+
+**结构化事件表示：**
+```json
+{
+  "event_id": "evt_001",
+  "event_type": "acquisition",
+  "trigger": "收购",
+  "arguments": {
+    "acquirer": {"entity": "公司A", "role": "收购方"},
+    "target": {"entity": "公司B", "role": "被收购方"},
+    "amount": {"entity": "350亿美元", "role": "金额"},
+    "time": {"entity": "2024年1月", "role": "时间"},
+    "location": {"entity": "北京", "role": "地点"}
+  },
+  "confidence": 0.95,
+  "timestamp": "2024-01-15T10:30:00Z",
+  "source": "financial_news_001"
+}
+```
+
+**抽象事件模式：**
+```json
+{
+  "pattern_id": "pattern_acquisition",
+  "abstract_form": "(收购方, 收购, 被收购方)",
+  "semantic_roles": ["agent", "action", "patient"],
+  "optional_roles": ["amount", "time", "location"],
+  "abstraction_level": "medium",
+  "frequency": 1250,
+  "domains": ["finance", "business"]
+}
+```
+
 ## 2. 系统架构
 
 ### 2.1 核心模块
@@ -307,6 +397,161 @@ def hybrid_search(structural_query, semantic_query):
 - ChromaDB向量索引重建
 - 数据完整性验证
 
+### 4.3.7 批量操作与性能优化 ✅
+
+**实施状态：已完成**
+
+#### 4.3.7.1 批量操作架构
+
+HyperGraphRAG 实现了完整的批量操作系统，显著提升数据插入性能：
+
+**核心组件：**
+- **Neo4JStorage**: 支持 `batch_upsert_nodes` 和 `batch_upsert_edges` 批量操作
+- **NetworkXStorage**: 提供对应的批量操作接口保持一致性
+- **HyperGraphRAG**: 自动检测并使用批量操作的智能调度
+- **PerformanceMonitor**: 实时性能跟踪和统计分析
+- **StorageConfig**: 统一配置管理系统
+
+#### 4.3.7.2 性能优化策略
+
+**1. 连接池优化：**
+```python
+# Neo4j连接池配置
+neo4j_config = {
+    "max_connection_pool_size": 50,
+    "connection_acquisition_timeout": 60,
+    "max_transaction_retry_time": 30,
+    "batch_size": 1000
+}
+```
+
+**2. 批量操作实现：**
+```python
+# 批量节点插入
+async def batch_upsert_nodes(self, nodes_data: List[Dict]):
+    with self._monitor.monitor_operation("neo4j_batch_upsert_nodes", len(nodes_data)):
+        return await self._do_batch_upsert_nodes(nodes_data)
+
+# 批量边插入
+async def batch_upsert_edges(self, edges_data: List[Dict]):
+    with self._monitor.monitor_operation("neo4j_batch_upsert_edges", len(edges_data)):
+        return await self._do_batch_upsert_edges(edges_data)
+```
+
+**3. 自动索引创建：**
+- 智能检测索引需求
+- 自动创建性能优化索引
+- 支持复合索引和分区索引
+
+
+### 4.3.9 图数据库备份和恢复策略
+
+#### 4.3.9.1 Neo4j备份策略
+
+**1. 自动备份配置：**
+```bash
+# 每日备份脚本
+#!/bin/bash
+BACKUP_DIR="/data/backups/neo4j"
+DATE=$(date +%Y%m%d_%H%M%S)
+
+# 创建备份
+neo4j-admin database backup --to-path=$BACKUP_DIR neo4j --backup-name=backup_$DATE
+
+# 压缩备份
+tar -czf $BACKUP_DIR/backup_$DATE.tar.gz $BACKUP_DIR/backup_$DATE
+
+# 清理旧备份（保留30天）
+find $BACKUP_DIR -name "backup_*.tar.gz" -mtime +30 -delete
+```
+
+**2. 增量备份：**
+```bash
+# 增量备份（每小时）
+neo4j-admin database backup --to-path=$BACKUP_DIR neo4j \
+  --backup-name=incremental_$DATE \
+  --from-path=$BACKUP_DIR/backup_latest
+```
+
+#### 4.3.9.2 数据恢复流程
+
+**1. 完整恢复：**
+```bash
+# 停止Neo4j服务
+sudo systemctl stop neo4j
+
+# 恢复数据
+neo4j-admin database restore --from-path=$BACKUP_DIR/backup_20240115_120000 neo4j
+
+# 启动服务
+sudo systemctl start neo4j
+```
+
+**2. 选择性恢复：**
+```cypher
+// 恢复特定时间点的数据
+MATCH (n) WHERE n.timestamp > datetime('2024-01-15T12:00:00Z')
+DETACH DELETE n;
+
+// 从备份导入数据
+CALL apoc.import.cypher('backup_data.cypher', {});
+```
+
+#### 4.3.9.3 NetworkX数据持久化
+
+**1. 图序列化：**
+```python
+import pickle
+import networkx as nx
+
+# 保存图数据
+def save_networkx_graph(graph, filepath):
+    with open(filepath, 'wb') as f:
+        pickle.dump(graph, f)
+
+# 加载图数据
+def load_networkx_graph(filepath):
+    with open(filepath, 'rb') as f:
+        return pickle.load(f)
+```
+
+**2. 定期快照：**
+```python
+# 自动快照管理
+class NetworkXSnapshotManager:
+    def __init__(self, snapshot_dir="./snapshots"):
+        self.snapshot_dir = snapshot_dir
+        os.makedirs(snapshot_dir, exist_ok=True)
+    
+    def create_snapshot(self, graph, name=None):
+        if name is None:
+            name = f"snapshot_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        filepath = os.path.join(self.snapshot_dir, f"{name}.pkl")
+        save_networkx_graph(graph, filepath)
+        return filepath
+```
+
+#### 4.3.9.4 灾难恢复计划
+
+**1. 备份验证：**
+- 定期恢复测试
+- 数据完整性检查
+- 性能基准验证
+
+**2. 多层备份策略：**
+- **本地备份**: 快速恢复，每日全量+每小时增量
+- **远程备份**: 灾难恢复，每周同步到云存储
+- **冷备份**: 长期归档，每月归档到离线存储
+
+**3. 恢复时间目标（RTO）：**
+- **本地故障**: < 30分钟
+- **数据中心故障**: < 4小时
+- **灾难性故障**: < 24小时
+
+**4. 恢复点目标（RPO）：**
+- **关键数据**: < 1小时数据丢失
+- **一般数据**: < 24小时数据丢失
+
 ## 4. 部署与运维
 
 ### 4.1 环境要求
@@ -378,9 +623,231 @@ python -c "import transformers, neo4j, jsonschema; print('Dependencies installed
 
 ### 4.2 配置管理
 
-- 环境变量配置
-- 模型配置文件
-- 数据库连接配置
+#### 4.2.1 统一配置架构
+
+系统采用分层配置管理策略，确保配置的一致性和安全性：
+
+**配置层次结构：**
+1. **环境变量** - 最高优先级，用于敏感信息
+2. **配置文件** - 默认配置和非敏感参数
+3. **代码默认值** - 兜底配置
+
+#### 4.2.2 核心配置模块
+
+**StorageConfig** - 存储配置管理：
+```python
+# 统一的存储配置入口
+from hypergraphrag.storage_config import StorageConfig
+
+# 自动从环境变量加载
+config = StorageConfig.from_env()
+
+# 访问各子系统配置
+neo4j_config = config.neo4j
+networkx_config = config.networkx
+vector_config = config.vector_db
+```
+
+#### 4.2.3 统一配置管理类
+
+**核心配置模块：**
+```python
+from dataclasses import dataclass
+from typing import Optional
+import os
+import logging
+from pathlib import Path
+
+@dataclass
+class StorageConfig:
+    """统一存储配置类"""
+    # Neo4j配置
+    neo4j_uri: str = "bolt://localhost:7687"
+    neo4j_user: str = "neo4j"
+    neo4j_password: str = ""
+    neo4j_database: str = "neo4j"
+    neo4j_max_connection_lifetime: int = 3600
+    neo4j_max_connection_pool_size: int = 50
+    neo4j_connection_timeout: int = 30
+    
+    # ChromaDB配置
+    chroma_host: str = "localhost"
+    chroma_port: int = 8000
+    chroma_collection: str = "hypereventgraph"
+    chroma_persist_directory: str = "./chroma_db"
+    
+    # 模型配置
+    embedding_model: str = "text-embedding-ada-002"
+    llm_model: str = "gpt-4"
+    openai_api_key: str = ""
+    openai_api_base: str = "https://api.openai.com/v1"
+    
+    # 系统配置
+    log_level: str = "INFO"
+    batch_size: int = 1000
+    max_retries: int = 3
+    
+    @classmethod
+    def from_env(cls) -> 'StorageConfig':
+        """从环境变量加载配置，提供统一的配置读取方法"""
+        config = cls(
+            # Neo4j配置
+            neo4j_uri=os.getenv('NEO4J_URI', cls.neo4j_uri),
+            neo4j_user=os.getenv('NEO4J_USER', cls.neo4j_user),
+            neo4j_password=os.getenv('NEO4J_PASSWORD', cls.neo4j_password),
+            neo4j_database=os.getenv('NEO4J_DATABASE', cls.neo4j_database),
+            neo4j_max_connection_lifetime=int(os.getenv('NEO4J_MAX_CONNECTION_LIFETIME', cls.neo4j_max_connection_lifetime)),
+            neo4j_max_connection_pool_size=int(os.getenv('NEO4J_MAX_CONNECTION_POOL_SIZE', cls.neo4j_max_connection_pool_size)),
+            neo4j_connection_timeout=int(os.getenv('NEO4J_CONNECTION_TIMEOUT', cls.neo4j_connection_timeout)),
+            
+            # ChromaDB配置
+            chroma_host=os.getenv('CHROMA_HOST', cls.chroma_host),
+            chroma_port=int(os.getenv('CHROMA_PORT', cls.chroma_port)),
+            chroma_collection=os.getenv('CHROMA_COLLECTION', cls.chroma_collection),
+            chroma_persist_directory=os.getenv('CHROMA_PERSIST_DIRECTORY', cls.chroma_persist_directory),
+            
+            # 模型配置
+            embedding_model=os.getenv('EMBEDDING_MODEL', cls.embedding_model),
+            llm_model=os.getenv('LLM_MODEL', cls.llm_model),
+            openai_api_key=os.getenv('OPENAI_API_KEY', cls.openai_api_key),
+            openai_api_base=os.getenv('OPENAI_API_BASE', cls.openai_api_base),
+            
+            # 系统配置
+            log_level=os.getenv('LOG_LEVEL', cls.log_level),
+            batch_size=int(os.getenv('BATCH_SIZE', cls.batch_size)),
+            max_retries=int(os.getenv('MAX_RETRIES', cls.max_retries))
+        )
+        
+        # 配置验证
+        config.validate()
+        return config
+    
+    def validate(self) -> None:
+        """配置验证"""
+        errors = []
+        
+        # Neo4j配置验证
+        if not self.neo4j_password:
+            errors.append("NEO4J_PASSWORD is required")
+        if not self.neo4j_uri.startswith(('bolt://', 'neo4j://', 'bolt+s://', 'neo4j+s://')):
+            errors.append("Invalid NEO4J_URI format")
+            
+        # API密钥验证
+        if not self.openai_api_key:
+            errors.append("OPENAI_API_KEY is required")
+            
+        # 数值范围验证
+        if self.batch_size <= 0:
+            errors.append("BATCH_SIZE must be positive")
+        if self.max_retries < 0:
+            errors.append("MAX_RETRIES must be non-negative")
+            
+        if errors:
+            raise ValueError(f"Configuration validation failed: {'; '.join(errors)}")
+    
+    def get_neo4j_config(self) -> dict:
+        """获取Neo4j连接配置"""
+        return {
+            'uri': self.neo4j_uri,
+            'auth': (self.neo4j_user, self.neo4j_password),
+            'database': self.neo4j_database,
+            'max_connection_lifetime': self.neo4j_max_connection_lifetime,
+            'max_connection_pool_size': self.neo4j_max_connection_pool_size,
+            'connection_timeout': self.neo4j_connection_timeout
+        }
+    
+    def get_chroma_config(self) -> dict:
+        """获取ChromaDB连接配置"""
+        return {
+            'host': self.chroma_host,
+            'port': self.chroma_port,
+            'collection_name': self.chroma_collection,
+            'persist_directory': self.chroma_persist_directory
+        }
+```
+
+#### 4.2.4 配置管理器
+
+```python
+class ConfigManager:
+    """全局配置管理器，确保配置的一致性"""
+    
+    _instance = None
+    _config = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+    
+    @property
+    def config(self) -> StorageConfig:
+        """获取配置实例（单例模式）"""
+        if self._config is None:
+            self._config = StorageConfig.from_env()
+            logging.info("Configuration loaded successfully")
+        return self._config
+    
+    def reload_config(self) -> None:
+        """重新加载配置"""
+        self._config = None
+        logging.info("Configuration reloaded")
+
+# 全局配置实例
+config_manager = ConfigManager()
+
+# 便捷访问函数
+def get_config() -> StorageConfig:
+    """获取全局配置实例"""
+    return config_manager.config
+```
+
+#### 4.2.3 环境变量标准
+
+**Neo4j配置：**
+```bash
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=your_secure_password
+NEO4J_DATABASE=neo4j
+NEO4J_MAX_CONNECTION_POOL_SIZE=50
+NEO4J_BATCH_SIZE=1000
+NEO4J_AUTO_CREATE_INDEXES=true
+```
+
+**向量数据库配置：**
+```bash
+VECTOR_DB_TYPE=chroma
+VECTOR_DB_HOST=localhost
+VECTOR_DB_PORT=8000
+VECTOR_DIMENSION=1536
+VECTOR_SIMILARITY_METRIC=cosine
+```
+
+**模型配置：**
+```bash
+LLM_PROVIDER=openai
+OPENAI_API_KEY=your_api_key
+OPENAI_MODEL=gpt-4
+EMBEDDING_MODEL=text-embedding-ada-002
+```
+
+#### 4.2.4 配置验证与安全
+
+**自动配置验证：**
+```python
+# 配置完整性检查
+config.validate()  # 抛出异常如果配置无效
+
+# 连接测试
+config.test_connections()  # 验证数据库连接
+```
+
+**安全最佳实践：**
+- 敏感信息仅通过环境变量传递
+- 支持配置文件加密存储
+- 连接字符串不输出到日志
+- 支持配置热重载
 
 ## 5. 测试策略
 
