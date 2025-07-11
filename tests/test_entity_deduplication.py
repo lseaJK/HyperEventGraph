@@ -39,7 +39,6 @@ class TestEntityDeduplication(unittest.TestCase):
         # 创建测试实体
         self.test_entities = {
             'entity_1': Entity(
-                id='entity_1',
                 name='腾讯控股有限公司',
                 entity_type='company',
                 aliases={'腾讯', 'Tencent', '腾讯公司'},
@@ -47,7 +46,6 @@ class TestEntityDeduplication(unittest.TestCase):
                 source_events=['event_1', 'event_2']
             ),
             'entity_2': Entity(
-                id='entity_2',
                 name='腾讯控股',
                 entity_type='company',
                 aliases={'腾讯公司', 'Tencent Holdings'},
@@ -55,7 +53,6 @@ class TestEntityDeduplication(unittest.TestCase):
                 source_events=['event_3']
             ),
             'entity_3': Entity(
-                id='entity_3',
                 name='阿里巴巴集团控股有限公司',
                 entity_type='company',
                 aliases={'阿里巴巴', 'Alibaba Group', '阿里'},
@@ -63,7 +60,6 @@ class TestEntityDeduplication(unittest.TestCase):
                 source_events=['event_4']
             ),
             'entity_4': Entity(
-                id='entity_4',
                 name='阿里巴巴',
                 entity_type='company',
                 aliases={'Alibaba', '阿里巴巴集团'},
@@ -71,7 +67,6 @@ class TestEntityDeduplication(unittest.TestCase):
                 source_events=['event_5']
             ),
             'entity_5': Entity(
-                id='entity_5',
                 name='马云',
                 entity_type='person',
                 aliases={'Jack Ma', '马云先生'},
@@ -79,7 +74,6 @@ class TestEntityDeduplication(unittest.TestCase):
                 source_events=['event_6']
             ),
             'entity_6': Entity(
-                id='entity_6',
                 name='Jack Ma',
                 entity_type='person',
                 aliases={'马云'},
@@ -90,9 +84,9 @@ class TestEntityDeduplication(unittest.TestCase):
     
     def test_exact_match_score(self):
         """测试精确匹配分数计算"""
-        entity1 = Entity(name='腾讯控股有限公司', entity_type='company')
-        entity2 = Entity(name='腾讯控股有限公司', entity_type='company')
-        entity3 = Entity(name='阿里巴巴', entity_type='company')
+        entity1 = Entity(name='腾讯控股有限公司', entity_type='company', aliases=set(), attributes={}, source_events=[])
+        entity2 = Entity(name='腾讯控股有限公司', entity_type='company', aliases=set(), attributes={}, source_events=[])
+        entity3 = Entity(name='阿里巴巴', entity_type='company', aliases=set(), attributes={}, source_events=[])
         
         score1 = self.deduplicator._exact_match_score(entity1, entity2)
         score2 = self.deduplicator._exact_match_score(entity1, entity3)
@@ -105,12 +99,16 @@ class TestEntityDeduplication(unittest.TestCase):
         entity1 = Entity(
             name='腾讯控股有限公司',
             entity_type='company',
-            aliases={'腾讯', 'Tencent'}
+            aliases={'腾讯', 'Tencent'},
+            attributes={},
+            source_events=[]
         )
         entity2 = Entity(
             name='腾讯控股',
             entity_type='company',
-            aliases={'腾讯公司', 'Tencent'}
+            aliases={'腾讯公司', 'Tencent'},
+            attributes={},
+            source_events=[]
         )
         
         score = self.deduplicator._alias_match_score(entity1, entity2)
@@ -119,9 +117,9 @@ class TestEntityDeduplication(unittest.TestCase):
     
     def test_fuzzy_match_score(self):
         """测试模糊匹配分数计算"""
-        entity1 = Entity(name='腾讯控股有限公司', entity_type='company')
-        entity2 = Entity(name='腾讯控股', entity_type='company')
-        entity3 = Entity(name='阿里巴巴', entity_type='company')
+        entity1 = Entity(name='腾讯控股有限公司', entity_type='company', aliases=set(), attributes={}, source_events=[])
+        entity2 = Entity(name='腾讯控股', entity_type='company', aliases=set(), attributes={}, source_events=[])
+        entity3 = Entity(name='阿里巴巴', entity_type='company', aliases=set(), attributes={}, source_events=[])
         
         score1 = self.deduplicator._fuzzy_match_score(entity1, entity2)
         score2 = self.deduplicator._fuzzy_match_score(entity1, entity3)
@@ -131,9 +129,9 @@ class TestEntityDeduplication(unittest.TestCase):
     
     def test_semantic_match_score(self):
         """测试语义匹配分数计算"""
-        entity1 = Entity(name='腾讯控股有限公司', entity_type='company')
-        entity2 = Entity(name='腾讯科技公司', entity_type='company')
-        entity3 = Entity(name='阿里巴巴集团', entity_type='company')
+        entity1 = Entity(name='腾讯控股有限公司', entity_type='company', aliases=set(), attributes={}, source_events=[])
+        entity2 = Entity(name='腾讯科技公司', entity_type='company', aliases=set(), attributes={}, source_events=[])
+        entity3 = Entity(name='阿里巴巴集团', entity_type='company', aliases=set(), attributes={}, source_events=[])
         
         score1 = self.deduplicator._semantic_match_score(entity1, entity2)
         score2 = self.deduplicator._semantic_match_score(entity1, entity3)
@@ -171,7 +169,7 @@ class TestEntityDeduplication(unittest.TestCase):
     def test_calculate_entity_richness(self):
         """测试实体信息丰富度计算"""
         rich_entity = self.test_entities['entity_1']
-        simple_entity = Entity(name='测试', entity_type='company')
+        simple_entity = Entity(name='测试', entity_type='company', aliases=set(), attributes={}, source_events=[])
         
         rich_score = self.deduplicator._calculate_entity_richness(rich_entity)
         simple_score = self.deduplicator._calculate_entity_richness(simple_entity)
@@ -305,8 +303,8 @@ class TestEntityDeduplication(unittest.TestCase):
     
     def test_different_entity_types(self):
         """测试不同实体类型的处理"""
-        company_entity = Entity(name='腾讯', entity_type='company')
-        person_entity = Entity(name='马化腾', entity_type='person')
+        company_entity = Entity(name='腾讯', entity_type='company', aliases=set(), attributes={}, source_events=[])
+        person_entity = Entity(name='马化腾', entity_type='person', aliases=set(), attributes={}, source_events=[])
         
         similarity = self.deduplicator._calculate_entity_similarity(
             company_entity, person_entity
@@ -373,7 +371,6 @@ def run_integration_test():
     # 创建测试数据
     entities = {
         'tencent_1': Entity(
-            id='tencent_1',
             name='腾讯控股有限公司',
             entity_type='company',
             aliases={'腾讯', 'Tencent'},
@@ -381,7 +378,6 @@ def run_integration_test():
             source_events=['event_1']
         ),
         'tencent_2': Entity(
-            id='tencent_2',
             name='腾讯控股',
             entity_type='company',
             aliases={'腾讯公司'},
@@ -389,7 +385,6 @@ def run_integration_test():
             source_events=['event_2']
         ),
         'alibaba_1': Entity(
-            id='alibaba_1',
             name='阿里巴巴集团控股有限公司',
             entity_type='company',
             aliases={'阿里巴巴', 'Alibaba'},
@@ -397,7 +392,6 @@ def run_integration_test():
             source_events=['event_3']
         ),
         'alibaba_2': Entity(
-            id='alibaba_2',
             name='阿里巴巴',
             entity_type='company',
             aliases={'Alibaba Group'},

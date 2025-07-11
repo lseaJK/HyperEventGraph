@@ -652,6 +652,60 @@ class ConsistencyChecker:
     def get_checker_statistics(self) -> Dict[str, Any]:
         """获取检查器统计信息"""
         return self.stats.copy()
+    
+    def validate_knowledge_graph(self, entities: Dict[str, Entity], edges: Dict[str, HyperEdge]) -> 'ValidationResult':
+        """验证知识图谱并返回ValidationResult对象"""
+        from ..event_extraction.validation import ValidationResult
+        
+        # 执行完整的一致性检查
+        report = self.check_graph_consistency(entities, edges)
+        
+        # 转换为ValidationResult格式
+        errors = [issue.message for issue in report.issues if issue.severity == 'error']
+        warnings = [issue.message for issue in report.issues if issue.severity == 'warning']
+        
+        # 计算置信度分数（基于质量分数）
+        confidence_score = report.quality_score / 100.0
+        
+        # 生成质量指标
+        quality_metrics = {
+            'completeness': 1.0 - (report.error_count / max(1, report.total_entities + report.total_edges)),
+            'consistency': confidence_score,
+            'quality_score': report.quality_score
+        }
+        
+        # 生成建议
+        suggestions = report.recommendations
+        
+        return ValidationResult(
+            is_valid=(report.total_issues == 0),
+            confidence_score=confidence_score,
+            errors=errors,
+            warnings=warnings,
+            quality_metrics=quality_metrics,
+            suggestions=suggestions
+        )
+    
+    def export_validation_report(self, result: 'ValidationResult', output_path: str) -> None:
+        """导出验证报告"""
+        report_data = {
+            'validation_summary': {
+                'is_valid': result.is_valid,
+                'confidence_score': result.confidence_score,
+                'total_errors': len(result.errors),
+                'total_warnings': len(result.warnings)
+            },
+            'errors': result.errors,
+            'warnings': result.warnings,
+            'quality_metrics': result.quality_metrics,
+            'suggestions': result.suggestions,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(report_data, f, ensure_ascii=False, indent=2)
+        
+        self.logger.info(f"验证报告已导出到: {output_path}")
 
 def main():
     """主函数 - 演示一致性检查功能"""

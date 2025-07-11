@@ -101,10 +101,13 @@ class SimpleIntegrationTester:
         ]
         
         try:
-            # 提取实体
-            entities = self.entity_extractor.extract_entities_from_event(test_events)
+            # 提取实体 - 逐个处理事件
+            all_entities = []
+            for i, event_data in enumerate(test_events):
+                entities = self.entity_extractor.extract_entities_from_event(event_data, f"event_{i}")
+                all_entities.extend(entities)
             
-            print(f"✅ 成功提取 {len(entities)} 个实体")
+            print(f"✅ 成功提取 {len(all_entities)} 个实体")
             
             # 显示实体统计
             stats = self.entity_extractor.get_entity_statistics()
@@ -114,16 +117,17 @@ class SimpleIntegrationTester:
             
             # 显示前几个实体
             print("\n前5个实体:")
-            for i, (entity_id, entity) in enumerate(list(entities.items())[:5]):
-                print(f"  {entity_id}: {entity['name']} ({entity['type']})")
+            entity_items = list(self.entity_extractor.entities.items())[:5]
+            for entity_id, entity in entity_items:
+                print(f"  {entity_id}: {entity.name} ({entity.entity_type})")
             
             self.test_results['entity_extraction'] = {
                 'status': 'success',
-                'entity_count': len(entities),
+                'entity_count': len(all_entities),
                 'entity_types': stats['entity_types']
             }
             
-            return entities
+            return self.entity_extractor.entities
             
         except Exception as e:
             print(f"❌ 实体提取失败: {e}")
