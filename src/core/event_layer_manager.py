@@ -14,7 +14,33 @@ import math
 from collections import defaultdict
 
 from ..models.event_data_model import Event, EventType, Entity, EventRelation
-from ..storage.neo4j_event_storage import Neo4jEventStorage
+
+# 条件导入Neo4j存储
+try:
+    from ..storage.neo4j_event_storage import Neo4jEventStorage
+except ImportError:
+    # 如果neo4j不可用，创建一个占位符类
+    class Neo4jEventStorage:
+        def __init__(self, *args, **kwargs):
+            raise ImportError("Neo4j driver not available. Please install neo4j package.")
+        
+        def store_event(self, event):
+            raise NotImplementedError("Neo4j storage not available")
+        
+        def get_event(self, event_id):
+            raise NotImplementedError("Neo4j storage not available")
+        
+        def query_events(self, **kwargs):
+            raise NotImplementedError("Neo4j storage not available")
+        
+        def get_event_relations(self, event_id):
+            raise NotImplementedError("Neo4j storage not available")
+        
+        def create_event_relation(self, relation):
+            raise NotImplementedError("Neo4j storage not available")
+        
+        def get_database_statistics(self):
+            raise NotImplementedError("Neo4j storage not available")
 
 
 class EventLayerManager:
@@ -199,11 +225,10 @@ class EventLayerManager:
                 limit=10000
             )
             
-            self.logger.info(f"获取到时间范围 {start_time} 到 {end_time} 内的 {len(events)} 个事件")
             return events
             
         except Exception as e:
-            self.logger.error(f"获取时间范围内事件失败: {str(e)}")
+            self.logger.error(f"获取时间范围事件失败: {str(e)}")
             return []
     
     def analyze_event_frequency(self, 
