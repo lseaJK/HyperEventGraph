@@ -136,98 +136,98 @@
 **优先级**: 🟡 中等优先级
 
 ### 3.1 混合检索器实现
-- [ ] 创建 `src/event_logic/hybrid_retriever.py`
+- [x] 创建 `src/event_logic/hybrid_retriever.py`
   - **输入**: Event - 查询事件
   - **输出**: HybridSearchResult - 混合检索结果(ChromaDB+Neo4j)
   - **验收标准**: 集成ChromaDB向量检索和Neo4j图结构检索
 
-- [ ] 实现BGE嵌入向量化
+- [x] 实现BGE嵌入向量化
   - **功能**: 使用Ollama `smartcreation/bge-large-zh-v1.5:latest`对事件进行向量化
   - **验收标准**: 向量化准确，支持批量处理
 
-- [ ] 实现ChromaDB向量检索
+- [x] 实现ChromaDB向量检索
   - **功能**: 基于BGE向量在ChromaDB中检索相似事件
   - **验收标准**: 检索精度高，响应时间<300ms
 
-- [ ] 实现Neo4j子图检索
+- [x] 实现Neo4j子图检索
   - **功能**: 基于ChromaDB候选集在Neo4j中获取结构化子图
   - **验收标准**: 子图完整，包含关系上下文
 
-- [ ] 实现混合检索融合策略
+- [x] 实现混合检索融合策略
   - **功能**: 加权融合语义相似度和结构相似度得分
   - **验收标准**: 融合结果相关性优于单一检索方式
 
 ### 3.2 属性补充器实现
-- [ ] 创建 `src/event_logic/attribute_enhancer.py`
+- [x] 创建 `src/event_logic/attribute_enhancer.py`
   - **输入**: IncompleteEvent - 不完整事件
   - **输出**: EnhancedEvent - 补充属性后的事件
   - **验收标准**: 能基于ChromaDB+Neo4j的历史数据推理缺失属性
 
-- [ ] 实现BGE向量化属性检索
+- [x] 实现BGE向量化属性检索
   - **功能**: 对不完整事件进行BGE向量化，在ChromaDB中检索同类型事件
   - **验收标准**: 检索到的同类型事件相关性>0.8
 
-- [ ] 实现Neo4j关联属性查询
+- [x] 实现Neo4j关联属性查询
   - **功能**: 基于ChromaDB候选事件，在Neo4j中查询关联属性和上下文
   - **验收标准**: 能获取完整的属性关联图谱
 
-- [ ] 实现属性模板生成
+- [x] 实现属性模板生成
   - **功能**: 统计ChromaDB检索结果的属性分布，生成属性模板
   - **验收标准**: 模板覆盖率>70%，推理准确率>60%
 
-- [ ] 实现属性补充验证
+- [x] 实现属性补充验证
   - **功能**: 基于Neo4j图谱上下文验证补充属性的合理性
   - **验收标准**: 验证准确率>80%，避免逻辑冲突
 
 ### 3.3 模式发现器实现
-- [ ] 创建 `src/event_logic/pattern_discoverer.py`
+- [x] 创建 `src/event_logic/pattern_discoverer.py`
   - **输入**: List[Event] - 事件序列
   - **输出**: List[EventPattern] - 发现的事理模式
   - **验收标准**: 基于ChromaDB聚类和Neo4j图遍历发现事理模式
 
-- [ ] 实现BGE批量向量化
+- [x] 实现BGE批量向量化
   - **功能**: 对事件序列进行批量BGE向量化处理
   - **验收标准**: 支持大批量处理，向量化效率高
 
-- [ ] 实现ChromaDB聚类分析
+- [x] 实现ChromaDB聚类分析
   - **功能**: 基于BGE向量在ChromaDB中进行事件聚类分析
   - **验收标准**: 聚类结果合理，能识别相似事件群组
 
-- [ ] 实现Neo4j频繁子图发现
+- [x] 实现Neo4j频繁子图发现
   - **功能**: 在Neo4j中使用图遍历算法发现频繁出现的事件子图
   - **验收标准**: 能发现有意义的事理模式，频率阈值可配置
 
-- [ ] 实现模式抽象与验证
+- [x] 实现模式抽象与验证
   - **功能**: 将频繁子图抽象为事理模式，并通过LLM验证语义合理性
   - **验收标准**: 抽象模式具有通用性，语义验证准确率>85%
 
-- [ ] 实现模式存储到ChromaDB和Neo4j
+- [x] 实现模式存储到ChromaDB和Neo4j
   - **功能**: 将验证后的事理模式同时存储到ChromaDB(向量)和Neo4j(结构)
   - **验收标准**: 存储完整，支持后续检索和复用
 
 ### 3.4 GraphRAG协调器
-- [ ] 创建 `src/event_logic/graphrag_coordinator.py`
+- [x] 创建 `src/event_logic/graphrag_coordinator.py`
   - **功能**: 协调ChromaDB+Neo4j的混合检索、属性补充、模式发现流程
   - **验收标准**: ChromaDB和Neo4j协作顺畅，支持并发处理
 
-- [ ] 实现ChromaDB连接管理
+- [x] 实现ChromaDB连接管理
   - **功能**: 管理ChromaDB连接池，支持BGE向量的存储和检索
   - **验收标准**: 连接稳定，支持高并发访问
 
-- [ ] 实现Neo4j连接管理
+- [x] 实现Neo4j连接管理
   - **功能**: 管理Neo4j连接池，支持图结构的查询和更新
   - **验收标准**: 连接稳定，事务处理正确
 
-- [ ] 实现混合检索协调
+- [x] 实现混合检索协调
   - **功能**: 协调ChromaDB向量检索和Neo4j图检索的执行顺序和结果融合
   - **验收标准**: 检索效率高，结果融合合理
 
-- [ ] 实现数据同步机制
+- [x] 实现数据同步机制
   - **功能**: 确保ChromaDB和Neo4j之间的数据一致性
   - **验收标准**: 数据同步及时，一致性检查通过
 
 ### 3.5 单元测试
-- [ ] 创建 `tests/test_graphrag_enhancer.py`
+- [x] 创建 `tests/test_graphrag_enhancer.py`
   - **覆盖**: 子图检索、属性补充、模式发现
   - **验收标准**: 测试覆盖率>75%
 

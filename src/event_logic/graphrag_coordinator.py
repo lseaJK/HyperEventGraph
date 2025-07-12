@@ -273,8 +273,8 @@ class GraphRAGCoordinator:
         current_avg = self.query_stats["average_response_time"]
         
         # 避免除零错误
-        if total_queries > 0:
-            # 计算新的平均响应时间
+        if total_queries > 1:
+            # 计算新的平均响应时间 (注意：total_queries已经被增加了1)
             new_avg = ((current_avg * (total_queries - 1)) + execution_time) / total_queries
             self.query_stats["average_response_time"] = new_avg
         else:

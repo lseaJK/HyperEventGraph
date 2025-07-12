@@ -9,8 +9,10 @@ import sys
 import os
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
+from typing import List, Dict, Any
 
 # 添加src目录到路径
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 try:
@@ -19,17 +21,18 @@ try:
     from src.rag.context_builder import ContextBuilder, ContextData
     from src.rag.answer_generator import AnswerGenerator, GeneratedAnswer
     from src.rag.rag_pipeline import RAGPipeline, RAGConfig, RAGResult, create_rag_pipeline, quick_query
-    from src.models.event_data_model import RelationType
+    from src.core.dual_layer_architecture import DualLayerArchitecture
+    from src.models.event_data_model import Event, EventType, EventRelation, RelationType
 except ImportError as e:
     print(f"Import error: {e}")
     # 使用相对导入作为备选
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
     from rag.query_processor import QueryProcessor, QueryType, QueryIntent
     from rag.knowledge_retriever import KnowledgeRetriever, RetrievalResult
     from rag.context_builder import ContextBuilder, ContextData
     from rag.answer_generator import AnswerGenerator, GeneratedAnswer
     from rag.rag_pipeline import RAGPipeline, RAGConfig, RAGResult, create_rag_pipeline, quick_query
-    from models.event_data_model import RelationType
+    from core.dual_layer_architecture import DualLayerArchitecture
+    from models.event_data_model import Event, EventType, EventRelation, RelationType
 
 
 class TestQueryProcessor:
@@ -81,28 +84,24 @@ class TestKnowledgeRetriever:
     """知识检索器测试"""
     
     def setup_method(self):
-        # 创建模拟的双层架构核心
         self.mock_dual_layer = Mock()
-        
-        # 配置模拟事件
-        mock_event = Mock()
+
+        mock_event = Mock(spec=Event)  # 使用 spec 避免 Mock 返回其他 Mock
         mock_event.id = "event_1"
         mock_event.event_type = "acquisition"
         mock_event.description = "苹果公司收购某科技公司"
-        mock_event.text = "苹果公司收购某科技公司"
+        mock_event.text = "苹果公司收购某科技公司"  # 明确设置字符串
         mock_event.timestamp = datetime.now()
         mock_event.participants = ["苹果公司", "科技公司"]
         mock_event.entities = ["苹果公司", "科技公司"]
-        
-        # 配置事件层方法返回值 - 确保返回列表而不是Mock对象
+
         self.mock_dual_layer.event_layer.search_events_by_text.return_value = [mock_event]
         self.mock_dual_layer.event_layer.get_events_by_participant.return_value = [mock_event]
         self.mock_dual_layer.event_layer.search_events_by_keywords.return_value = [mock_event]
         self.mock_dual_layer.event_layer.get_events_by_entity.return_value = [mock_event]
         self.mock_dual_layer.event_layer.query_events.return_value = [mock_event]
-        
+
         self.retriever = KnowledgeRetriever(dual_layer_core=self.mock_dual_layer)
-    
     def test_event_search_retrieval(self):
         """测试事件搜索检索"""
         # 模拟查询意图
@@ -366,6 +365,7 @@ class TestRAGPipeline:
         mock_event.id = "event_1"
         mock_event.event_type = "acquisition"
         mock_event.description = "苹果公司收购某科技公司"
+        # 直接使用字符串作为text属性
         mock_event.text = "苹果公司收购某科技公司"
         mock_event.timestamp = datetime.now()
         mock_event.participants = ["苹果公司", "科技公司"]
@@ -400,6 +400,7 @@ class TestRAGPipeline:
         mock_event.id = "batch_event_1"
         mock_event.event_type = "general"
         mock_event.description = "批量处理测试事件"
+        # 直接使用字符串作为text属性
         mock_event.text = "批量处理测试事件"
         mock_event.timestamp = datetime.now()
         mock_event.participants = ["测试实体"]
@@ -412,14 +413,18 @@ class TestRAGPipeline:
         self.mock_dual_layer.event_layer.get_events_by_entity.return_value = [mock_event]
         self.mock_dual_layer.event_layer.search_events_by_text.return_value = [mock_event]
         self.mock_dual_layer.event_layer.get_events_by_participant.return_value = [mock_event]
-        self.mock_dual_layer.event_layer.get_events_in_timerange.return_value = []
+        self.mock_dual_layer.event_layer.get_events_in_timerange.return_value = [mock_event]  # 确保时序查询也返回事件
         self.mock_dual_layer.event_layer.get_event_relations.return_value = []
         self.mock_dual_layer.pattern_layer.find_causal_paths.return_value = []
         self.mock_dual_layer.graph_processor.find_causal_paths.return_value = []
         
+        # 确保mock_event支持迭代和包含检查
+        mock_event.__iter__ = lambda: iter([mock_event])
+        mock_event.__contains__ = lambda key: key in ['relevance_score']
+        
         results = self.pipeline.batch_process_queries(queries)
         
-        assert len(results) == len(queries)
+        assert len(results) == 3  # 明确期望3个结果
         for result in results:
             assert isinstance(result, RAGResult)
     

@@ -134,6 +134,14 @@ class BGEEmbedder:
             event_text += f" 类型: {event.event_type.value}"
             
         return self.embed_text(event_text)
+    
+    def batch_embed_events(self, events: List[Event]) -> List[BGEEmbedding]:
+        """批量事件向量化"""
+        embeddings = []
+        for event in events:
+            embedding = self.embed_event(event)
+            embeddings.append(embedding)
+        return embeddings
 
 
 class ChromaDBRetriever:
@@ -190,6 +198,52 @@ class ChromaDBRetriever:
             
         except Exception as e:
             self.logger.error(f"添加事件到ChromaDB失败: {e}")
+            return False
+    
+    def add_events(self, events: List[Event]) -> bool:
+        """批量添加事件到向量数据库"""
+        try:
+            # 批量向量化
+            embeddings = self.embedder.batch_embed_events(events)
+            
+            # 构建批量数据
+            embedding_vectors = [emb.vector for emb in embeddings]
+            documents = [event.text for event in events]
+            metadatas = []
+            ids = []
+            
+            for event in events:
+                # 处理timestamp字段
+                timestamp_str = ''
+                if hasattr(event, 'timestamp'):
+                    if isinstance(event.timestamp, str):
+                        timestamp_str = event.timestamp
+                    else:
+                        timestamp_str = event.timestamp.isoformat()
+                
+                metadata = {
+                    "event_id": event.id,
+                    "event_type": getattr(event, 'event_type', ''),
+                    "timestamp": timestamp_str,
+                    "entities": json.dumps([e.name for e in getattr(event, 'participants', [])]),
+                    "importance_score": getattr(event, 'confidence', 0.0)
+                }
+                metadatas.append(metadata)
+                ids.append(event.id)
+            
+            # 批量添加到ChromaDB
+            self.collection.add(
+                embeddings=embedding_vectors,
+                documents=documents,
+                metadatas=metadatas,
+                ids=ids
+            )
+            
+            self.logger.info(f"成功批量添加{len(events)}个事件到ChromaDB")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"批量添加事件到ChromaDB失败: {e}")
             return False
     
     def search_similar_events(self, query_event: Event, 

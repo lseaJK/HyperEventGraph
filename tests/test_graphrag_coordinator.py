@@ -355,12 +355,12 @@ class TestGraphRAGCoordinator:
         assert stats["failed_queries"] == 0
         assert stats["average_response_time"] == 0.0
         
-        # 更新响应时间
-        coordinator._update_average_response_time(1.0)
+        # 更新响应时间 - 模拟实际调用顺序
         coordinator.query_stats["total_queries"] = 1
+        coordinator._update_average_response_time(1.0)
         
-        coordinator._update_average_response_time(2.0)
         coordinator.query_stats["total_queries"] = 2
+        coordinator._update_average_response_time(2.0)
         
         assert coordinator.query_stats["average_response_time"] == 1.5
         

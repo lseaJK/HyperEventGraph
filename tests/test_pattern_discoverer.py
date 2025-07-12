@@ -8,11 +8,19 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from models.event_data_model import Event, EventType
-from event_logic.pattern_discoverer import (
-    PatternDiscoverer, EventCluster, FrequentSubgraph, EventPattern
-)
-from event_logic.hybrid_retriever import HybridRetriever
+# 修复导入路径
+try:
+    from src.models.event_data_model import Event, EventType, RelationType
+    from src.event_logic.pattern_discoverer import (
+        PatternDiscoverer, EventCluster, FrequentSubgraph, EventPattern
+    )
+    from src.event_logic.hybrid_retriever import HybridRetriever
+except ImportError:
+    from models.event_data_model import Event, EventType, RelationType
+    from event_logic.pattern_discoverer import (
+        PatternDiscoverer, EventCluster, FrequentSubgraph, EventPattern
+    )
+    from event_logic.hybrid_retriever import HybridRetriever
 
 class TestEventCluster(unittest.TestCase):
     """事件聚类数据模型测试"""
@@ -52,16 +60,16 @@ class TestFrequentSubgraph(unittest.TestCase):
     def test_frequent_subgraph_creation(self):
         """测试频繁子图创建"""
         subgraph = FrequentSubgraph(
-            pattern_id="pattern_1",
-            nodes=['event_1', 'event_2'],
-            edges=[('event_1', 'event_2', 'CAUSES')],
+            subgraph_id="pattern_1",
+            nodes=[{'id': 'event_1', 'type': 'ACTION'}, {'id': 'event_2', 'type': 'RESULT'}],
+            edges=[{'source': 'event_1', 'target': 'event_2', 'type': 'CAUSES'}],
             frequency=5,
             support=0.8,
             confidence=0.9,
             pattern_type="causal_chain"
         )
         
-        self.assertEqual(subgraph.pattern_id, "pattern_1")
+        self.assertEqual(subgraph.subgraph_id, "pattern_1")
         self.assertEqual(len(subgraph.nodes), 2)
         self.assertEqual(len(subgraph.edges), 1)
         self.assertEqual(subgraph.frequency, 5)
@@ -85,9 +93,9 @@ class TestEventPattern(unittest.TestCase):
         )
         
         subgraph = FrequentSubgraph(
-            pattern_id="pattern_1",
-            nodes=['event_1', 'event_2'],
-            edges=[('event_1', 'event_2', 'CAUSES')],
+            subgraph_id="pattern_1",
+            nodes=[{'id': 'event_1', 'type': 'ACTION'}, {'id': 'event_2', 'type': 'RESULT'}],
+            edges=[{'source': 'event_1', 'target': 'event_2', 'type': 'CAUSES'}],
             frequency=5,
             support=0.8,
             confidence=0.9,
@@ -96,20 +104,32 @@ class TestEventPattern(unittest.TestCase):
         
         pattern = EventPattern(
             pattern_id="full_pattern_1",
-            cluster=cluster,
-            frequent_subgraphs=[subgraph],
-            pattern_strength=0.85,
-            generalization_level=0.7,
-            applicability_score=0.8,
-            pattern_description="因果链模式",
-            validation_status="validated"
+            pattern_name="因果链模式",
+            pattern_type="causal_chain",
+            description="测试因果链模式",
+            event_sequence=["ACTION", "OTHER"],
+            relation_sequence=[RelationType.CAUSAL_CAUSE],
+            temporal_constraints={},
+            causal_structure={},
+            frequency=5,
+            support=0.8,
+            confidence=0.85,
+            generality_score=0.7,
+            semantic_coherence=0.9,
+            validation_score=0.8,
+            source_clusters=[1],
+            source_subgraphs=["pattern_1"],
+            examples=[]
         )
-        
+
+
         self.assertEqual(pattern.pattern_id, "full_pattern_1")
-        self.assertEqual(pattern.cluster.cluster_id, 1)
-        self.assertEqual(len(pattern.frequent_subgraphs), 1)
-        self.assertEqual(pattern.pattern_strength, 0.85)
-        self.assertEqual(pattern.validation_status, "validated")
+        self.assertIn(1, pattern.source_clusters)
+        self.assertIn("pattern_1", pattern.source_subgraphs)
+        self.assertEqual(pattern.confidence, 0.85)
+        self.assertGreaterEqual(pattern.validation_score, 0.8)
+        self.assertEqual(pattern.generality_score, 0.7)
+        self.assertEqual(pattern.semantic_coherence, 0.9)
 
 class TestPatternDiscoverer(unittest.TestCase):
     """模式发现器测试"""
@@ -117,6 +137,8 @@ class TestPatternDiscoverer(unittest.TestCase):
     def setUp(self):
         # Mock混合检索器
         self.mock_retriever = Mock(spec=HybridRetriever)
+        # 添加neo4j_retriever属性
+        self.mock_retriever.neo4j_retriever = Mock()
         self.discoverer = PatternDiscoverer(self.mock_retriever)
         
         # Mock BGE嵌入器
@@ -156,9 +178,9 @@ class TestPatternDiscoverer(unittest.TestCase):
         # Mock频繁子图
         mock_subgraphs = [
             FrequentSubgraph(
-                pattern_id="pattern_1",
-                nodes=['event_1', 'event_2'],
-                edges=[('event_1', 'event_2', 'CAUSES')],
+                subgraph_id="pattern_1",
+                nodes=[{'id': 'event_1', 'type': 'ACTION'}, {'id': 'event_2', 'type': 'OTHER'}],
+                edges=[{'source': 'event_1', 'target': 'event_2', 'type': 'CAUSES'}],
                 frequency=5,
                 support=0.8,
                 confidence=0.9,
@@ -173,13 +195,22 @@ class TestPatternDiscoverer(unittest.TestCase):
             mock_validate.return_value = [
                 EventPattern(
                     pattern_id="full_pattern_1",
-                    cluster=mock_clusters[0],
-                    frequent_subgraphs=mock_subgraphs,
-                    pattern_strength=0.85,
-                    generalization_level=0.7,
-                    applicability_score=0.8,
-                    pattern_description="因果链模式",
-                    validation_status="validated"
+                    pattern_name="因果链模式",
+                    pattern_type="causal_chain",
+                    description="测试因果链模式",
+                    event_sequence=["ACTION", "OTHER"],
+                    relation_sequence=[RelationType.CAUSAL_CAUSE],
+                    temporal_constraints={},
+                    causal_structure={},
+                    frequency=5,
+                    support=0.8,
+                    confidence=0.85,
+                    generality_score=0.7,
+                    semantic_coherence=0.9,
+                    validation_score=0.8,
+                    source_clusters=[1],
+                    source_subgraphs=["pattern_1"],
+                    examples=[]
                 )
             ]
             
@@ -281,24 +312,21 @@ class TestPatternDiscoverer(unittest.TestCase):
                 event_type=EventType.ACTION,
                 text="事件1",
                 summary="摘要1",
-                timestamp="2024-01-01T00:00:00Z",
-                importance_score=0.8
+                timestamp="2024-01-01T00:00:00Z"
             ),
             Event(
                 id="event_2",
                 event_type=EventType.ACTION,
                 text="事件2",
                 summary="摘要2",
-                timestamp="2024-01-02T00:00:00Z",
-                importance_score=0.9
+                timestamp="2024-01-02T00:00:00Z"
             ),
             Event(
                 id="event_3",
-                event_type=EventType.RESULT,
+                event_type=EventType.OTHER,
                 text="事件3",
                 summary="摘要3",
-                timestamp="2024-01-03T00:00:00Z",
-                importance_score=0.7
+                timestamp="2024-01-03T00:00:00Z"
             )
         ]
         
@@ -306,7 +334,7 @@ class TestPatternDiscoverer(unittest.TestCase):
         
         self.assertIsInstance(common_attrs, dict)
         self.assertIn('dominant_type', common_attrs)
-        self.assertEqual(common_attrs['dominant_type'], 'ACTION')  # 最频繁的类型
+        self.assertEqual(common_attrs['dominant_type'], EventType.ACTION)  # 最频繁的类型
         
         if 'avg_importance' in common_attrs:
             self.assertAlmostEqual(common_attrs['avg_importance'], 0.8, places=1)
