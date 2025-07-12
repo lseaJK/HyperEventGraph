@@ -8,6 +8,9 @@ import os
 from datetime import datetime, timedelta
 from typing import List
 
+# 添加当前目录到路径以支持绝对导入
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 # 使用本地数据模型
 from local_models import Event, EventType, Participant
 from event_logic_analyzer import EventLogicAnalyzer
@@ -168,19 +171,19 @@ def test_relationship_validator(relations, events):
         
         print(f"关系: {relation.source_event_id} -> {relation.target_event_id}")
         print(f"验证结果: {'有效' if validation_result.is_valid else '无效'}")
-        print(f"调整后置信度: {validation_result.confidence:.2f}")
+        print(f"调整后置信度: {validation_result.confidence_score:.2f}")
         print(f"一致性得分: {validation_result.consistency_score:.2f}")
-        print(f"错误数: {len(validation_result.errors)}")
-        print(f"警告数: {len(validation_result.warnings)}")
+        print(f"错误数: {len(validation_result.validation_errors)}")
+        print(f"警告数: {len(validation_result.validation_warnings)}")
         
-        if validation_result.errors:
+        if validation_result.validation_errors:
             print("错误:")
-            for error in validation_result.errors:
+            for error in validation_result.validation_errors:
                 print(f"  - {error}")
         
-        if validation_result.warnings:
+        if validation_result.validation_warnings:
             print("警告:")
-            for warning in validation_result.warnings:
+            for warning in validation_result.validation_warnings:
                 print(f"  - {warning}")
     
     # 测试关系集合验证

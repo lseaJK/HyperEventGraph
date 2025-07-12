@@ -8,8 +8,8 @@ from typing import List, Dict, Set, Optional, Tuple
 from collections import defaultdict, deque
 from datetime import datetime
 
-from .local_models import Event
-from .data_models import (
+from local_models import Event
+from data_models import (
     EventRelation, RelationType, ValidationResult, ValidatedRelation
 )
 
@@ -116,9 +116,9 @@ class RelationshipValidator:
         
         return ValidationResult(
             is_valid=is_valid,
-            confidence=adjusted_confidence,
-            errors=errors,
-            warnings=warnings,
+            confidence_score=adjusted_confidence,
+            validation_errors=errors,
+            validation_warnings=warnings,
             consistency_score=consistency_score
         )
     
@@ -342,7 +342,7 @@ class RelationshipValidator:
             # 检查是否存在不兼容的关系
             for target, other_type in relation_graph[source_id]:
                 if target == target_id and (rel_type, other_type) in self.incompatible_relations:
-                    vr.validation_result.warnings.append(
+                    vr.validation_result.validation_warnings.append(
                         f"存在不兼容的关系: {rel_type} 与 {other_type}"
                     )
                     vr.validation_result.consistency_score *= 0.8
@@ -376,9 +376,9 @@ class RelationshipValidator:
                             for vr in validated_relations:
                                 if (vr.relation.source_event_id == a and 
                                     vr.relation.target_event_id == c):
-                                    vr.validation_result.warnings.append(
-                                        f"传递性不一致: {a}->{b}({type_ab}), {b}->{c}({type_bc}), {a}->{c}({type_ac})"
-                                    )
+                                    vr.validation_result.validation_warnings.append(
+                                f"传递性不一致: {a}->{b}({type_ab}), {b}->{c}({type_bc}), {a}->{c}({type_ac})"
+                            )
                                     break
     
     def _validate_cycles(self, validated_relations: List[ValidatedRelation]):
@@ -414,14 +414,14 @@ class RelationshipValidator:
             rec_stack.remove(node)
             return False
         
-        # 检查所有节点
-        for node in graph:
+        # 检查所有节点（使用list()避免迭代时字典大小改变的问题）
+        for node in list(graph.keys()):
             if node not in visited:
                 if has_cycle(node):
                     # 找到循环，添加警告
                     for vr in validated_relations:
                         if vr.relation.source_event_id == node:
-                            vr.validation_result.warnings.append(
+                            vr.validation_result.validation_warnings.append(
                                 f"检测到循环依赖，涉及事件 {node}"
                             )
                             vr.validation_result.consistency_score *= 0.9
@@ -474,7 +474,7 @@ class RelationshipValidator:
         # 确保得分在[0, 1]范围内
         return max(0.0, min(1.0, score))
     
-    def get_validation_summary(self, validated_relations: List[ValidatedRelation]) -> Dict[str, Any]:
+    def get_validation_summary(self, validated_relations: List[ValidatedRelation]) -> Dict[str, any]:
         """获取验证摘要
         
         Args:
@@ -485,10 +485,10 @@ class RelationshipValidator:
         """
         total_relations = len(validated_relations)
         valid_relations = sum(1 for vr in validated_relations if vr.validation_result.is_valid)
-        total_errors = sum(len(vr.validation_result.errors) for vr in validated_relations)
-        total_warnings = sum(len(vr.validation_result.warnings) for vr in validated_relations)
+        total_errors = sum(len(vr.validation_result.validation_errors) for vr in validated_relations)
+        total_warnings = sum(len(vr.validation_result.validation_warnings) for vr in validated_relations)
         
-        avg_confidence = sum(vr.validation_result.confidence for vr in validated_relations) / total_relations if total_relations > 0 else 0
+        avg_confidence = sum(vr.validation_result.confidence_score for vr in validated_relations) / total_relations if total_relations > 0 else 0
         avg_consistency = sum(vr.validation_result.consistency_score for vr in validated_relations) / total_relations if total_relations > 0 else 0
         
         return {
