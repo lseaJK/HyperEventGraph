@@ -112,7 +112,11 @@ class KnowledgeRetriever:
         
         # 1. 基于关键词检索事件
         for keyword in query_intent.keywords:
-            keyword_events = self.dual_layer.event_layer.search_events_by_text(keyword)
+            # 使用query_events方法，通过properties参数传递关键词
+            keyword_events = self.dual_layer.event_layer.query_events(
+                properties={'text': keyword},
+                limit=20
+            )
             if keyword_events and hasattr(keyword_events, '__iter__'):
                 events.extend(keyword_events)
             elif keyword_events:
@@ -120,7 +124,10 @@ class KnowledgeRetriever:
         
         # 2. 基于实体检索事件
         for entity in query_intent.entities:
-            entity_events = self.dual_layer.event_layer.get_events_by_participant(entity)
+            entity_events = self.dual_layer.event_layer.query_events(
+                participants=[entity],
+                limit=20
+            )
             if entity_events and hasattr(entity_events, '__iter__'):
                 events.extend(entity_events)
             elif entity_events:
@@ -169,8 +176,14 @@ class KnowledgeRetriever:
             entity1, entity2 = query_intent.entities[0], query_intent.entities[1]
             
             # 获取两个实体相关的事件
-            events1 = self.dual_layer.event_layer.get_events_by_participant(entity1)
-            events2 = self.dual_layer.event_layer.get_events_by_participant(entity2)
+            events1 = self.dual_layer.event_layer.query_events(
+                participants=[entity1],
+                limit=50
+            )
+            events2 = self.dual_layer.event_layer.query_events(
+                participants=[entity2],
+                limit=50
+            )
             
             # 查找关联路径
             paths = self._find_association_paths(events1, events2)
@@ -211,7 +224,10 @@ class KnowledgeRetriever:
         # 基于关键词找到起始事件
         seed_events = []
         for keyword in query_intent.keywords:
-            keyword_events = self.dual_layer.event_layer.search_events_by_text(keyword)
+            keyword_events = self.dual_layer.event_layer.query_events(
+                properties={'text': keyword},
+                limit=10
+            )
             seed_events.extend(keyword_events)
         
         # 对每个种子事件，查找因果链
@@ -257,7 +273,10 @@ class KnowledgeRetriever:
         else:
             # 如果没有时间范围，基于关键词检索
             for keyword in query_intent.keywords:
-                keyword_events = self.dual_layer.event_layer.search_events_by_text(keyword)
+                keyword_events = self.dual_layer.event_layer.query_events(
+                    properties={'text': keyword},
+                    limit=50
+                )
                 events.extend(keyword_events)
         
         # 按时间排序
@@ -289,9 +308,12 @@ class KnowledgeRetriever:
     def _retrieve_entity_events(self, query_intent: QueryIntent) -> RetrievalResult:
         """检索实体相关事件"""
         events = []
-        
+       # 基于实体检索
         for entity in query_intent.entities:
-            entity_events = self.dual_layer.event_layer.get_events_by_participant(entity)
+            entity_events = self.dual_layer.event_layer.query_events(
+                participants=[entity],
+                limit=50
+            )
             events.extend(entity_events)
         
         # 时间过滤
@@ -329,9 +351,12 @@ class KnowledgeRetriever:
             keyword_events = self.dual_layer.event_layer.search_events_by_text(keyword)
             events.extend(keyword_events)
         
-        # 实体检索
+        # 基于实体检索相关事件
         for entity in query_intent.entities:
-            entity_events = self.dual_layer.event_layer.get_events_by_participant(entity)
+            entity_events = self.dual_layer.event_layer.query_events(
+                participants=[entity],
+                limit=50
+            )
             events.extend(entity_events)
         
         events = self._deduplicate_events(events)
@@ -400,7 +425,7 @@ class KnowledgeRetriever:
         
         for event in events:
             try:
-                event_relations = self.dual_layer.event_layer.get_event_relations(event.id)
+                event_relations = self.dual_layer.event_layer.get_event_relationships(event.id)
                 # 只保留两端都在事件集合中的关系
                 for rel in event_relations:
                     if rel.source_event_id in event_ids and rel.target_event_id in event_ids:

@@ -312,7 +312,7 @@ class EventLayerManager:
     def get_event_relationships(self, event_id: str) -> List[EventRelation]:
         """获取事件关系"""
         try:
-            return self.storage.get_event_relations(event_id)
+            return self.storage.query_event_relations(event_id)
         except Exception as e:
             self.logger.error(f"获取事件关系失败: {str(e)}")
             return []

@@ -47,6 +47,7 @@ class ContextBuilder:
     
     def build_context(self, retrieval_result: RetrievalResult, query_intent: QueryIntent) -> ContextData:
         """构建上下文"""
+        
         # 根据查询类型选择不同的上下文构建策略
         if query_intent.query_type == QueryType.CAUSAL_ANALYSIS:
             context = self._build_causal_context(retrieval_result, query_intent)
@@ -61,9 +62,9 @@ class ContextBuilder:
         token_count = len(context) // 4  # 粗略估算
         
         # 如果超长，进行截断
-        if token_count > self.max_context_length:
+        if token_count > self.max_tokens:
             context = self._truncate_context(context, retrieval_result)
-            token_count = self.max_context_length
+            token_count = self.max_tokens
         
         # 生成相关性摘要
         relevance_summary = self._generate_relevance_summary(retrieval_result)

@@ -11,7 +11,6 @@ import json
 import logging
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
-from dataclasses import dataclass
 
 from neo4j import GraphDatabase
 from neo4j.exceptions import ServiceUnavailable, TransientError
@@ -35,16 +34,31 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-@dataclass
 class Neo4jConfig:
     """Neo4j配置类"""
-    uri: str = "bolt://localhost:7687"
-    username: str = "neo4j"
-    password: str = "password"
-    database: str = "neo4j"
-    max_connection_lifetime: int = 3600
-    max_connection_pool_size: int = 50
-    connection_acquisition_timeout: int = 60
+    
+    def __init__(self, uri: str = "bolt://localhost:7687", username: str = "neo4j", 
+                 password: str = "password", database: str = "neo4j",
+                 max_connection_lifetime: int = 3600, max_connection_pool_size: int = 50,
+                 connection_acquisition_timeout: int = 60):
+        self.uri = uri
+        self.username = username
+        self.password = password
+        self.database = database
+        self.max_connection_lifetime = max_connection_lifetime
+        self.max_connection_pool_size = max_connection_pool_size
+        self.connection_acquisition_timeout = connection_acquisition_timeout
+    
+    @classmethod
+    def from_env(cls) -> 'Neo4jConfig':
+        """从环境变量创建配置"""
+        import os
+        return cls(
+            uri=os.getenv('NEO4J_URI', 'bolt://localhost:7687'),
+            username=os.getenv('NEO4J_USER', os.getenv('NEO4J_USERNAME', 'neo4j')),
+            password=os.getenv('NEO4J_PASSWORD', 'password'),
+            database=os.getenv('NEO4J_DATABASE', 'neo4j')
+        )
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
