@@ -16,19 +16,26 @@ import sys
 import os
 from pathlib import Path
 
-# 添加项目根目录到Python路径
+# 添加项目根目录和当前目录到路径
 project_root = Path(__file__).parent.parent.parent
+current_dir = Path(__file__).parent
 sys.path.insert(0, str(project_root))
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(current_dir))
 
+# 尝试导入模块
 try:
-    from jsonl_manager import JSONLManager
-    from graph_exporter import GraphExporter
-    from format_validator import FormatValidator, ValidationResult
+    # 直接从当前目录导入
+    import jsonl_manager
+    import graph_exporter
+    import format_validator
+    
+    JSONLManager = jsonl_manager.JSONLManager
+    GraphExporter = graph_exporter.GraphExporter
+    FormatValidator = format_validator.FormatValidator
+    ValidationResult = format_validator.ValidationResult
+    print("成功导入所有模块")
 except ImportError as e:
-    print(f"Warning: Could not import modules: {e}")
-    print(f"Current working directory: {os.getcwd()}")
-    print(f"Python path: {sys.path[:3]}")
+    print(f"Warning: Could not import modules. Running in standalone mode. Error: {e}")
     JSONLManager = None
     GraphExporter = None
     FormatValidator = None

@@ -10,18 +10,22 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
 from dataclasses import asdict
 
-# 尝试相对导入，如果失败则使用绝对导入
-try:
-    from ..event_logic.data_models import EventRelation
-    from ..event_logic.local_models import Event
-except ImportError:
-    import sys
-    from pathlib import Path
-    # 添加项目根目录到路径
-    project_root = Path(__file__).parent.parent.parent
-    sys.path.insert(0, str(project_root))
-    from src.event_logic.data_models import EventRelation
-    from src.event_logic.local_models import Event
+# 简化导入，避免循环依赖
+# 使用类型提示而不是直接导入，让模块可以独立运行
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    try:
+        from ..event_logic.data_models import EventRelation
+        from ..event_logic.local_models import Event
+    except ImportError:
+        # 如果导入失败，定义占位符类型
+        EventRelation = Any
+        Event = Any
+else:
+    # 运行时不导入，避免依赖问题
+    EventRelation = Any
+    Event = Any
 
 
 class JSONLManager:
@@ -37,13 +41,13 @@ class JSONLManager:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
     def write_events_to_jsonl(self, 
-                             events: List[Event], 
+                             events: List[Union[Dict[str, Any], Any]], 
                              filename: str = None,
                              append: bool = False) -> str:
         """将事件列表写入JSONL文件
         
         Args:
-            events: 事件列表
+            events: 事件列表（可以是字典或Event对象）
             filename: 输出文件名，如果为None则自动生成
             append: 是否追加模式写入
             
@@ -65,13 +69,13 @@ class JSONLManager:
         return str(filepath)
     
     def write_relations_to_jsonl(self, 
-                                relations: List[EventRelation], 
+                                relations: List[Union[Dict[str, Any], Any]], 
                                 filename: str = None,
                                 append: bool = False) -> str:
         """将关系列表写入JSONL文件
         
         Args:
-            relations: 关系列表
+            relations: 关系列表（可以是字典或EventRelation对象）
             filename: 输出文件名，如果为None则自动生成
             append: 是否追加模式写入
             
@@ -87,23 +91,21 @@ class JSONLManager:
         
         with open(filepath, mode, encoding='utf-8') as f:
             for relation in relations:
-                relation_dict = relation.to_dict()
+                relation_dict = self._relation_to_dict(relation)
                 f.write(json.dumps(relation_dict, ensure_ascii=False) + '\n')
                 
         return str(filepath)
     
     def write_combined_to_jsonl(self, 
-                               events: List[Event], 
-                               relations: List[EventRelation],
-                               filename: str = None,
-                               append: bool = False) -> str:
+                               events: List[Union[Dict[str, Any], Any]], 
+                               relations: List[Union[Dict[str, Any], Any]],
+                               filename: str = None) -> str:
         """将事件和关系合并写入JSONL文件
         
         Args:
-            events: 事件列表
-            relations: 关系列表
+            events: 事件列表（可以是字典或Event对象）
+            relations: 关系列表（可以是字典或EventRelation对象）
             filename: 输出文件名，如果为None则自动生成
-            append: 是否追加模式写入
             
         Returns:
             str: 输出文件路径
@@ -113,28 +115,48 @@ class JSONLManager:
             filename = f"combined_{timestamp}.jsonl"
             
         filepath = self.output_dir / filename
-        mode = 'a' if append else 'w'
         
-        with open(filepath, mode, encoding='utf-8') as f:
-            # 写入事件数据
+        with open(filepath, 'w', encoding='utf-8') as f:
+            # 写入事件
             for event in events:
                 event_dict = self._event_to_dict(event)
                 event_dict['data_type'] = 'event'
                 f.write(json.dumps(event_dict, ensure_ascii=False) + '\n')
-            
-            # 写入关系数据
+                
+            # 写入关系
             for relation in relations:
-                relation_dict = relation.to_dict()
+                relation_dict = self._relation_to_dict(relation)
                 relation_dict['data_type'] = 'relation'
                 f.write(json.dumps(relation_dict, ensure_ascii=False) + '\n')
                 
         return str(filepath)
     
-    def append_event_to_jsonl(self, event: Event, filename: str) -> None:
+    def _relation_to_dict(self, relation: Union[Dict[str, Any], Any]) -> Dict[str, Any]:
+        """将关系对象转换为字典
+        
+        Args:
+            relation: 关系对象或字典
+            
+        Returns:
+            Dict[str, Any]: 关系字典
+        """
+        if isinstance(relation, dict):
+            return relation
+        elif hasattr(relation, 'to_dict'):
+            return relation.to_dict()
+        else:
+            # 如果没有to_dict方法，使用dataclasses.asdict
+            try:
+                return asdict(relation)
+            except TypeError:
+                # 如果不是dataclass，返回空字典
+                return {}
+    
+    def append_event_to_jsonl(self, event: Union[Dict[str, Any], Any], filename: str) -> None:
         """向JSONL文件追加单个事件
         
         Args:
-            event: 事件对象
+            event: 事件对象或字典
             filename: 目标文件名
         """
         filepath = self.output_dir / filename
@@ -143,17 +165,17 @@ class JSONLManager:
             event_dict = self._event_to_dict(event)
             f.write(json.dumps(event_dict, ensure_ascii=False) + '\n')
     
-    def append_relation_to_jsonl(self, relation: EventRelation, filename: str) -> None:
+    def append_relation_to_jsonl(self, relation: Union[Dict[str, Any], Any], filename: str) -> None:
         """向JSONL文件追加单个关系
         
         Args:
-            relation: 关系对象
+            relation: 关系对象或字典
             filename: 目标文件名
         """
         filepath = self.output_dir / filename
         
         with open(filepath, 'a', encoding='utf-8') as f:
-            relation_dict = relation.to_dict()
+            relation_dict = self._relation_to_dict(relation)
             f.write(json.dumps(relation_dict, ensure_ascii=False) + '\n')
     
     def read_events_from_jsonl(self, filename: str) -> List[Dict[str, Any]]:
@@ -299,27 +321,33 @@ class JSONLManager:
                         
         return stats
     
-    def _event_to_dict(self, event: Event) -> Dict[str, Any]:
-        """将Event对象转换为字典格式
+    def _event_to_dict(self, event: Union[Dict[str, Any], Any]) -> Dict[str, Any]:
+        """将事件对象转换为字典
         
         Args:
-            event: Event对象
+            event: 事件对象或字典
             
         Returns:
             Dict[str, Any]: 事件字典
         """
-        if hasattr(event, 'to_dict'):
+        if isinstance(event, dict):
+            return event
+        elif hasattr(event, 'to_dict'):
             return event.to_dict()
         else:
-            # 如果Event对象没有to_dict方法，使用dataclass的asdict
-            event_dict = asdict(event) if hasattr(event, '__dataclass_fields__') else event.__dict__.copy()
-            
-            # 处理datetime对象
-            for key, value in event_dict.items():
-                if isinstance(value, datetime):
-                    event_dict[key] = value.isoformat()
-                    
-            return event_dict
+             # 如果没有to_dict方法，使用dataclasses.asdict
+             try:
+                 event_dict = asdict(event)
+             except TypeError:
+                 # 如果不是dataclass，尝试使用__dict__
+                 event_dict = getattr(event, '__dict__', {}).copy()
+             
+             # 处理datetime对象
+             for key, value in event_dict.items():
+                 if isinstance(value, datetime):
+                     event_dict[key] = value.isoformat()
+             
+             return event_dict
     
     def list_output_files(self) -> List[str]:
         """列出输出目录中的所有JSONL文件
