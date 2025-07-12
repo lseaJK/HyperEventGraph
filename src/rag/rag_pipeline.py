@@ -17,12 +17,12 @@ from .answer_generator import AnswerGenerator, GeneratedAnswer
 
 # 导入双层架构组件
 try:
-    from ..core.dual_layer_core import DualLayerCore
+    from ..core.dual_layer_architecture import DualLayerArchitecture
     from ..core.event_layer_manager import EventLayerManager
     from ..core.pattern_layer_manager import PatternLayerManager
 except ImportError:
     # 如果导入失败，使用None作为占位符
-    DualLayerCore = None
+    DualLayerArchitecture = None
     EventLayerManager = None
     PatternLayerManager = None
 
@@ -89,10 +89,13 @@ class RAGPipeline:
     """RAG管道 - 完整的检索增强生成系统"""
     
     def __init__(self, 
-                 dual_layer_core: Optional[DualLayerCore] = None,
+                 dual_layer_core: Optional[DualLayerArchitecture] = None,
                  config: Optional[RAGConfig] = None,
                  llm_client=None):
         """初始化RAG管道"""
+        if dual_layer_core is None:
+            raise ValueError("必须提供dual_layer_core或dual_layer_arch参数")
+            
         self.config = config or RAGConfig()
         self.dual_layer_core = dual_layer_core
         self.llm_client = llm_client
@@ -243,7 +246,18 @@ class RAGPipeline:
         relation_score = min(len(retrieval_result.relations) / 20, 1.0)  # 最多20个关系得满分
         
         # 如果有相关性分数，使用平均值
-        relevance_scores = [event.get('relevance_score', 0.8) for event in retrieval_result.events]
+        relevance_scores = []
+        for event in retrieval_result.events:
+            try:
+                score = event.get('relevance_score', 0.8)
+                # 确保score是数值类型
+                if isinstance(score, (int, float)):
+                    relevance_scores.append(score)
+                else:
+                    relevance_scores.append(0.8)
+            except:
+                relevance_scores.append(0.8)
+        
         avg_relevance = sum(relevance_scores) / len(relevance_scores) if relevance_scores else 0.5
         
         # 综合分数
@@ -355,14 +369,16 @@ class RAGPipeline:
 
 
 # 便捷函数
-def create_rag_pipeline(dual_layer_core=None, llm_client=None, **config_kwargs) -> RAGPipeline:
+def create_rag_pipeline(dual_layer_core=None, dual_layer_arch=None, llm_client=None, **config_kwargs) -> RAGPipeline:
     """创建RAG管道的便捷函数"""
     config = RAGConfig(**config_kwargs)
-    return RAGPipeline(dual_layer_core=dual_layer_core, config=config, llm_client=llm_client)
+    # 支持dual_layer_arch参数作为dual_layer_core的别名
+    core = dual_layer_core or dual_layer_arch
+    return RAGPipeline(dual_layer_core=core, config=config, llm_client=llm_client)
 
 
-def quick_query(query: str, dual_layer_core=None, llm_client=None) -> str:
+def quick_query(query: str, dual_layer_core=None, dual_layer_arch=None, llm_client=None) -> str:
     """快速查询的便捷函数"""
-    pipeline = create_rag_pipeline(dual_layer_core=dual_layer_core, llm_client=llm_client)
+    pipeline = create_rag_pipeline(dual_layer_core=dual_layer_core, dual_layer_arch=dual_layer_arch, llm_client=llm_client)
     result = pipeline.process_query(query)
     return result.generated_answer.answer

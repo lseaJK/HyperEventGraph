@@ -33,29 +33,36 @@ class QueryIntent:
     keywords: List[str]
     original_query: str
     processed_query: str
+    expanded_keywords: List[str] = None
+    
+    def __post_init__(self):
+        if self.expanded_keywords is None:
+            self.expanded_keywords = []
 
 
 class QueryProcessor:
     """查询处理器 - 负责自然语言查询的解析和理解"""
     
-    def __init__(self):
+    def __init__(self, enable_expansion: bool = True, max_keywords: int = 10):
         """初始化查询处理器"""
+        self.enable_expansion = enable_expansion
+        self.max_keywords = max_keywords
         # 初始化jieba分词
         jieba.initialize()
         
         # 查询类型关键词映射
         self.query_type_keywords = {
             QueryType.EVENT_SEARCH: [
-                "事件", "发生", "什么事", "事情", "情况", "活动"
+                "事件", "发生", "什么事", "事情", "情况", "活动", "查找", "搜索", "收购", "合并", "投资", "融资"
             ],
             QueryType.RELATION_QUERY: [
-                "关系", "关联", "联系", "相关", "影响", "关于"
+                "关系", "关联", "联系", "相关", "关于"
             ],
             QueryType.CAUSAL_ANALYSIS: [
-                "原因", "导致", "因为", "由于", "造成", "引起", "为什么"
+                "原因", "导致", "因为", "由于", "造成", "引起", "为什么", "影响", "分析", "对", "的影响"
             ],
             QueryType.TEMPORAL_ANALYSIS: [
-                "时间", "何时", "什么时候", "之前", "之后", "期间", "顺序"
+                "时间", "何时", "什么时候", "之前", "之后", "期间", "顺序", "趋势", "发展", "变化"
             ],
             QueryType.ENTITY_QUERY: [
                 "公司", "企业", "人员", "组织", "机构", "个人"
@@ -105,9 +112,10 @@ class QueryProcessor:
             confidence=confidence,
             entities=entities,
             time_range=time_range,
-            keywords=expanded_keywords,
+            keywords=keywords,
             original_query=query,
-            processed_query=processed_query
+            processed_query=processed_query,
+            expanded_keywords=expanded_keywords if self.enable_expansion else []
         )
     
     def _preprocess_query(self, query: str) -> str:
@@ -126,17 +134,20 @@ class QueryProcessor:
             for keyword in keywords:
                 if keyword in query:
                     score += 1
-            scores[query_type] = score / len(keywords) if keywords else 0
+            scores[query_type] = score
         
         # 找到得分最高的查询类型
         best_type = max(scores, key=scores.get)
-        confidence = scores[best_type]
+        max_score = scores[best_type]
         
         # 如果没有明确匹配，默认为一般问答
-        if confidence == 0:
+        if max_score == 0:
             return QueryType.GENERAL_QA, 0.5
         
-        return best_type, min(confidence * 2, 1.0)  # 调整置信度
+        # 计算置信度：得分除以总关键词数，但至少0.6
+        confidence = max(0.6, min(max_score / len(self.query_type_keywords[best_type]), 1.0))
+        
+        return best_type, confidence
     
     def _extract_entities(self, query: str) -> List[str]:
         """提取实体（简化版实现）"""

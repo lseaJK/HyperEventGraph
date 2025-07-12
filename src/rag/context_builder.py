@@ -26,18 +26,23 @@ class ContextData:
 class ContextBuilder:
     """上下文构建器 - 将检索结果转换为结构化上下文"""
     
-    def __init__(self, max_context_length: int = 4000):
+    def __init__(self, max_tokens: int = 2000, include_event_details: bool = True, 
+                 include_relations: bool = True, include_temporal_info: bool = True, **kwargs):
         """初始化上下文构建器"""
-        self.max_context_length = max_context_length
+        self.max_tokens = max_tokens
+        self.max_context_length = max_tokens * 4  # 保持向后兼容
+        self.include_event_details = include_event_details
+        self.include_relations = include_relations
+        self.include_temporal_info = include_temporal_info
         
         # 关系类型的中文描述
         self.relation_descriptions = {
-            RelationType.CAUSE: "导致",
+            RelationType.CAUSAL_CAUSE: "导致",
             RelationType.TEMPORAL_BEFORE: "发生在...之前",
-            RelationType.CONDITIONAL: "条件关系",
-            RelationType.ENABLE: "使能",
-            RelationType.PREVENT: "阻止",
-            RelationType.CORRELATION: "相关"
+            RelationType.CONDITIONAL_IF: "条件关系",
+            RelationType.CAUSAL_ENABLE: "使能",
+            RelationType.CAUSAL_EFFECT: "效果",
+            RelationType.COOCCURRENCE: "相关"
         }
     
     def build_context(self, retrieval_result: RetrievalResult, query_intent: QueryIntent) -> ContextData:
@@ -69,9 +74,10 @@ class ContextBuilder:
             "relation_count": len(retrieval_result.relations),
             "path_count": len(retrieval_result.paths),
             "query_type": query_intent.query_type.value,
+            "context_type": query_intent.query_type.value,  # 添加context_type
             "entities": query_intent.entities,
             "keywords": query_intent.keywords,
-            "time_range": query_intent.time_range.isoformat() if query_intent.time_range else None
+            "time_range": f"{query_intent.time_range[0].isoformat()} - {query_intent.time_range[1].isoformat()}" if query_intent.time_range else None
         }
         
         return ContextData(
@@ -107,7 +113,7 @@ class ContextBuilder:
         # 添加关系信息
         causal_relations = [
             rel for rel in retrieval_result.relations 
-            if rel.relation_type in [RelationType.CAUSE, RelationType.ENABLE]
+            if rel.relation_type in [RelationType.CAUSAL_CAUSE, RelationType.CAUSAL_ENABLE]
         ]
         
         if causal_relations:

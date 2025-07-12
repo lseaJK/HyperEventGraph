@@ -9,33 +9,80 @@ from dataclasses import dataclass
 from datetime import datetime
 import logging
 
-from ..core.dual_layer_architecture import DualLayerArchitecture
-from ..models.event_data_model import Event, EventType, EventRelation, RelationType
+# 导入双层架构组件
+try:
+    from ..core.dual_layer_architecture import DualLayerArchitecture
+    from ..core.event_layer_manager import EventLayerManager
+    from ..core.pattern_layer_manager import PatternLayerManager
+except ImportError:
+    # 如果导入失败，使用None作为占位符
+    DualLayerArchitecture = None
+    EventLayerManager = None
+    PatternLayerManager = None
+
+try:
+    from ..models.event_data_model import Event, EventType, EventRelation, RelationType
+except ImportError:
+    # 如果导入失败，使用基础类型
+    Event = dict
+    EventType = str
+    EventRelation = dict
+    RelationType = str
+
 from .query_processor import QueryIntent, QueryType
 
 
 @dataclass
 class RetrievalResult:
     """检索结果结构"""
+    query_type: QueryType
     events: List[Event]
     relations: List[EventRelation]
-    paths: List[List[str]]  # 关联路径（事件ID列表）
-    relevance_scores: Dict[str, float]  # 事件相关性得分
-    subgraph_summary: str
+    causal_paths: List[Dict[str, Any]] = None  # 因果路径
+    temporal_sequences: List[Dict[str, Any]] = None  # 时序序列
+    paths: List[List[str]] = None  # 关联路径（事件ID列表）
+    relevance_scores: Dict[str, float] = None  # 事件相关性得分
+    subgraph_summary: str = ""
+    metadata: Dict[str, Any] = None  # 元数据
+    
+    def __post_init__(self):
+        if self.causal_paths is None:
+            self.causal_paths = []
+        if self.temporal_sequences is None:
+            self.temporal_sequences = []
+        if self.paths is None:
+            self.paths = []
+        if self.relevance_scores is None:
+            self.relevance_scores = {}
+        if self.metadata is None:
+            self.metadata = {}
 
 
 class KnowledgeRetriever:
     """知识检索器 - 基于双层架构的智能检索"""
     
-    def __init__(self, dual_layer_arch: DualLayerArchitecture):
-        """初始化知识检索器"""
-        self.dual_layer = dual_layer_arch
+    def __init__(self, dual_layer_core=None, dual_layer_arch: DualLayerArchitecture = None, max_events: int = 100, max_relations: int = 50, **kwargs):
+        """初始化知识检索器
+        
+        Args:
+            dual_layer_core: 双层架构核心实例
+            dual_layer_arch: 双层架构实例（向后兼容）
+            max_events: 最大事件数量限制
+            max_relations: 最大关系数量限制
+            **kwargs: 其他参数（用于兼容性）
+        """
+        # 支持两种参数名以保持兼容性
+        self.dual_layer = dual_layer_core or dual_layer_arch
+        if self.dual_layer is None:
+            raise ValueError("必须提供dual_layer_core或dual_layer_arch参数")
         self.logger = logging.getLogger(__name__)
         
         # 检索参数配置
         self.max_events_per_query = 50
         self.max_hop_distance = 3
         self.min_relevance_score = 0.3
+        self.max_events = max_events
+        self.max_relations = max_relations
         
     def retrieve_knowledge(self, query_intent: QueryIntent) -> RetrievalResult:
         """根据查询意图检索相关知识"""
@@ -55,6 +102,10 @@ class KnowledgeRetriever:
         else:
             return self._retrieve_general(query_intent)
     
+    def retrieve(self, query_intent: QueryIntent) -> RetrievalResult:
+        """检索方法的别名，用于兼容测试"""
+        return self.retrieve_knowledge(query_intent)
+    
     def _retrieve_events(self, query_intent: QueryIntent) -> RetrievalResult:
         """检索相关事件"""
         events = []
@@ -62,12 +113,18 @@ class KnowledgeRetriever:
         # 1. 基于关键词检索事件
         for keyword in query_intent.keywords:
             keyword_events = self.dual_layer.event_layer.search_events_by_text(keyword)
-            events.extend(keyword_events)
+            if keyword_events and hasattr(keyword_events, '__iter__'):
+                events.extend(keyword_events)
+            elif keyword_events:
+                events.append(keyword_events)
         
         # 2. 基于实体检索事件
         for entity in query_intent.entities:
             entity_events = self.dual_layer.event_layer.get_events_by_participant(entity)
-            events.extend(entity_events)
+            if entity_events and hasattr(entity_events, '__iter__'):
+                events.extend(entity_events)
+            elif entity_events:
+                events.append(entity_events)
         
         # 3. 基于时间范围过滤
         if query_intent.time_range:
@@ -93,11 +150,13 @@ class KnowledgeRetriever:
         summary = self._generate_subgraph_summary(events, relations)
         
         return RetrievalResult(
+            query_type=query_intent.query_type,
             events=events,
             relations=relations,
             paths=[],
             relevance_scores=relevance_scores,
-            subgraph_summary=summary
+            subgraph_summary=summary,
+            metadata={"event_count": len(events)}
         )
     
     def _retrieve_relations(self, query_intent: QueryIntent) -> RetrievalResult:
@@ -134,11 +193,13 @@ class KnowledgeRetriever:
         summary = self._generate_subgraph_summary(events, relations)
         
         return RetrievalResult(
+            query_type=query_intent.query_type,
             events=events,
             relations=relations,
             paths=paths if 'paths' in locals() else [],
             relevance_scores=relevance_scores,
-            subgraph_summary=summary
+            subgraph_summary=summary,
+            metadata={"relation_count": len(relations)}
         )
     
     def _retrieve_causal_chains(self, query_intent: QueryIntent) -> RetrievalResult:
@@ -168,7 +229,7 @@ class KnowledgeRetriever:
         # 获取因果关系
         relations = [
             rel for rel in self._get_relations_for_events(events)
-            if rel.relation_type in [RelationType.CAUSE, RelationType.ENABLE]
+            if rel.relation_type in [RelationType.CAUSAL_CAUSE, RelationType.CAUSAL_ENABLE]
         ]
         
         events = self._deduplicate_events(events)
@@ -176,11 +237,13 @@ class KnowledgeRetriever:
         summary = self._generate_subgraph_summary(events, relations)
         
         return RetrievalResult(
+            query_type=query_intent.query_type,
             events=events,
             relations=relations,
-            paths=paths,
+            causal_paths=[{"path": path, "relations": ["causes"]} for path in paths],
             relevance_scores=relevance_scores,
-            subgraph_summary=summary
+            subgraph_summary=summary,
+            metadata={"path_count": len(paths)}
         )
     
     def _retrieve_temporal_sequences(self, query_intent: QueryIntent) -> RetrievalResult:
@@ -214,11 +277,13 @@ class KnowledgeRetriever:
         summary = self._generate_subgraph_summary(events, relations)
         
         return RetrievalResult(
+            query_type=query_intent.query_type,
             events=events,
             relations=relations,
-            paths=paths,
+            temporal_sequences=[{"sequence": path} for path in paths],
             relevance_scores=relevance_scores,
-            subgraph_summary=summary
+            subgraph_summary=summary,
+            metadata={"sequence_count": len(paths)}
         )
     
     def _retrieve_entity_events(self, query_intent: QueryIntent) -> RetrievalResult:
@@ -245,11 +310,13 @@ class KnowledgeRetriever:
         summary = self._generate_subgraph_summary(events, relations)
         
         return RetrievalResult(
+            query_type=query_intent.query_type,
             events=events,
             relations=relations,
             paths=[],
             relevance_scores=relevance_scores,
-            subgraph_summary=summary
+            subgraph_summary=summary,
+            metadata={"entity_count": len(query_intent.entities)}
         )
     
     def _retrieve_general(self, query_intent: QueryIntent) -> RetrievalResult:
@@ -275,11 +342,13 @@ class KnowledgeRetriever:
         summary = self._generate_subgraph_summary(events, relations)
         
         return RetrievalResult(
+            query_type=query_intent.query_type,
             events=events,
             relations=relations,
             paths=[],
             relevance_scores=relevance_scores,
-            subgraph_summary=summary
+            subgraph_summary=summary,
+            metadata={"general_query": True}
         )
     
     def _find_association_paths(self, events1: List[Event], events2: List[Event]) -> List[List[str]]:
@@ -367,7 +436,9 @@ class KnowledgeRetriever:
             
             # 实体匹配得分
             for entity in query_intent.entities:
-                if entity in event.participants:
+                # 检查实体是否在参与者列表中
+                participant_names = [p.name if hasattr(p, 'name') else str(p) for p in event.participants]
+                if entity in participant_names:
                     score += 0.4
             
             # 时间匹配得分
