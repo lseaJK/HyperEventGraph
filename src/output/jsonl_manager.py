@@ -10,8 +10,18 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
 from dataclasses import asdict
 
-from ..event_logic.data_models import EventRelation
-from ..event_logic.local_models import Event
+# 尝试相对导入，如果失败则使用绝对导入
+try:
+    from ..event_logic.data_models import EventRelation
+    from ..event_logic.local_models import Event
+except ImportError:
+    import sys
+    from pathlib import Path
+    # 添加项目根目录到路径
+    project_root = Path(__file__).parent.parent.parent
+    sys.path.insert(0, str(project_root))
+    from src.event_logic.data_models import EventRelation
+    from src.event_logic.local_models import Event
 
 
 class JSONLManager:
