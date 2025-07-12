@@ -6,11 +6,13 @@
 - 双层映射：建立事件与模式的关联
 """
 
-from .dual_layer_architecture import DualLayerArchitecture
+# 先导入基础管理器，避免循环导入
 from .event_layer_manager import EventLayerManager
 from .pattern_layer_manager import PatternLayerManager
 from .layer_mapper import LayerMapper
 from .graph_processor import GraphProcessor
+# 最后导入依赖其他模块的架构类
+from .dual_layer_architecture import DualLayerArchitecture
 
 __all__ = [
     'DualLayerArchitecture',

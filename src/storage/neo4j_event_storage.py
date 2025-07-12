@@ -20,11 +20,17 @@ from neo4j.exceptions import ServiceUnavailable, TransientError
 try:
     from ..models.event_data_model import Event, Entity, EventRelation, EventPattern, EventType, RelationType
 except ImportError:
-    # 如果导入失败，使用相对导入
-    import sys
-    import os
-    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-    from models.event_data_model import Event, Entity, EventRelation, EventPattern, EventType, RelationType
+    # 如果导入失败，尝试绝对导入
+    try:
+        from src.models.event_data_model import Event, Entity, EventRelation, EventPattern, EventType, RelationType
+    except ImportError:
+        # 最后尝试直接导入
+        import sys
+        import os
+        # 添加项目根目录到路径
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        sys.path.insert(0, project_root)
+        from src.models.event_data_model import Event, Entity, EventRelation, EventPattern, EventType, RelationType
 
 logger = logging.getLogger(__name__)
 
@@ -384,7 +390,7 @@ class Neo4jEventStorage:
                     properties: Dict[str, Any] = None,
                     start_time: str = None,
                     end_time: str = None,
-                    limit: int = 10) -> List[Dict[str, Any]]:
+                    limit: int = 10) -> List[Event]:
         """
         通用事件查询方法
         
@@ -397,35 +403,210 @@ class Neo4jEventStorage:
             limit: 返回数量限制
             
         Returns:
-            List[Dict]: 事件列表
+            List[Event]: 事件对象列表
         """
         with self.driver.session() as session:
-            # 构建查询条件
-            conditions = []
-            params = {"limit": limit}
-            
-            if event_type:
-                conditions.append("e.event_type = $event_type")
-                params["event_type"] = event_type.value
-            
-            if entity_name:
-                conditions.append("(ent:Entity {name: $entity_name})<-[:HAS_SUBJECT|HAS_OBJECT|HAS_PARTICIPANT]-(e)")
-                params["entity_name"] = entity_name
-            
-            if start_time:
-                conditions.append("e.timestamp >= $start_time")
-                params["start_time"] = start_time
-            
-            if end_time:
-                conditions.append("e.timestamp <= $end_time")
-                params["end_time"] = end_time
-            
-            # 构建查询语句
-            if entity_name:
-                query = "MATCH (ent:Entity {name: $entity_name})<-[:HAS_SUBJECT|HAS_OBJECT|HAS_PARTICIPANT]-(e:Event)"
-            else:
-                query = "MATCH (e:Event)"
+            try:
+                # 构建查询条件
+                conditions = []
+                params = {"limit": limit}
+                
+                if event_type:
+                    conditions.append("e.event_type = $event_type")
+                    # 处理EventType枚举
+                    if hasattr(event_type, 'value'):
+                        params["event_type"] = event_type.value
+                    else:
+                        params["event_type"] = str(event_type)
+                
+                if entity_name:
+                    conditions.append("(ent:Entity {name: $entity_name})<-[:HAS_SUBJECT|HAS_OBJECT|HAS_PARTICIPANT]-(e)")
+                    params["entity_name"] = entity_name
+                
+                if start_time:
+                    conditions.append("e.timestamp >= $start_time")
+                    params["start_time"] = start_time
+                
+                if end_time:
+                    conditions.append("e.timestamp <= $end_time")
+                    params["end_time"] = end_time
+                
+                # 构建完整的查询语句，包含关联实体信息
+                if entity_name:
+                    query = """
+                    MATCH (ent:Entity {name: $entity_name})<-[:HAS_SUBJECT|HAS_OBJECT|HAS_PARTICIPANT]-(e:Event)
+                    OPTIONAL MATCH (e)-[:HAS_PARTICIPANT]->(p:Entity)
+                    OPTIONAL MATCH (e)-[:HAS_SUBJECT]->(s:Entity)
+                    OPTIONAL MATCH (e)-[:HAS_OBJECT]->(o:Entity)
+                    """
+                else:
+                    query = """
+                    MATCH (e:Event)
+                    OPTIONAL MATCH (e)-[:HAS_PARTICIPANT]->(p:Entity)
+                    OPTIONAL MATCH (e)-[:HAS_SUBJECT]->(s:Entity)
+                    OPTIONAL MATCH (e)-[:HAS_OBJECT]->(o:Entity)
+                    """
+                
+                # 添加WHERE条件
+                if conditions and not entity_name:
+                    query += " WHERE " + " AND ".join([c for c in conditions if not c.startswith("(")])
+                elif conditions and entity_name:
+                    non_entity_conditions = [c for c in conditions if not c.startswith("(")]
+                    if non_entity_conditions:
+                        query += " WHERE " + " AND ".join(non_entity_conditions)
+                
+                query += """
+                    RETURN DISTINCT e, collect(DISTINCT p) as participants, s, o
+                    ORDER BY e.timestamp DESC
+                    LIMIT $limit
+                """
+                
+                result = session.run(query, **params)
+                events = []
+                for record in result:
+                    try:
+                        event = self._deserialize_event_from_record(record)
+                        if event:
+                            events.append(event)
+                    except Exception as e:
+                        logger.warning(f"反序列化事件对象失败: {e}")
+                        continue
+                
+                return events
+            except Exception as e:
+                logger.error(f"查询事件失败: {e}")
+                return []
     
+    def _deserialize_event_from_record(self, record) -> Optional[Event]:
+        """
+        从Neo4j记录中反序列化Event对象的统一方法
+        
+        Args:
+            record: Neo4j查询结果记录
+            
+        Returns:
+            Event: 反序列化的事件对象，失败时返回None
+        """
+        try:
+            # 使用已经导入的类，避免重复导入
+            import json
+            from datetime import datetime
+            
+            event_data = dict(record["e"])
+            participants_data = record.get("participants", [])
+            subject_data = record.get("s")
+            object_data = record.get("o")
+            
+            # 构建参与者列表
+            participants = []
+            if participants_data:
+                for p_data in participants_data:
+                    if p_data:  # 过滤None值
+                        participants.append(Entity(
+                            name=p_data.get("name", ""),
+                            entity_type=p_data.get("entity_type", "UNKNOWN"),
+                            properties=self._deserialize_json_field(p_data.get("properties", "{}"))
+                        ))
+            
+            # 构建主体和客体
+            subject = None
+            if subject_data:
+                subject = Entity(
+                    name=subject_data.get("name", ""),
+                    entity_type=subject_data.get("entity_type", "UNKNOWN"),
+                    properties=self._deserialize_json_field(subject_data.get("properties", "{}"))
+                )
+            
+            object_entity = None
+            if object_data:
+                object_entity = Entity(
+                    name=object_data.get("name", ""),
+                    entity_type=object_data.get("entity_type", "UNKNOWN"),
+                    properties=self._deserialize_json_field(object_data.get("properties", "{}"))
+                )
+            
+            # 处理事件类型
+            event_type_str = event_data.get('event_type', 'UNKNOWN')
+            try:
+                event_type = EventType(event_type_str)
+            except ValueError:
+                event_type = EventType.UNKNOWN
+            
+            # 处理时间戳
+            timestamp = self._deserialize_timestamp(event_data.get('timestamp'))
+            
+            # 处理properties
+            properties = self._deserialize_json_field(event_data.get('properties', '{}'))
+            
+            return Event(
+                id=event_data.get('id'),
+                text=event_data.get('text', ''),
+                summary=event_data.get('summary', ''),
+                event_type=event_type,
+                timestamp=timestamp,
+                participants=participants,
+                subject=subject,
+                object=object_entity,
+                location=event_data.get('location'),
+                properties=properties,
+                confidence=event_data.get('confidence', 0.0)
+            )
+            
+        except Exception as e:
+            logger.error(f"反序列化事件对象失败: {e}")
+            return None
+    
+    def _deserialize_json_field(self, field_value) -> Dict[str, Any]:
+        """
+        反序列化JSON字段的辅助方法
+        
+        Args:
+            field_value: 字段值（可能是字符串或字典）
+            
+        Returns:
+            Dict: 反序列化后的字典
+        """
+        if not field_value:
+            return {}
+        
+        try:
+            if isinstance(field_value, str):
+                return json.loads(field_value)
+            elif isinstance(field_value, dict):
+                return field_value
+            else:
+                return {}
+        except (json.JSONDecodeError, TypeError):
+            return {}
+    
+    def _deserialize_timestamp(self, timestamp_value):
+        """
+        反序列化时间戳的辅助方法
+        
+        Args:
+            timestamp_value: 时间戳值（可能是字符串或datetime对象）
+            
+        Returns:
+            datetime或None: 反序列化后的时间戳
+        """
+        if not timestamp_value:
+            return None
+        
+        if isinstance(timestamp_value, datetime):
+            return timestamp_value
+        
+        if isinstance(timestamp_value, str):
+            try:
+                return datetime.fromisoformat(timestamp_value.replace('Z', '+00:00'))
+            except ValueError:
+                try:
+                    return datetime.strptime(timestamp_value, '%Y-%m-%d %H:%M:%S')
+                except ValueError:
+                    logger.warning(f"无法解析时间戳格式: {timestamp_value}")
+                    return None
+        
+        return None
+
     def get_event(self, event_id: str) -> Optional[Event]:
         """根据ID获取事件"""
         with self.driver.session() as session:
@@ -444,50 +625,7 @@ class Neo4jEventStorage:
                 if not record:
                     return None
                 
-                # 构建Event对象
-                event_data = record['e']
-                from ..models.event_data_model import Event, Entity, EventType
-                
-                # 处理participants
-                participants = []
-                for p in record['participants']:
-                    if p:
-                        participants.append(Entity(
-                            id=p['id'],
-                            name=p['name'],
-                            entity_type=p['entity_type']
-                        ))
-                
-                # 处理subject和object
-                subject = None
-                if record['s']:
-                    subject = Entity(
-                        id=record['s']['id'],
-                        name=record['s']['name'],
-                        entity_type=record['s']['entity_type']
-                    )
-                
-                obj = None
-                if record['o']:
-                    obj = Entity(
-                        id=record['o']['id'],
-                        name=record['o']['name'],
-                        entity_type=record['o']['entity_type']
-                    )
-                
-                event = Event(
-                    id=event_data['id'],
-                    event_type=EventType(event_data['event_type']),
-                    text=event_data.get('text', ''),
-                    summary=event_data.get('summary', ''),
-                    participants=participants,
-                    subject=subject,
-                    object=obj,
-                    properties=json.loads(event_data.get('properties', '{}')),
-                    confidence=event_data.get('confidence', 1.0)
-                )
-                
-                return event
+                return self._deserialize_event_from_record(record)
                 
             except Exception as e:
                 logger.error(f"获取事件失败: {e}")
@@ -515,57 +653,6 @@ class Neo4jEventStorage:
             except Exception as e:
                 logger.error(f"获取数据库统计失败: {e}")
                 return {"total_events": 0, "total_entities": 0, "total_relations": 0}
-            
-            if conditions and not entity_name:
-                query += " WHERE " + " AND ".join([c for c in conditions if not c.startswith("(")])
-            elif conditions and entity_name:
-                non_entity_conditions = [c for c in conditions if not c.startswith("(")]
-                if non_entity_conditions:
-                    query += " WHERE " + " AND ".join(non_entity_conditions)
-            
-            query += " RETURN DISTINCT e ORDER BY e.timestamp DESC LIMIT $limit"
-            
-            result = session.run(query, **params)
-            events = []
-            for record in result:
-                event_data = dict(record["e"])
-                # 将dict转换为Event对象
-                try:
-                    from ..models.event_data_model import Event, EventType, Entity
-                    # 处理participants字段
-                    participants = []
-                    if 'participants' in event_data and event_data['participants']:
-                        for p in event_data['participants']:
-                            if isinstance(p, str):
-                                participants.append(Entity(name=p, entity_type="UNKNOWN"))
-                            else:
-                                participants.append(p)
-                    
-                    # 处理event_type字段
-                    event_type = event_data.get('event_type', 'UNKNOWN')
-                    if isinstance(event_type, str):
-                        try:
-                            event_type = EventType(event_type)
-                        except ValueError:
-                            event_type = EventType.UNKNOWN
-                    
-                    event = Event(
-                        id=event_data.get('id', event_data.get('event_id')),
-                        text=event_data.get('text', ''),
-                        summary=event_data.get('summary', ''),
-                        event_type=event_type,
-                        timestamp=event_data.get('timestamp'),
-                        participants=participants,
-                        location=event_data.get('location'),
-                        properties=event_data.get('properties', {}),
-                        confidence=event_data.get('confidence', 0.0)
-                    )
-                    events.append(event)
-                except Exception as e:
-                    logger.warning(f"转换事件对象失败: {e}, 返回原始dict")
-                    events.append(event_data)
-            
-            return events
     
     def query_event_patterns(self, conditions: Dict[str, Any] = None, limit: int = 10) -> List[Dict[str, Any]]:
         """
@@ -604,7 +691,7 @@ class Neo4jEventStorage:
             result = session.run(query, **params)
             return [dict(record["p"]) for record in result]
     
-    def query_events_by_type(self, event_type: EventType, limit: int = 10) -> List[Dict[str, Any]]:
+    def query_events_by_type(self, event_type: EventType, limit: int = 10) -> List[Event]:
         """
         按类型查询事件
         
@@ -613,20 +700,37 @@ class Neo4jEventStorage:
             limit: 返回数量限制
             
         Returns:
-            List[Dict]: 事件列表
+            List[Event]: 事件列表
         """
         with self.driver.session() as session:
-            query = """
-            MATCH (e:Event {event_type: $event_type})
-            RETURN e
-            ORDER BY e.timestamp DESC
-            LIMIT $limit
-            """
-            
-            result = session.run(query, event_type=event_type.value, limit=limit)
-            return [dict(record["e"]) for record in result]
+            try:
+                query = """
+                MATCH (e:Event {event_type: $event_type})
+                OPTIONAL MATCH (e)-[:HAS_PARTICIPANT]->(p:Entity)
+                OPTIONAL MATCH (e)-[:HAS_SUBJECT]->(s:Entity)
+                OPTIONAL MATCH (e)-[:HAS_OBJECT]->(o:Entity)
+                RETURN e, collect(DISTINCT p) as participants, s, o
+                ORDER BY e.timestamp DESC
+                LIMIT $limit
+                """
+                
+                result = session.run(query, event_type=event_type.value, limit=limit)
+                events = []
+                for record in result:
+                    try:
+                        event = self._deserialize_event_from_record(record)
+                        if event:
+                            events.append(event)
+                    except Exception as e:
+                        logger.warning(f"反序列化事件对象失败: {e}")
+                        continue
+                
+                return events
+            except Exception as e:
+                logger.error(f"按类型查询事件失败: {e}")
+                return []
     
-    def query_events_by_entity(self, entity_name: str, limit: int = 10) -> List[Dict[str, Any]]:
+    def query_events_by_entity(self, entity_name: str, limit: int = 10) -> List[Event]:
         """
         按实体查询相关事件
         
@@ -635,18 +739,35 @@ class Neo4jEventStorage:
             limit: 返回数量限制
             
         Returns:
-            List[Dict]: 事件列表
+            List[Event]: 事件列表
         """
         with self.driver.session() as session:
-            query = """
-            MATCH (ent:Entity {name: $entity_name})<-[:HAS_SUBJECT|HAS_OBJECT|HAS_PARTICIPANT]-(e:Event)
-            RETURN DISTINCT e
-            ORDER BY e.timestamp DESC
-            LIMIT $limit
-            """
-            
-            result = session.run(query, entity_name=entity_name, limit=limit)
-            return [dict(record["e"]) for record in result]
+            try:
+                query = """
+                MATCH (ent:Entity {name: $entity_name})<-[:HAS_SUBJECT|HAS_OBJECT|HAS_PARTICIPANT]-(e:Event)
+                OPTIONAL MATCH (e)-[:HAS_PARTICIPANT]->(p:Entity)
+                OPTIONAL MATCH (e)-[:HAS_SUBJECT]->(s:Entity)
+                OPTIONAL MATCH (e)-[:HAS_OBJECT]->(o:Entity)
+                RETURN DISTINCT e, collect(DISTINCT p) as participants, s, o
+                ORDER BY e.timestamp DESC
+                LIMIT $limit
+                """
+                
+                result = session.run(query, entity_name=entity_name, limit=limit)
+                events = []
+                for record in result:
+                    try:
+                        event = self._deserialize_event_from_record(record)
+                        if event:
+                            events.append(event)
+                    except Exception as e:
+                        logger.warning(f"反序列化事件对象失败: {e}")
+                        continue
+                
+                return events
+            except Exception as e:
+                logger.error(f"按实体查询事件失败: {e}")
+                return []
     
     def query_event_relations(self, event_id: str) -> List[Dict[str, Any]]:
         """
@@ -674,29 +795,49 @@ class Neo4jEventStorage:
                 })
             return relations
     
-    def query_temporal_sequence(self, start_time: datetime, end_time: datetime) -> List[Dict[str, Any]]:
+    def query_temporal_sequence(self, start_time: datetime, end_time: datetime, limit: int = 10) -> List[Event]:
         """
         查询时间序列事件
         
         Args:
             start_time: 开始时间
             end_time: 结束时间
+            limit: 返回数量限制
             
         Returns:
-            List[Dict]: 按时间排序的事件列表
+            List[Event]: 按时间排序的事件列表
         """
         with self.driver.session() as session:
-            query = """
-            MATCH (e:Event)
-            WHERE e.timestamp >= $start_time AND e.timestamp <= $end_time
-            RETURN e
-            ORDER BY e.timestamp ASC
-            """
-            
-            result = session.run(query, 
-                               start_time=start_time.isoformat(),
-                               end_time=end_time.isoformat())
-            return [dict(record["e"]) for record in result]
+            try:
+                query = """
+                MATCH (e:Event)
+                WHERE e.timestamp >= $start_time AND e.timestamp <= $end_time
+                OPTIONAL MATCH (e)-[:HAS_PARTICIPANT]->(p:Entity)
+                OPTIONAL MATCH (e)-[:HAS_SUBJECT]->(s:Entity)
+                OPTIONAL MATCH (e)-[:HAS_OBJECT]->(o:Entity)
+                RETURN e, collect(DISTINCT p) as participants, s, o
+                ORDER BY e.timestamp ASC
+                LIMIT $limit
+                """
+                
+                result = session.run(query, 
+                                   start_time=start_time.isoformat(),
+                                   end_time=end_time.isoformat(),
+                                   limit=limit)
+                events = []
+                for record in result:
+                    try:
+                        event = self._deserialize_event_from_record(record)
+                        if event:
+                            events.append(event)
+                    except Exception as e:
+                        logger.warning(f"反序列化事件对象失败: {e}")
+                        continue
+                
+                return events
+            except Exception as e:
+                logger.error(f"查询时间序列事件失败: {e}")
+                return []
     
     def store_event_pattern(self, pattern: EventPattern) -> bool:
         """

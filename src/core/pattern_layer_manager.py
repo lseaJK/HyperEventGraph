@@ -47,9 +47,9 @@ class PatternLayerManager:
             success = self.storage.store_event_pattern(pattern)
             if success:
                 # 更新缓存
-                self._pattern_cache[pattern.pattern_id] = pattern
+                self._pattern_cache[pattern.id] = pattern
                 self._update_pattern_index(pattern)
-                self.logger.info(f"模式已添加: {pattern.pattern_id}")
+                self.logger.info(f"模式已添加: {pattern.id}")
             return success
         except Exception as e:
             self.logger.error(f"添加模式失败: {str(e)}")
@@ -262,14 +262,16 @@ class PatternLayerManager:
             
             for sequence, support in sequences.items():
                 pattern = EventPattern(
-                    pattern_id=f"temporal_{hash(sequence)}_{support}",
+                    id=f"temporal_{hash(sequence)}_{support}",
+                    pattern_name=f"时序模式_{hash(sequence)}",
                     pattern_type="temporal_sequence",
-                    description=f"时序模式: {' -> '.join(sequence)}",
-                    event_sequence=list(sequence),
-                    conditions={"temporal_order": True},
-                    support=support,
+                    event_types=[EventType.OTHER],  # 简化处理
+                    relation_types=[RelationType.TEMPORAL_BEFORE],
+                    constraints={"temporal_order": True},
+                    frequency=support,
                     confidence=support / len(sorted_events),
-                    domain=self._infer_domain(sorted_events[:length])
+                    support=support / len(sorted_events),
+                    instances=[e.id for e in sorted_events[:length]]
                 )
                 patterns.append(pattern)
         
@@ -292,14 +294,16 @@ class PatternLayerManager:
         for (cause_type, effect_type), count in pattern_counts.items():
             if count >= min_support:
                 pattern = EventPattern(
-                    pattern_id=f"causal_{cause_type}_{effect_type}_{count}",
+                    id=f"causal_{cause_type}_{effect_type}_{count}",
+                    pattern_name=f"因果模式_{cause_type}_{effect_type}",
                     pattern_type="causal_relationship",
-                    description=f"因果模式: {cause_type} 导致 {effect_type}",
-                    event_sequence=[cause_type, effect_type],
-                    conditions={"causal_relationship": True},
-                    support=count,
+                    event_types=[EventType.OTHER],  # 简化处理
+                    relation_types=[RelationType.CAUSAL],
+                    constraints={"causal_relationship": True},
+                    frequency=count,
                     confidence=count / len(events),
-                    domain=self._infer_domain_from_types([cause_type, effect_type])
+                    support=count / len(events),
+                    instances=[]  # 简化处理
                 )
                 patterns.append(pattern)
         
@@ -316,14 +320,16 @@ class PatternLayerManager:
         for combination, count in type_combinations.items():
             if len(combination) >= 2:
                 pattern = EventPattern(
-                    pattern_id=f"cooccurrence_{hash(combination)}_{count}",
+                    id=f"cooccurrence_{hash(combination)}_{count}",
+                    pattern_name=f"共现模式_{hash(combination)}",
                     pattern_type="cooccurrence",
-                    description=f"共现模式: {', '.join(combination)}",
-                    event_sequence=list(combination),
-                    conditions={"cooccurrence": True},
-                    support=count,
+                    event_types=[EventType.OTHER],  # 简化处理
+                    relation_types=[RelationType.COOCCURRENCE],
+                    constraints={"cooccurrence": True},
+                    frequency=count,
                     confidence=count / len(events),
-                    domain=self._infer_domain_from_types(combination)
+                    support=count / len(events),
+                    instances=[]
                 )
                 patterns.append(pattern)
         

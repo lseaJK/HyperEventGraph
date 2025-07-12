@@ -138,7 +138,7 @@ class EventLayerManager:
             for event in candidate_events:
                 # 确保event是Event对象而不是dict
                 if isinstance(event, dict):
-                    logger.warning(f"候选事件是dict格式，跳过相似度计算: {event.get('id', 'unknown')}")
+                    self.logger.warning(f"候选事件是dict格式，跳过相似度计算: {event.get('id', 'unknown')}")
                     continue
                     
                 # 获取事件ID，兼容id和event_id字段
@@ -330,13 +330,35 @@ class EventLayerManager:
         total_score = sum(score * weight for score, weight in similarity_scores)
         return min(total_score, 1.0)
     
-    def _calculate_participant_similarity(self, participants1: List[str], participants2: List[str]) -> float:
+    def _calculate_participant_similarity(self, participants1: List, participants2: List) -> float:
         """计算参与者相似度"""
         if not participants1 or not participants2:
             return 0.0
         
-        set1 = set(participants1)
-        set2 = set(participants2)
+        # 提取参与者名称
+        names1 = []
+        for p in participants1:
+            if hasattr(p, 'name'):
+                names1.append(p.name)
+            elif isinstance(p, str):
+                names1.append(p)
+            elif isinstance(p, dict) and 'name' in p:
+                names1.append(p['name'])
+        
+        names2 = []
+        for p in participants2:
+            if hasattr(p, 'name'):
+                names2.append(p.name)
+            elif isinstance(p, str):
+                names2.append(p)
+            elif isinstance(p, dict) and 'name' in p:
+                names2.append(p['name'])
+        
+        if not names1 or not names2:
+            return 0.0
+        
+        set1 = set(names1)
+        set2 = set(names2)
         
         intersection = len(set1 & set2)
         union = len(set1 | set2)
@@ -362,11 +384,19 @@ class EventLayerManager:
         if not time1 or not time2:
             return 0.5  # 中性分数
         
-        # 时间差（天）
-        time_diff = abs((time1 - time2).days)
-        
-        # 使用指数衰减
-        return math.exp(-time_diff / 30)  # 30天半衰期
+        try:
+            # 确保时间戳是datetime对象
+            dt1 = time1 if isinstance(time1, datetime) else datetime.fromisoformat(str(time1).replace('Z', '+00:00'))
+            dt2 = time2 if isinstance(time2, datetime) else datetime.fromisoformat(str(time2).replace('Z', '+00:00'))
+            
+            # 时间差（天）
+            time_diff = abs((dt1 - dt2).days)
+            
+            # 使用指数衰减
+            return math.exp(-time_diff / 30)  # 30天半衰期
+        except Exception as e:
+            # 如果时间转换失败，返回中性分数
+            return 0.5
     
     def _calculate_location_similarity(self, loc1: Optional[str], loc2: Optional[str]) -> float:
         """计算地点相似度"""

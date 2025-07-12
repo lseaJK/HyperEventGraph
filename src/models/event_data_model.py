@@ -53,6 +53,9 @@ class RelationType(Enum):
     # 层次关系
     HIERARCHICAL_PART_OF = "hierarchical.part_of"  # 部分-整体
     HIERARCHICAL_INSTANCE_OF = "hierarchical.instance_of"  # 实例-类别
+    
+    # 共现关系
+    COOCCURRENCE = "cooccurrence"  # 共现关系
 
 
 @dataclass

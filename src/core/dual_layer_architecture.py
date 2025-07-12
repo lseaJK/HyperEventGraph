@@ -12,12 +12,29 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 
-from ..models.event_data_model import Event, EventPattern, Entity, EventRelation
-from ..storage.neo4j_event_storage import Neo4jEventStorage
-from .event_layer_manager import EventLayerManager
-from .pattern_layer_manager import PatternLayerManager
-from .layer_mapper import LayerMapper
-from .graph_processor import GraphProcessor
+# 尝试相对导入，失败时使用绝对导入
+try:
+    from ..models.event_data_model import Event, EventPattern, Entity, EventRelation
+    from ..storage.neo4j_event_storage import Neo4jEventStorage
+    from .event_layer_manager import EventLayerManager
+    from .pattern_layer_manager import PatternLayerManager
+    from .layer_mapper import LayerMapper
+    from .graph_processor import GraphProcessor
+except ImportError:
+    import sys
+    import os
+    # 添加项目根目录到路径
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(os.path.dirname(current_dir))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+    
+    from src.models.event_data_model import Event, EventPattern, Entity, EventRelation
+    from src.storage.neo4j_event_storage import Neo4jEventStorage
+    from src.core.event_layer_manager import EventLayerManager
+    from src.core.pattern_layer_manager import PatternLayerManager
+    from src.core.layer_mapper import LayerMapper
+    from src.core.graph_processor import GraphProcessor
 
 
 @dataclass

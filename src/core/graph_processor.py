@@ -881,3 +881,140 @@ class GraphProcessor:
             "autocorrelation": 0.7,
             "cross_correlation": 0.5
         }
+    
+    def analyze_event_chain(self, events: List[Event]) -> Dict[str, Any]:
+        """分析事件链
+        
+        Args:
+            events: 事件列表
+            
+        Returns:
+            Dict[str, Any]: 事件链分析结果
+        """
+        try:
+            if not events:
+                return {"error": "事件列表为空"}
+            
+            # 构建事件图
+            event_graph = self.build_event_graph(events)
+            
+            # 分析事件链特征
+            analysis_result = {
+                "chain_length": len(events),
+                "event_types": [str(event.event_type) for event in events],
+                "temporal_span": self._calculate_temporal_span(events),
+                "causal_relationships": self._analyze_causal_relationships(events),
+                "frequent_patterns": self._find_frequent_patterns_in_chain(events),
+                "anomalies": self._detect_chain_anomalies(events),
+                "graph_metrics": {
+                    "nodes": event_graph.number_of_nodes(),
+                    "edges": event_graph.number_of_edges(),
+                    "density": nx.density(event_graph) if event_graph.number_of_nodes() > 1 else 0
+                }
+            }
+            
+            return analysis_result
+            
+        except Exception as e:
+            self.logger.error(f"事件链分析失败: {str(e)}")
+            return {"error": f"分析失败: {str(e)}"}
+    
+    def _calculate_temporal_span(self, events: List[Event]) -> Dict[str, Any]:
+        """计算时间跨度"""
+        timestamps = []
+        for event in events:
+            if event.timestamp:
+                try:
+                    if isinstance(event.timestamp, str):
+                        dt = datetime.fromisoformat(event.timestamp.replace('Z', '+00:00'))
+                    else:
+                        dt = event.timestamp
+                    timestamps.append(dt)
+                except:
+                    continue
+        
+        if len(timestamps) < 2:
+            return {"span_days": 0, "start_time": None, "end_time": None}
+        
+        timestamps.sort()
+        span = timestamps[-1] - timestamps[0]
+        
+        return {
+            "span_days": span.days,
+            "start_time": timestamps[0].isoformat(),
+            "end_time": timestamps[-1].isoformat()
+        }
+    
+    def _analyze_causal_relationships(self, events: List[Event]) -> List[Dict[str, Any]]:
+        """分析因果关系"""
+        relationships = []
+        
+        for i in range(len(events) - 1):
+            current_event = events[i]
+            next_event = events[i + 1]
+            
+            # 简化的因果关系检测
+            relationship = {
+                "source": current_event.id,
+                "target": next_event.id,
+                "source_type": str(current_event.event_type),
+                "target_type": str(next_event.event_type),
+                "confidence": 0.7  # 简化的置信度
+            }
+            relationships.append(relationship)
+        
+        return relationships
+    
+    def _find_frequent_patterns_in_chain(self, events: List[Event]) -> List[Dict[str, Any]]:
+        """在事件链中查找频繁模式"""
+        event_types = [str(event.event_type) for event in events]
+        patterns = []
+        
+        # 查找长度为2的模式
+        for i in range(len(event_types) - 1):
+            pattern = {
+                "pattern": [event_types[i], event_types[i + 1]],
+                "frequency": 1,
+                "positions": [i]
+            }
+            patterns.append(pattern)
+        
+        return patterns[:5]  # 返回前5个模式
+    
+    def _detect_chain_anomalies(self, events: List[Event]) -> List[Dict[str, Any]]:
+        """检测事件链中的异常"""
+        anomalies = []
+        
+        # 简化的异常检测：检查时间间隔异常
+        timestamps = []
+        for event in events:
+            if event.timestamp:
+                try:
+                    if isinstance(event.timestamp, str):
+                        dt = datetime.fromisoformat(event.timestamp.replace('Z', '+00:00'))
+                    else:
+                        dt = event.timestamp
+                    timestamps.append((event.id, dt))
+                except:
+                    continue
+        
+        if len(timestamps) > 2:
+            intervals = []
+            for i in range(len(timestamps) - 1):
+                interval = (timestamps[i + 1][1] - timestamps[i][1]).total_seconds()
+                intervals.append(interval)
+            
+            # 检测异常间隔（简化：超过平均值2倍的间隔）
+            if intervals:
+                avg_interval = sum(intervals) / len(intervals)
+                for i, interval in enumerate(intervals):
+                    if interval > avg_interval * 2:
+                        anomaly = {
+                            "type": "time_gap_anomaly",
+                            "position": i,
+                            "interval_seconds": interval,
+                            "expected_seconds": avg_interval
+                        }
+                        anomalies.append(anomaly)
+        
+        return anomalies
