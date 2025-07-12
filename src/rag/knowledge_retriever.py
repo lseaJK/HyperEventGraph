@@ -446,36 +446,54 @@ class KnowledgeRetriever:
                 unique_events.append(event)
         
         return unique_events
-    
+
+
     def _calculate_relevance_scores(self, events: List[Event], query_intent: QueryIntent) -> Dict[str, float]:
         """计算事件相关性得分"""
         scores = {}
-        
+
         for event in events:
             score = 0.0
+
+            # 安全获取属性
+            event_text = str(getattr(event, 'text', ''))
+            # 安全获取participants
+            participants = getattr(event, 'participants', [])
+            if not hasattr(participants, '__iter__'):
+                participants = []
             
+            # 安全获取entities
+            entities = getattr(event, 'entities', [])
+            if not hasattr(entities, '__iter__'):
+                entities = []
+
             # 关键词匹配得分
             for keyword in query_intent.keywords:
-                if keyword in event.text:
+                if keyword in event_text:
                     score += 0.3
-            
+
             # 实体匹配得分
             for entity in query_intent.entities:
-                # 检查实体是否在参与者列表中
-                participant_names = [p.name if hasattr(p, 'name') else str(p) for p in event.participants]
+                # 处理 participants 可能是对象或字符串的情况
+                participant_names = [
+                    str(getattr(p, 'name', p)) 
+                    for p in participants
+                ]
                 if entity in participant_names:
                     score += 0.4
-            
+
             # 时间匹配得分
             if query_intent.time_range:
-                start_time, end_time = query_intent.time_range
-                if start_time <= event.timestamp <= end_time:
-                    score += 0.3
-            
+                event_time = getattr(event, 'timestamp', None)
+                if event_time:
+                    start_time, end_time = query_intent.time_range
+                    if start_time <= event_time <= end_time:
+                        score += 0.3
+
             scores[event.id] = min(score, 1.0)
-        
+
         return scores
-    
+
     def _generate_subgraph_summary(self, events: List[Event], relations: List[EventRelation]) -> str:
         """生成子图摘要"""
         if not events:
