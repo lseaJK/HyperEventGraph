@@ -1,0 +1,351 @@
+"""事理关系分析器
+
+实现基于LLM的事件间事理关系识别和分析功能。
+"""
+
+import json
+import time
+from typing import List, Dict, Any, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import logging
+
+from ..models.event_data_model import Event
+from .data_models import (
+    EventRelation, RelationType, RelationAnalysisRequest, 
+    RelationAnalysisResult, ValidationResult
+)
+
+# 配置日志
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+class EventLogicAnalyzer:
+    """事理关系分析器
+    
+    基于LLM识别事件间的因果、时序、条件、对比等事理关系。
+    """
+    
+    def __init__(self, llm_client=None, max_workers: int = 3):
+        """初始化分析器
+        
+        Args:
+            llm_client: LLM客户端实例
+            max_workers: 并发处理的最大工作线程数
+        """
+        self.llm_client = llm_client
+        self.max_workers = max_workers
+        
+        # 关系类型映射
+        self.relation_type_mapping = {
+            "因果": RelationType.CAUSAL,
+            "直接因果": RelationType.CAUSAL_DIRECT,
+            "间接因果": RelationType.CAUSAL_INDIRECT,
+            "时间先后": RelationType.TEMPORAL_BEFORE,
+            "时间后续": RelationType.TEMPORAL_AFTER,
+            "同时发生": RelationType.TEMPORAL_SIMULTANEOUS,
+            "条件": RelationType.CONDITIONAL,
+            "必要条件": RelationType.CONDITIONAL_NECESSARY,
+            "充分条件": RelationType.CONDITIONAL_SUFFICIENT,
+            "对比": RelationType.CONTRAST,
+            "相反": RelationType.CONTRAST_OPPOSITE,
+            "相似": RelationType.CONTRAST_SIMILAR,
+            "相关": RelationType.CORRELATION,
+            "未知": RelationType.UNKNOWN
+        }
+    
+    def analyze_event_relations(self, events: List[Event]) -> List[EventRelation]:
+        """分析事件间的事理关系
+        
+        Args:
+            events: 事件列表
+            
+        Returns:
+            事件关系列表
+        """
+        if len(events) < 2:
+            logger.warning("事件数量少于2个，无法分析关系")
+            return []
+        
+        relations = []
+        
+        # 两两分析事件关系
+        for i in range(len(events)):
+            for j in range(i + 1, len(events)):
+                event1, event2 = events[i], events[j]
+                
+                # 分析双向关系
+                relation_1_to_2 = self._analyze_single_relation(event1, event2)
+                if relation_1_to_2:
+                    relations.append(relation_1_to_2)
+                
+                relation_2_to_1 = self._analyze_single_relation(event2, event1)
+                if relation_2_to_1:
+                    relations.append(relation_2_to_1)
+        
+        # 过滤低置信度关系
+        filtered_relations = [r for r in relations if r.confidence >= 0.3]
+        
+        logger.info(f"分析了{len(events)}个事件，发现{len(filtered_relations)}个有效关系")
+        return filtered_relations
+    
+    def batch_analyze_relations(self, event_batches: List[List[Event]]) -> Dict[str, List[EventRelation]]:
+        """批量分析事件关系
+        
+        Args:
+            event_batches: 事件批次列表
+            
+        Returns:
+            批次ID到关系列表的映射
+        """
+        results = {}
+        
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            # 提交所有批次任务
+            future_to_batch = {
+                executor.submit(self.analyze_event_relations, batch): f"batch_{i}"
+                for i, batch in enumerate(event_batches)
+            }
+            
+            # 收集结果
+            for future in as_completed(future_to_batch):
+                batch_id = future_to_batch[future]
+                try:
+                    relations = future.result()
+                    results[batch_id] = relations
+                    logger.info(f"批次 {batch_id} 完成，发现 {len(relations)} 个关系")
+                except Exception as e:
+                    logger.error(f"批次 {batch_id} 处理失败: {e}")
+                    results[batch_id] = []
+        
+        return results
+    
+    def _analyze_single_relation(self, source_event: Event, target_event: Event) -> Optional[EventRelation]:
+        """分析单个事件对的关系
+        
+        Args:
+            source_event: 源事件
+            target_event: 目标事件
+            
+        Returns:
+            事件关系或None
+        """
+        try:
+            # 构建分析提示
+            prompt = self._build_relation_analysis_prompt(source_event, target_event)
+            
+            # 调用LLM分析（如果没有LLM客户端，使用规则方法）
+            if self.llm_client:
+                response = self._call_llm_for_relation_analysis(prompt)
+                return self._parse_llm_response(response, source_event.id, target_event.id)
+            else:
+                # 使用简单规则方法作为fallback
+                return self._rule_based_relation_analysis(source_event, target_event)
+                
+        except Exception as e:
+            logger.error(f"分析关系失败: {e}")
+            return None
+    
+    def _build_relation_analysis_prompt(self, event1: Event, event2: Event) -> str:
+        """构建关系分析提示词
+        
+        Args:
+            event1: 第一个事件
+            event2: 第二个事件
+            
+        Returns:
+            分析提示词
+        """
+        prompt = f"""请分析以下两个事件之间的事理关系：
+
+事件1：
+- ID: {event1.id}
+- 类型: {event1.event_type.value if hasattr(event1.event_type, 'value') else event1.event_type}
+- 描述: {event1.text or event1.summary}
+- 时间: {event1.timestamp or '未知'}
+- 参与者: {[p.name for p in event1.participants] if event1.participants else '未知'}
+
+事件2：
+- ID: {event2.id}
+- 类型: {event2.event_type.value if hasattr(event2.event_type, 'value') else event2.event_type}
+- 描述: {event2.text or event2.summary}
+- 时间: {event2.timestamp or '未知'}
+- 参与者: {[p.name for p in event2.participants] if event2.participants else '未知'}
+
+请分析事件1对事件2的影响关系，从以下类型中选择最合适的：
+1. 因果关系（直接因果、间接因果）
+2. 时序关系（时间先后、时间后续、同时发生）
+3. 条件关系（必要条件、充分条件）
+4. 对比关系（相反、相似）
+5. 相关关系
+6. 无明显关系
+
+请以JSON格式返回分析结果：
+{{
+    "relation_type": "关系类型",
+    "confidence": 0.8,
+    "strength": 0.7,
+    "description": "关系描述",
+    "evidence": "支持证据"
+}}
+"""
+        return prompt
+    
+    def _call_llm_for_relation_analysis(self, prompt: str) -> str:
+        """调用LLM进行关系分析
+        
+        Args:
+            prompt: 分析提示词
+            
+        Returns:
+            LLM响应
+        """
+        # 这里应该调用实际的LLM客户端
+        # 暂时返回模拟响应
+        return '''{
+    "relation_type": "时间先后",
+    "confidence": 0.7,
+    "strength": 0.6,
+    "description": "事件1在时间上先于事件2发生",
+    "evidence": "基于时间戳分析"
+}'''
+    
+    def _parse_llm_response(self, response: str, source_id: str, target_id: str) -> Optional[EventRelation]:
+        """解析LLM响应
+        
+        Args:
+            response: LLM响应
+            source_id: 源事件ID
+            target_id: 目标事件ID
+            
+        Returns:
+            事件关系或None
+        """
+        try:
+            data = json.loads(response)
+            
+            # 映射关系类型
+            relation_type_str = data.get('relation_type', '未知')
+            relation_type = self.relation_type_mapping.get(relation_type_str, RelationType.UNKNOWN)
+            
+            # 如果是无关系，返回None
+            if relation_type == RelationType.UNKNOWN and data.get('confidence', 0) < 0.3:
+                return None
+            
+            return EventRelation(
+                relation_type=relation_type,
+                source_event_id=source_id,
+                target_event_id=target_id,
+                confidence=data.get('confidence', 0.0),
+                strength=data.get('strength', 0.0),
+                description=data.get('description', ''),
+                evidence=data.get('evidence', ''),
+                source='llm_analysis'
+            )
+            
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.error(f"解析LLM响应失败: {e}")
+            return None
+    
+    def _rule_based_relation_analysis(self, event1: Event, event2: Event) -> Optional[EventRelation]:
+        """基于规则的关系分析（fallback方法）
+        
+        Args:
+            event1: 第一个事件
+            event2: 第二个事件
+            
+        Returns:
+            事件关系或None
+        """
+        # 简单的时序关系判断
+        if event1.timestamp and event2.timestamp:
+            if event1.timestamp < event2.timestamp:
+                return EventRelation(
+                    relation_type=RelationType.TEMPORAL_BEFORE,
+                    source_event_id=event1.id,
+                    target_event_id=event2.id,
+                    confidence=0.8,
+                    strength=0.6,
+                    description="基于时间戳的时序关系",
+                    evidence=f"事件1时间: {event1.timestamp}, 事件2时间: {event2.timestamp}",
+                    source='rule_based'
+                )
+        
+        # 基于事件类型的关系推断
+        if hasattr(event1, 'event_type') and hasattr(event2, 'event_type'):
+            type1 = event1.event_type.value if hasattr(event1.event_type, 'value') else str(event1.event_type)
+            type2 = event2.event_type.value if hasattr(event2.event_type, 'value') else str(event2.event_type)
+            
+            # 简单的因果关系规则
+            causal_patterns = {
+                ('investment', 'business_cooperation'): 0.7,
+                ('personnel_change', 'organizational_change'): 0.6,
+                ('product_launch', 'market_expansion'): 0.8
+            }
+            
+            if (type1, type2) in causal_patterns:
+                confidence = causal_patterns[(type1, type2)]
+                return EventRelation(
+                    relation_type=RelationType.CAUSAL,
+                    source_event_id=event1.id,
+                    target_event_id=event2.id,
+                    confidence=confidence,
+                    strength=confidence * 0.8,
+                    description=f"基于事件类型的因果关系: {type1} -> {type2}",
+                    evidence="事件类型模式匹配",
+                    source='rule_based'
+                )
+        
+        return None
+    
+    def get_supported_relation_types(self) -> List[RelationType]:
+        """获取支持的关系类型列表
+        
+        Returns:
+            关系类型列表
+        """
+        return list(RelationType)
+    
+    def analyze_with_request(self, request: RelationAnalysisRequest) -> RelationAnalysisResult:
+        """根据请求分析事件关系
+        
+        Args:
+            request: 分析请求
+            
+        Returns:
+            分析结果
+        """
+        start_time = time.time()
+        
+        try:
+            relations = self.analyze_event_relations(request.events)
+            
+            # 过滤关系类型
+            if request.analysis_types:
+                relations = [r for r in relations if r.relation_type in request.analysis_types]
+            
+            # 过滤置信度
+            relations = [r for r in relations if r.confidence >= request.min_confidence]
+            
+            # 限制数量
+            relations = relations[:request.max_relations]
+            
+            processing_time = time.time() - start_time
+            
+            return RelationAnalysisResult(
+                relations=relations,
+                total_analyzed=len(request.events),
+                processing_time=processing_time,
+                errors=[]
+            )
+            
+        except Exception as e:
+            processing_time = time.time() - start_time
+            logger.error(f"关系分析失败: {e}")
+            
+            return RelationAnalysisResult(
+                relations=[],
+                total_analyzed=len(request.events),
+                processing_time=processing_time,
+                errors=[str(e)]
+            )
