@@ -141,6 +141,26 @@ class RelationAnalysisRequest:
     
 
 @dataclass
+class EventAnalysisResult:
+    """事件分析结果"""
+    importance_score: float = 0.0  # 重要性评分 [0, 1]
+    sentiment: str = "neutral"  # 情感倾向: positive, negative, neutral
+    key_entities: List[str] = field(default_factory=list)  # 关键实体
+    event_type: str = "unknown"  # 事件类型
+    confidence: float = 0.0  # 置信度 [0, 1]
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典格式"""
+        return {
+            'importance_score': self.importance_score,
+            'sentiment': self.sentiment,
+            'key_entities': self.key_entities,
+            'event_type': self.event_type,
+            'confidence': self.confidence
+        }
+
+
+@dataclass
 class RelationAnalysisResult:
     """关系分析结果"""
     relations: List[EventRelation] = field(default_factory=list)

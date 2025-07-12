@@ -53,8 +53,41 @@ def test_real_news_analysis():
         print(f"  目标事件: {target_event['title']}")
         print(f"  关系类型: {relation['relation_type']}")
         
+        # 创建EventRelation对象
+        from data_models import EventRelation, RelationType
+        from local_models import Event
+        
+        # 将字典转换为Event对象
+        from datetime import datetime
+        
+        source_event_obj = Event(
+            id=source_event['id'],
+            text=source_event['content'],
+            summary=source_event['title'],
+            timestamp=datetime.fromisoformat(source_event['timestamp'].replace('Z', '+00:00')),
+            source=source_event['source']
+        )
+        
+        target_event_obj = Event(
+            id=target_event['id'],
+            text=target_event['content'],
+            summary=target_event['title'],
+            timestamp=datetime.fromisoformat(target_event['timestamp'].replace('Z', '+00:00')),
+            source=target_event['source']
+        )
+        
+        # 创建EventRelation对象
+        event_relation = EventRelation(
+            id=f"rel_{i+1}",
+            source_event_id=relation['source_event'],
+            target_event_id=relation['target_event'],
+            relation_type=RelationType(relation['relation_type']),
+            confidence=relation.get('confidence', 0.8),
+            strength=relation.get('strength', 0.7)
+        )
+        
         validation_result = validator.validate_single_relation(
-            source_event, target_event, relation['relation_type']
+            event_relation, source_event_obj, target_event_obj
         )
         
         print(f"  验证结果: {'有效' if validation_result.is_valid else '无效'}")
@@ -65,24 +98,68 @@ def test_real_news_analysis():
     # 测试3: 批量关系验证
     print("\n=== 测试3: 批量关系验证 ===")
     all_relations = relations + complex_relations
-    batch_result = validator.validate_relations(events, all_relations)
+    
+    # 创建事件字典
+    from datetime import datetime
+    
+    events_dict = {event['id']: Event(
+        id=event['id'],
+        text=event['content'],
+        summary=event['title'],
+        timestamp=datetime.fromisoformat(event['timestamp'].replace('Z', '+00:00')),
+        source=event['source']
+    ) for event in events}
+    
+    # 创建EventRelation对象列表
+    event_relations = []
+    for i, relation in enumerate(all_relations):
+        event_relation = EventRelation(
+            id=f"rel_{i+1}",
+            source_event_id=relation['source_event'],
+            target_event_id=relation['target_event'],
+            relation_type=RelationType(relation['relation_type']),
+            confidence=relation.get('confidence', 0.8),
+            strength=relation.get('strength', 0.7)
+        )
+        event_relations.append(event_relation)
+    
+    # 使用validate_relation_set方法
+    validated_relations = validator.validate_relation_set(event_relations, events_dict)
+    
+    valid_count = sum(1 for vr in validated_relations if vr.validation_result.is_valid)
+    invalid_count = len(validated_relations) - valid_count
+    avg_confidence = sum(vr.validation_result.confidence_score for vr in validated_relations) / len(validated_relations) if validated_relations else 0
     
     print(f"总关系数: {len(all_relations)}")
-    print(f"有效关系数: {batch_result.valid_relations}")
-    print(f"无效关系数: {batch_result.invalid_relations}")
-    print(f"总体置信度: {batch_result.overall_confidence:.2f}")
+    print(f"有效关系数: {valid_count}")
+    print(f"无效关系数: {invalid_count}")
+    print(f"平均置信度: {avg_confidence:.2f}")
     
-    if batch_result.validation_warnings:
+    # 收集所有警告
+    all_warnings = []
+    for vr in validated_relations:
+        all_warnings.extend(vr.validation_result.validation_warnings)
+    
+    if all_warnings:
         print(f"\n批量验证警告:")
-        for warning in batch_result.validation_warnings[:5]:  # 只显示前5个警告
+        for warning in all_warnings[:5]:  # 只显示前5个警告
             print(f"  - {warning}")
     
     # 测试4: 循环检测
     print("\n=== 测试4: 循环检测 ===")
-    cycle_result = validator._validate_cycles(all_relations)
-    if cycle_result.validation_warnings:
+    # _validate_cycles方法会直接修改validated_relations中的警告
+    validator._validate_cycles(validated_relations)
+    
+    # 检查是否有循环相关的警告
+    cycle_warnings = []
+    for vr in validated_relations:
+        for warning in vr.validation_result.validation_warnings:
+            if "循环" in warning:
+                cycle_warnings.append(warning)
+    
+    if cycle_warnings:
         print("检测到循环关系:")
-        for warning in cycle_result.validation_warnings:
+        for warning in cycle_warnings:
             print(f"  - {warning}")
     else:
         print("未检测到循环关系")

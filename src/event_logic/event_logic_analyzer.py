@@ -12,7 +12,7 @@ import logging
 from local_models import Event
 from data_models import (
     EventRelation, RelationType, RelationAnalysisRequest, 
-    RelationAnalysisResult, ValidationResult
+    RelationAnalysisResult, ValidationResult, EventAnalysisResult
 )
 
 # 配置日志
@@ -305,6 +305,146 @@ class EventLogicAnalyzer:
             关系类型列表
         """
         return list(RelationType)
+    
+    def analyze_event(self, event_data: Dict[str, Any]) -> EventAnalysisResult:
+        """分析单个事件
+        
+        Args:
+            event_data: 事件数据字典
+            
+        Returns:
+            事件分析结果
+        """
+        try:
+            # 计算重要性评分
+            importance_score = self._calculate_importance_score(event_data)
+            
+            # 分析情感倾向
+            sentiment = self._analyze_sentiment(event_data)
+            
+            # 提取关键实体
+            key_entities = self._extract_key_entities(event_data)
+            
+            # 确定事件类型
+            event_type = self._determine_event_type(event_data)
+            
+            return EventAnalysisResult(
+                importance_score=importance_score,
+                sentiment=sentiment,
+                key_entities=key_entities,
+                event_type=event_type,
+                confidence=0.8  # 默认置信度
+            )
+            
+        except Exception as e:
+            logger.error(f"事件分析失败: {e}")
+            return EventAnalysisResult(
+                importance_score=0.5,
+                sentiment="neutral",
+                key_entities=[],
+                event_type="unknown",
+                confidence=0.1
+            )
+    
+    def _calculate_importance_score(self, event_data: Dict[str, Any]) -> float:
+        """计算事件重要性评分"""
+        score = 0.5  # 基础分数
+        
+        # 基于类别调整
+        category = event_data.get('category', '').lower()
+        category_weights = {
+            '政治': 0.9,
+            '经济': 0.8,
+            '军事': 0.9,
+            '国际': 0.8,
+            '科技': 0.7,
+            '社会': 0.6,
+            '环境': 0.7,
+            '金融': 0.8
+        }
+        score = category_weights.get(category, 0.5)
+        
+        # 基于实体数量调整
+        entities = event_data.get('entities', [])
+        if len(entities) > 5:
+            score += 0.1
+        elif len(entities) > 3:
+            score += 0.05
+        
+        # 基于内容长度调整
+        content = event_data.get('content', '')
+        if len(content) > 200:
+            score += 0.1
+        
+        return min(1.0, score)
+    
+    def _analyze_sentiment(self, event_data: Dict[str, Any]) -> str:
+        """分析情感倾向"""
+        content = event_data.get('content', '').lower()
+        title = event_data.get('title', '').lower()
+        text = content + ' ' + title
+        
+        # 简单的关键词匹配
+        positive_keywords = ['增长', '发展', '成功', '突破', '创新', '合作', '提升', '改善']
+        negative_keywords = ['下降', '危机', '冲突', '失败', '问题', '困难', '风险', '衰退']
+        
+        positive_count = sum(1 for word in positive_keywords if word in text)
+        negative_count = sum(1 for word in negative_keywords if word in text)
+        
+        if positive_count > negative_count:
+            return 'positive'
+        elif negative_count > positive_count:
+            return 'negative'
+        else:
+            return 'neutral'
+    
+    def _extract_key_entities(self, event_data: Dict[str, Any]) -> List[str]:
+        """提取关键实体"""
+        entities = event_data.get('entities', [])
+        if entities:
+            return entities[:5]  # 返回前5个实体
+        
+        # 如果没有预定义实体，从内容中提取
+        content = event_data.get('content', '')
+        title = event_data.get('title', '')
+        
+        # 简单的实体提取（基于常见模式）
+        import re
+        text = content + ' ' + title
+        
+        # 提取可能的实体（大写开头的词组）
+        entities = re.findall(r'[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*', text)
+        
+        # 提取中文实体（简单模式）
+        chinese_entities = re.findall(r'[\u4e00-\u9fff]{2,}', text)
+        
+        all_entities = list(set(entities + chinese_entities))
+        return all_entities[:5]
+    
+    def _determine_event_type(self, event_data: Dict[str, Any]) -> str:
+        """确定事件类型"""
+        category = event_data.get('category', '')
+        if category:
+            return category
+        
+        # 基于内容推断类型
+        content = event_data.get('content', '').lower()
+        title = event_data.get('title', '').lower()
+        text = content + ' ' + title
+        
+        type_keywords = {
+            '政治': ['政府', '选举', '政策', '总统', '议会'],
+            '经济': ['经济', '市场', '投资', '贸易', '金融'],
+            '科技': ['技术', '创新', '研发', '人工智能', '芯片'],
+            '军事': ['军事', '战争', '冲突', '军队', '武器'],
+            '社会': ['社会', '民众', '公众', '社区', '文化']
+        }
+        
+        for event_type, keywords in type_keywords.items():
+            if any(keyword in text for keyword in keywords):
+                return event_type
+        
+        return 'unknown'
     
     def analyze_with_request(self, request: RelationAnalysisRequest) -> RelationAnalysisResult:
         """根据请求分析事件关系
