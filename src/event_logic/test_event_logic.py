@@ -8,13 +8,11 @@ import os
 from datetime import datetime, timedelta
 from typing import List
 
-# 添加项目根目录到路径
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from models.event_data_model import Event, EventType, Participant
-from event_logic.event_logic_analyzer import EventLogicAnalyzer
-from event_logic.relationship_validator import RelationshipValidator
-from event_logic.data_models import RelationType, RelationAnalysisRequest
+# 使用本地数据模型
+from local_models import Event, EventType, Participant
+from event_logic_analyzer import EventLogicAnalyzer
+from relationship_validator import RelationshipValidator
+from data_models import RelationType, RelationAnalysisRequest
 
 
 def create_test_events() -> List[Event]:
