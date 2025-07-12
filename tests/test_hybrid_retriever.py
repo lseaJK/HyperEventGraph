@@ -33,7 +33,7 @@ class TestBGEEmbedder(unittest.TestCase):
         event = Event(
             id="test_event_1",
             event_type=EventType.ACTION,
-            raw_text="测试事件描述",
+            text="测试事件描述",
             summary="测试摘要",
             timestamp="2024-01-01T00:00:00Z"
         )
@@ -50,7 +50,7 @@ class TestBGEEmbedder(unittest.TestCase):
             Event(
                 id=f"test_event_{i}",
                 event_type=EventType.ACTION,
-                raw_text=f"测试事件{i}",
+                text=f"测试事件{i}",
                 summary=f"摘要{i}",
                 timestamp="2024-01-01T00:00:00Z"
             ) for i in range(3)
@@ -76,7 +76,7 @@ class TestChromaDBRetriever(unittest.TestCase):
             Event(
                 id="test_event_1",
                 event_type=EventType.ACTION,
-                raw_text="测试事件1",
+                text="测试事件1",
                 summary="摘要1",
                 timestamp="2024-01-01T00:00:00Z"
             )
@@ -94,7 +94,7 @@ class TestChromaDBRetriever(unittest.TestCase):
         query_event = Event(
             id="query_event",
             event_type=EventType.ACTION,
-            raw_text="查询事件",
+            text="查询事件",
             summary="查询摘要",
             timestamp="2024-01-01T00:00:00Z"
         )
@@ -104,8 +104,8 @@ class TestChromaDBRetriever(unittest.TestCase):
             'ids': [['event_1', 'event_2']],
             'distances': [[0.1, 0.3]],
             'metadatas': [[
-                {'event_type': 'ACTION', 'raw_text': '事件1', 'summary': '摘要1', 'timestamp': '2024-01-01T00:00:00Z'},
-                {'event_type': 'ACTION', 'raw_text': '事件2', 'summary': '摘要2', 'timestamp': '2024-01-01T00:00:00Z'}
+                {'event_type': 'ACTION', 'text': '事件1', 'summary': '摘要1', 'timestamp': '2024-01-01T00:00:00Z'},
+                {'event_type': 'ACTION', 'text': '事件2', 'summary': '摘要2', 'timestamp': '2024-01-01T00:00:00Z'}
             ]]
         }
         
@@ -177,7 +177,7 @@ class TestHybridRetriever(unittest.TestCase):
         query_event = Event(
             id="query_event",
             event_type=EventType.ACTION,
-            raw_text="查询事件",
+            text="查询事件",
             summary="查询摘要",
             timestamp="2024-01-01T00:00:00Z"
         )
@@ -185,16 +185,17 @@ class TestHybridRetriever(unittest.TestCase):
         # Mock向量检索结果
         vector_results = [
             VectorSearchResult(
-                event=Event(id="vec_event_1", event_type=EventType.ACTION, raw_text="向量事件1", summary="摘要1", timestamp="2024-01-01T00:00:00Z"),
+                event_id="vec_event_1",
+                event=Event(id="vec_event_1", event_type=EventType.ACTION, text="向量事件1", summary="摘要1", timestamp="2024-01-01T00:00:00Z"),
                 similarity_score=0.9,
-                distance=0.1
+                embedding=BGEEmbedding(vector=[0.1, 0.2, 0.3], dimension=3)
             )
         ]
         
         # Mock图检索结果
         graph_results = [
             GraphSearchResult(
-                event=Event(id="graph_event_1", event_type=EventType.ACTION, raw_text="图事件1", summary="摘要1", timestamp="2024-01-01T00:00:00Z"),
+                event=Event(id="graph_event_1", event_type=EventType.ACTION, text="图事件1", summary="摘要1", timestamp="2024-01-01T00:00:00Z"),
                 structural_score=0.8,
                 relation_count=3,
                 related_events=[],
@@ -215,7 +216,7 @@ class TestHybridRetriever(unittest.TestCase):
         """测试结果融合"""
         vector_results = [
             VectorSearchResult(
-                event=Event(id="event_1", event_type=EventType.ACTION, raw_text="事件1", summary="摘要1", timestamp="2024-01-01T00:00:00Z"),
+                event=Event(id="event_1", event_type=EventType.ACTION, text="事件1", summary="摘要1", timestamp="2024-01-01T00:00:00Z"),
                 similarity_score=0.9,
                 distance=0.1
             )
@@ -223,7 +224,7 @@ class TestHybridRetriever(unittest.TestCase):
         
         graph_results = [
             GraphSearchResult(
-                event=Event(id="event_1", event_type=EventType.ACTION, raw_text="事件1", summary="摘要1", timestamp="2024-01-01T00:00:00Z"),
+                event=Event(id="event_1", event_type=EventType.ACTION, text="事件1", summary="摘要1", timestamp="2024-01-01T00:00:00Z"),
                 structural_score=0.8,
                 relation_count=3,
                 related_events=[],

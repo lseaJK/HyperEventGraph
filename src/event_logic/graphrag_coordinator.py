@@ -67,7 +67,7 @@ class GraphRAGCoordinator:
     async def process_query(self, query: GraphRAGQuery) -> GraphRAGResponse:
         """处理GraphRAG查询"""
         start_time = datetime.now()
-        response = GraphRAGResponse(query_id=query.query_id)
+        response = GraphRAGResponse(query_id=query.query_id, status="pending")
         
         try:
             self.logger.info(f"Processing query {query.query_id} of type {query.query_type}")
@@ -272,9 +272,13 @@ class GraphRAGCoordinator:
         total_queries = self.query_stats["total_queries"]
         current_avg = self.query_stats["average_response_time"]
         
-        # 计算新的平均响应时间
-        new_avg = ((current_avg * (total_queries - 1)) + execution_time) / total_queries
-        self.query_stats["average_response_time"] = new_avg
+        # 避免除零错误
+        if total_queries > 0:
+            # 计算新的平均响应时间
+            new_avg = ((current_avg * (total_queries - 1)) + execution_time) / total_queries
+            self.query_stats["average_response_time"] = new_avg
+        else:
+            self.query_stats["average_response_time"] = execution_time
     
     def get_performance_stats(self) -> Dict[str, Any]:
         """获取性能统计信息"""

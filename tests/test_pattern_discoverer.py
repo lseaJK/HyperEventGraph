@@ -23,7 +23,7 @@ class TestEventCluster(unittest.TestCase):
             Event(
                 id="event_1",
                 event_type=EventType.ACTION,
-                raw_text="事件1",
+                text="事件1",
                 summary="摘要1",
                 timestamp="2024-01-01T00:00:00Z"
             )
@@ -127,7 +127,7 @@ class TestPatternDiscoverer(unittest.TestCase):
             Event(
                 id=f"event_{i}",
                 event_type=EventType.ACTION,
-                raw_text=f"测试事件{i}",
+                text=f"测试事件{i}",
                 summary=f"摘要{i}",
                 timestamp="2024-01-01T00:00:00Z"
             ) for i in range(10)
@@ -279,7 +279,7 @@ class TestPatternDiscoverer(unittest.TestCase):
             Event(
                 id="event_1",
                 event_type=EventType.ACTION,
-                raw_text="事件1",
+                text="事件1",
                 summary="摘要1",
                 timestamp="2024-01-01T00:00:00Z",
                 importance_score=0.8
@@ -287,7 +287,7 @@ class TestPatternDiscoverer(unittest.TestCase):
             Event(
                 id="event_2",
                 event_type=EventType.ACTION,
-                raw_text="事件2",
+                text="事件2",
                 summary="摘要2",
                 timestamp="2024-01-02T00:00:00Z",
                 importance_score=0.9
@@ -295,7 +295,7 @@ class TestPatternDiscoverer(unittest.TestCase):
             Event(
                 id="event_3",
                 event_type=EventType.RESULT,
-                raw_text="事件3",
+                text="事件3",
                 summary="摘要3",
                 timestamp="2024-01-03T00:00:00Z",
                 importance_score=0.7

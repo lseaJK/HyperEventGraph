@@ -125,13 +125,13 @@ class BGEEmbedder:
     def embed_event(self, event: Event) -> BGEEmbedding:
         """对事件进行向量化"""
         # 构建事件的文本表示
-        event_text = f"{event.description}"
-        if hasattr(event, 'entities') and event.entities:
-            entities_text = ", ".join([f"{e.name}({e.type})" for e in event.entities])
+        event_text = f"{event.text}"
+        if hasattr(event, 'participants') and event.participants:
+            entities_text = ", ".join([f"{e.name}({e.entity_type})" for e in event.participants])
             event_text += f" 实体: {entities_text}"
         
         if hasattr(event, 'event_type') and event.event_type:
-            event_text += f" 类型: {event.event_type}"
+            event_text += f" 类型: {event.event_type.value}"
             
         return self.embed_text(event_text)
 
@@ -176,13 +176,13 @@ class ChromaDBRetriever:
             
             self.collection.add(
                 embeddings=[embedding.vector],
-                documents=[event.description],
+                documents=[event.text],
                 metadatas=[{
                     "event_id": event.id,
                     "event_type": getattr(event, 'event_type', ''),
                     "timestamp": event.timestamp.isoformat() if hasattr(event, 'timestamp') else '',
-                    "entities": json.dumps([e.name for e in getattr(event, 'entities', [])]),
-                    "importance_score": getattr(event, 'importance_score', 0.0)
+                    "entities": json.dumps([e.name for e in getattr(event, 'participants', [])]),
+                    "importance_score": getattr(event, 'confidence', 0.0)
                 }],
                 ids=[event.id]
             )
@@ -218,7 +218,7 @@ class ChromaDBRetriever:
                     # 重构事件对象
                     event = Event(
                         id=metadata["event_id"],
-                        description=doc,
+                        text=doc,
                         timestamp=datetime.fromisoformat(metadata["timestamp"]) if metadata["timestamp"] else datetime.now()
                     )
                     
@@ -281,7 +281,7 @@ class Neo4jGraphRetriever:
                     # 构建事件对象
                     event = Event(
                         id=event_node["id"],
-                        description=event_node["description"],
+                        text=event_node.get("text", event_node.get("description", "")),
                         timestamp=datetime.fromisoformat(event_node["timestamp"]) if event_node.get("timestamp") else datetime.now()
                     )
                     
