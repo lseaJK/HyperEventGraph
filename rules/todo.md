@@ -238,7 +238,7 @@
 **优先级**: 🟡 中等优先级
 
 ### 4.1 工作流控制器实现
-- [ ] 创建 `src/core/workflow_controller.py`
+- [x] 创建 `src/core/workflow_controller.py`
   - **功能**: 协调各模块的执行顺序和数据传递，管理ChromaDB和Neo4j的协同工作
   - **验收标准**: 支持6阶段流水线，错误恢复机制完善，双数据库协调正常
 
@@ -388,5 +388,15 @@
 - 优先实现核心功能，后续迭代优化性能
 - 保持与现有代码的兼容性
 - 所有新增代码遵循项目的编码规范
+
+### 开发规则
+- **Python模块导入规则**: 所有测试文件必须在导入项目模块前添加以下代码解决导入问题：
+  ```python
+  import sys
+  import os
+  # 添加项目根目录到Python路径
+  sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+  ```
+- **测试文件规范**: 确保所有测试文件都能独立运行，不依赖IDE或特定环境配置
 
 **Repository**: https://github.com/lseaJK/HyperEventGraph

@@ -149,7 +149,8 @@ class PatternDiscoverer:
             
             for event in batch_events:
                 # 构建事件文本表示
-                event_text = event.description
+                # 修改这里：使用 event.text 或 event.summary 代替 description
+                event_text = event.text  # 或者 event.summary
                 if hasattr(event, 'event_type') and event.event_type:
                     event_text += f" [类型: {event.event_type}]"
                 if hasattr(event, 'entities') and event.entities:
@@ -409,7 +410,7 @@ class PatternDiscoverer:
             event = result.event
             nodes[event.id] = {
                 'id': event.id,
-                'description': event.description,
+                'text': event.text,
                 'type': getattr(event, 'event_type', 'unknown'),
                 'timestamp': event.timestamp.isoformat() if hasattr(event, 'timestamp') else None
             }
@@ -657,7 +658,7 @@ class PatternDiscoverer:
         for event in events:
             examples.append({
                 'event_id': event.id,
-                'description': event.description,
+                'text': event.text,
                 'type': getattr(event, 'event_type', 'unknown'),
                 'timestamp': event.timestamp.isoformat() if hasattr(event, 'timestamp') else None
             })
