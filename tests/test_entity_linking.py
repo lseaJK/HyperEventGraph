@@ -42,7 +42,6 @@ class TestEntityLinking(unittest.TestCase):
         # 创建测试实体
         self.test_entities = {
             'company_1': Entity(
-                id='company_1',
                 name='腾讯控股有限公司',
                 entity_type='company',
                 aliases={'腾讯', 'Tencent', '腾讯公司'},
@@ -50,7 +49,6 @@ class TestEntityLinking(unittest.TestCase):
                 source_events=['event_1']
             ),
             'person_1': Entity(
-                id='person_1',
                 name='马化腾',
                 entity_type='person',
                 aliases={'Pony Ma', '马化腾先生'},
@@ -58,7 +56,6 @@ class TestEntityLinking(unittest.TestCase):
                 source_events=['event_2']
             ),
             'location_1': Entity(
-                id='location_1',
                 name='深圳',
                 entity_type='location',
                 aliases={'深圳市', 'Shenzhen'},
@@ -424,10 +421,11 @@ class TestEntityLinking(unittest.TestCase):
     def test_entity_without_aliases(self):
         """测试没有别名的实体"""
         entity = Entity(
-            id='test_entity',
             name='测试公司',
-            entity_type='company'
-            # 没有aliases属性
+            entity_type='company',
+            aliases=set(),
+            attributes={},
+            source_events=[]
         )
         
         # 测试置信度计算不会出错
@@ -516,14 +514,12 @@ def run_integration_test():
     # 创建测试实体
     entities = {
         'tencent': Entity(
-            id='tencent',
             name='腾讯',
             entity_type='company',
             aliases={'Tencent'},
             attributes={'industry': '互联网'}
         ),
         'beijing': Entity(
-            id='beijing',
             name='北京',
             entity_type='location',
             aliases={'Beijing'},

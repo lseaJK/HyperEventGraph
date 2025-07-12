@@ -57,10 +57,10 @@ class TestGraphRAGResponse:
     
     def test_response_creation(self):
         """测试响应创建"""
-        response = GraphRAGResponse(query_id="test_001")
+        response = GraphRAGResponse(query_id="test_001", status="pending")
         
         assert response.query_id == "test_001"
-        assert response.status == ""  # 默认为空
+        assert response.status == "pending"
         assert len(response.retrieved_events) == 0
         assert len(response.enhanced_events) == 0
         assert len(response.discovered_patterns) == 0

@@ -57,10 +57,9 @@ class TestEnhancedEvent(unittest.TestCase):
         """测试增强事件创建"""
         original_event = Event(
             id="original_1",
-            event_type=EventType.ACTION,
-            raw_text="原始事件",
-            summary="原始摘要",
-            timestamp="2024-01-01T00:00:00Z"
+            event_type=EventType.OTHER,
+            text="原始事件",
+            summary="原始摘要"
         )
         
         enhanced_event = EnhancedEvent(
@@ -99,18 +98,16 @@ class TestAttributeEnhancer(unittest.TestCase):
         similar_events = [
             Event(
                 id="similar_1",
-                event_type=EventType.ACTION,
-                raw_text="类似事件1",
+                event_type=EventType.OTHER,
+                text="类似事件1",
                 summary="摘要1",
-                timestamp="2024-01-01T00:00:00Z",
                 location="北京"
             ),
             Event(
                 id="similar_2",
-                event_type=EventType.ACTION,
-                raw_text="类似事件2",
+                event_type=EventType.OTHER,
+                text="类似事件2",
                 summary="摘要2",
-                timestamp="2024-01-02T00:00:00Z",
                 location="北京"
             )
         ]
@@ -143,26 +140,23 @@ class TestAttributeEnhancer(unittest.TestCase):
         similar_events = [
             Event(
                 id="event_1",
-                event_type=EventType.ACTION,
-                raw_text="事件1",
+                event_type=EventType.OTHER,
+                text="事件1",
                 summary="摘要1",
-                timestamp="2024-01-01T00:00:00Z",
                 location="北京"
             ),
             Event(
                 id="event_2",
-                event_type=EventType.ACTION,
-                raw_text="事件2",
+                event_type=EventType.OTHER,
+                text="事件2",
                 summary="摘要2",
-                timestamp="2024-01-02T00:00:00Z",
                 location="上海"
             ),
             Event(
                 id="event_3",
-                event_type=EventType.RESULT,
-                raw_text="事件3",
+                event_type=EventType.BUSINESS_ACQUISITION,
+                text="事件3",
                 summary="摘要3",
-                timestamp="2024-01-03T00:00:00Z",
                 location="北京"
             )
         ]
@@ -177,8 +171,8 @@ class TestAttributeEnhancer(unittest.TestCase):
         # 检查event_type模板
         event_type_template = templates['event_type']
         self.assertIsInstance(event_type_template, AttributeTemplate)
-        self.assertIn('ACTION', event_type_template.possible_values)
-        self.assertIn('RESULT', event_type_template.possible_values)
+        self.assertIn('OTHER', event_type_template.possible_values)
+        self.assertIn('BUSINESS_ACQUISITION', event_type_template.possible_values)
         
         # 检查location模板
         location_template = templates['location']
@@ -191,9 +185,9 @@ class TestAttributeEnhancer(unittest.TestCase):
         templates = {
             'event_type': AttributeTemplate(
                 attribute_name='event_type',
-                possible_values=['ACTION', 'RESULT'],
-                value_frequencies={'ACTION': 3, 'RESULT': 1},
-                confidence_scores={'ACTION': 0.8, 'RESULT': 0.6},
+                possible_values=['OTHER', 'BUSINESS_ACQUISITION'],
+                value_frequencies={'OTHER': 3, 'BUSINESS_ACQUISITION': 1},
+                confidence_scores={'OTHER': 0.8, 'BUSINESS_ACQUISITION': 0.6},
                 coverage_rate=0.9,
                 accuracy_rate=0.85
             ),
@@ -213,22 +207,22 @@ class TestAttributeEnhancer(unittest.TestCase):
         self.assertIsInstance(confidences, dict)
         self.assertIn('event_type', inferred_attrs)
         self.assertIn('location', inferred_attrs)
-        self.assertEqual(inferred_attrs['event_type'], 'ACTION')  # 最频繁的值
+        self.assertEqual(inferred_attrs['event_type'], 'OTHER')  # 最频繁的值
         self.assertEqual(inferred_attrs['location'], '北京')  # 最频繁的值
     
     def test_calculate_attribute_confidence(self):
         """测试属性置信度计算"""
         template = AttributeTemplate(
             attribute_name='event_type',
-            possible_values=['ACTION', 'RESULT'],
-            value_frequencies={'ACTION': 3, 'RESULT': 1},
-            confidence_scores={'ACTION': 0.8, 'RESULT': 0.6},
+            possible_values=['OTHER', 'BUSINESS_ACQUISITION'],
+            value_frequencies={'OTHER': 3, 'BUSINESS_ACQUISITION': 1},
+            confidence_scores={'OTHER': 0.8, 'BUSINESS_ACQUISITION': 0.6},
             coverage_rate=0.9,
             accuracy_rate=0.85
         )
         
         confidence = self.enhancer._calculate_attribute_confidence(
-            template, 'ACTION', 'test context'
+            template, 'OTHER', 'test context'
         )
         
         self.assertIsInstance(confidence, float)
@@ -238,7 +232,7 @@ class TestAttributeEnhancer(unittest.TestCase):
     def test_validate_attributes(self):
         """测试属性验证"""
         inferred_attrs = {
-            'event_type': 'ACTION',
+            'event_type': 'OTHER',
             'location': '北京',
             'importance_score': 0.8
         }
@@ -264,10 +258,9 @@ class TestAttributeEnhancer(unittest.TestCase):
         mock_enhanced_event = EnhancedEvent(
             original_event=Event(
                 id="test",
-                event_type=EventType.ACTION,
-                raw_text="测试",
-                summary="测试",
-                timestamp="2024-01-01T00:00:00Z"
+                event_type=EventType.OTHER,
+                text="测试",
+                summary="测试"
             ),
             enhanced_attributes={'location': '北京'},
             attribute_confidences={'location': 0.8},
@@ -287,10 +280,9 @@ class TestAttributeEnhancer(unittest.TestCase):
             EnhancedEvent(
                 original_event=Event(
                     id=f"event_{i}",
-                    event_type=EventType.ACTION,
-                    raw_text=f"事件{i}",
-                    summary=f"摘要{i}",
-                    timestamp="2024-01-01T00:00:00Z"
+                    event_type=EventType.OTHER,
+                    text=f"事件{i}",
+                    summary=f"摘要{i}"
                 ),
                 enhanced_attributes={'location': '北京', 'importance_score': 0.8},
                 attribute_confidences={'location': 0.9, 'importance_score': 0.7},
