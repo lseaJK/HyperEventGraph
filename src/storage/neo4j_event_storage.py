@@ -901,6 +901,27 @@ class Neo4jEventStorage:
                 logger.error(f"❌ 事理模式存储失败: {e}")
                 return False
     
+    def clear_all_data(self) -> bool:
+        """
+        清理所有测试数据
+        
+        Returns:
+            bool: 清理是否成功
+        """
+        with self.driver.session() as session:
+            try:
+                # 删除所有关系
+                session.run("MATCH ()-[r]->() DELETE r")
+                
+                # 删除所有节点
+                session.run("MATCH (n) DELETE n")
+                
+                logger.info("✅ 所有测试数据已清理")
+                return True
+            except Exception as e:
+                logger.error(f"❌ 清理数据失败: {e}")
+                return False
+    
     def get_database_stats(self) -> Dict[str, Any]:
         """
         获取数据库统计信息
