@@ -161,12 +161,11 @@ class TestHybridRetriever(unittest.TestCase):
     
     def setUp(self):
         self.retriever = HybridRetriever(
-            chroma_config={'persist_directory': './test_chroma'},
-            neo4j_config={
-                'uri': 'bolt://localhost:7687',
-                'user': 'neo4j',
-                'password': 'password'
-            }
+            chroma_collection="test_events",
+            chroma_persist_dir="./test_chroma",
+            neo4j_uri="bolt://localhost:7687",
+            neo4j_user="neo4j",
+            neo4j_password="password"
         )
         
         # Mock子检索器

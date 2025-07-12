@@ -27,6 +27,7 @@ class EventType(Enum):
     MARKET_EXPANSION = "market.expansion"  # 市场扩张
     REGULATORY_CHANGE = "regulatory.change"  # 监管变化
     TECHNOLOGY_BREAKTHROUGH = "technology.breakthrough"  # 技术突破
+    ACTION = "action"  # 行动事件
     OTHER = "other"  # 其他类型
 
 

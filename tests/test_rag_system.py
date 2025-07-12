@@ -99,6 +99,7 @@ class TestKnowledgeRetriever:
         self.mock_dual_layer.event_layer.get_events_by_participant.return_value = [mock_event]
         self.mock_dual_layer.event_layer.search_events_by_keywords.return_value = [mock_event]
         self.mock_dual_layer.event_layer.get_events_by_entity.return_value = [mock_event]
+        self.mock_dual_layer.event_layer.query_events.return_value = [mock_event]
         
         self.retriever = KnowledgeRetriever(dual_layer_core=self.mock_dual_layer)
     

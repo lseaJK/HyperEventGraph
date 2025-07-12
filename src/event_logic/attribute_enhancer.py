@@ -148,8 +148,8 @@ class AttributeEnhancer:
         """将不完整事件转换为Event对象"""
         return Event(
             id=incomplete_event.id,
-            description=incomplete_event.description,
-            timestamp=incomplete_event.timestamp or datetime.now()
+            text=incomplete_event.description,
+            summary=incomplete_event.description
         )
     
     def _filter_relevant_events(self, fused_results: List[Dict[str, Any]],
@@ -176,9 +176,17 @@ class AttributeEnhancer:
                 if hasattr(event, attr_name):
                     value = getattr(event, attr_name)
                     if value is not None:
-                        values.append(value)
-                        confidences.append(event_data.get('fused_score', 0.5))
-                        contexts.append(event.description)
+                        # 如果是枚举类型，转换为字符串
+                        if hasattr(value, 'value'):
+                            value = value.value
+                        # 如果是列表类型，转换为元组（可哈希）
+                        elif isinstance(value, list):
+                            value = tuple(value) if value else None
+                        
+                        if value is not None:
+                            values.append(value)
+                            confidences.append(event_data.get('fused_score', 0.5))
+                            contexts.append(event.text)
             
             if values:
                 # 计算值频率
@@ -431,19 +439,19 @@ class AttributeEnhancer:
         
         return enhanced_events
     
-    def get_attribute_statistics(self) -> Dict[str, Any]:
+    @staticmethod
+    def get_attribute_statistics(enhanced_events: List[EnhancedEvent]) -> Dict[str, Any]:
         """获取属性补充统计信息"""
+        # 统计增强事件的属性信息
+        total_events = len(enhanced_events)
+        enhanced_attributes_count = sum(len(event.enhanced_attributes) for event in enhanced_events)
+        avg_confidence = sum(event.total_confidence for event in enhanced_events) / total_events if total_events > 0 else 0
+        
         return {
-            'supported_attributes': list(self.supported_attributes),
-            'cached_templates': len(self.attribute_templates),
-            'template_details': {
-                name: {
-                    'coverage_rate': template.coverage_rate,
-                    'inference_accuracy': template.inference_accuracy,
-                    'possible_values_count': len(template.possible_values)
-                }
-                for name, template in self.attribute_templates.items()
-            }
+            'total_events': total_events,
+            'enhanced_attributes_count': enhanced_attributes_count,
+            'average_confidence': avg_confidence,
+            'validation_pass_rate': sum(all(event.validation_results.values()) for event in enhanced_events) / total_events if total_events > 0 else 0
         }
 
 
