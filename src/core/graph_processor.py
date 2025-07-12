@@ -344,60 +344,72 @@ class GraphProcessor:
             self.logger.error(f"计算中心性失败: {str(e)}")
             return {}
     
-    def predict_next_events(self, current_event_id: str, 
-                           prediction_window: int = 7) -> List[Tuple[str, float]]:
+    def predict_next_events(self, current_events: List[Event], 
+                           top_k: int = 5) -> List[Tuple[Event, float]]:
         """预测下一个可能的事件
         
         Args:
-            current_event_id: 当前事件ID
-            prediction_window: 预测时间窗口（天）
+            current_events: 当前事件列表
+            top_k: 返回前k个预测结果
             
         Returns:
-            List[Tuple[str, float]]: (事件类型, 概率) 列表
+            List[Tuple[Event, float]]: (预测事件, 概率) 列表
         """
         try:
-            # 获取当前事件
-            current_event = self.event_manager.get_event(current_event_id)
-            if not current_event:
+            if not current_events:
                 return []
-            
-            # 查找相似的历史模式
-            matching_patterns = self.pattern_manager.find_matching_patterns(
-                current_event, threshold=self.config.similarity_threshold
-            )
             
             # 基于模式预测
             predictions = defaultdict(float)
             
-            for pattern, match_score in matching_patterns:
-                # 获取模式中当前事件后的事件类型
-                next_types = self._get_next_event_types_from_pattern(
-                    pattern, current_event.event_type
+            for current_event in current_events:
+                # 查找相似的历史模式
+                matching_patterns = self.pattern_manager.find_matching_patterns(
+                    current_event, threshold=self.config.similarity_threshold
                 )
                 
-                for next_type, probability in next_types:
-                    # 加权概率
-                    weighted_prob = probability * match_score * pattern.confidence
-                    predictions[next_type] += weighted_prob
+                for pattern, match_score in matching_patterns:
+                    # 获取模式中当前事件后的事件类型
+                    next_types = self._get_next_event_types_from_pattern(
+                        pattern, current_event.event_type
+                    )
+                    
+                    for next_type, probability in next_types:
+                        # 加权概率
+                        weighted_prob = probability * match_score * pattern.confidence
+                        predictions[next_type] += weighted_prob
+                
+                # 基于历史数据的统计预测
+                statistical_predictions = self._statistical_event_prediction(
+                    current_event, 7  # 默认7天预测窗口
+                )
+                
+                # 合并预测结果
+                for event_type, prob in statistical_predictions:
+                    predictions[event_type] += prob * 0.3  # 给统计预测较低权重
             
-            # 基于历史数据的统计预测
-            statistical_predictions = self._statistical_event_prediction(
-                current_event, prediction_window
-            )
-            
-            # 合并预测结果
-            for event_type, prob in statistical_predictions:
-                predictions[event_type] += prob * 0.3  # 给统计预测较低权重
-            
-            # 归一化和排序
+            # 创建预测事件对象并归一化
+            predicted_events = []
             total_prob = sum(predictions.values())
+            
             if total_prob > 0:
-                normalized_predictions = [
-                    (event_type, prob / total_prob) 
-                    for event_type, prob in predictions.items()
-                ]
-                normalized_predictions.sort(key=lambda x: x[1], reverse=True)
-                return normalized_predictions[:10]  # 返回前10个预测
+                for event_type, prob in predictions.items():
+                    normalized_prob = prob / total_prob
+                    
+                    # 创建预测事件对象
+                    predicted_event = Event(
+                        id=f"predicted_{event_type}_{hash(str(current_events))}"[:16],
+                        event_type=EventType(event_type) if isinstance(event_type, str) else event_type,
+                        text=f"预测的{event_type}事件",
+                        summary=f"基于模式预测的{event_type}事件",
+                        confidence=normalized_prob
+                    )
+                    
+                    predicted_events.append((predicted_event, normalized_prob))
+                
+                # 排序并返回前k个
+                predicted_events.sort(key=lambda x: x[1], reverse=True)
+                return predicted_events[:top_k]
             
             return []
             

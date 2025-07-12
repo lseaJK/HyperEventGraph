@@ -164,13 +164,16 @@ class EventPattern:
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     pattern_name: str = ""
     pattern_type: str = ""  # 模式类型：sequential, causal, conditional等
+    domain: str = ""  # 模式领域
     
     # 模式结构
     event_types: List[EventType] = field(default_factory=list)
+    event_sequence: List[str] = field(default_factory=list)  # 事件序列（兼容性）
     relation_types: List[RelationType] = field(default_factory=list)
     
     # 模式约束
     constraints: Dict[str, Any] = field(default_factory=dict)
+    conditions: Dict[str, Any] = field(default_factory=dict)  # 模式条件（兼容性）
     
     # 统计信息
     frequency: int = 0  # 模式出现频次
@@ -186,9 +189,12 @@ class EventPattern:
             'id': self.id,
             'pattern_name': self.pattern_name,
             'pattern_type': self.pattern_type,
+            'domain': self.domain,
             'event_types': [et.value for et in self.event_types],
+            'event_sequence': self.event_sequence,
             'relation_types': [rt.value for rt in self.relation_types],
             'constraints': self.constraints,
+            'conditions': self.conditions,
             'frequency': self.frequency,
             'confidence': self.confidence,
             'support': self.support,
