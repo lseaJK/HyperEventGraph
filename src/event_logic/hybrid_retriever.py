@@ -26,7 +26,8 @@ try:
 except ImportError:
     GraphDatabase = None
 
-from .data_models import Event, EventRelation, RelationType
+from src.models.event_data_model import Event
+from .data_models import EventRelation, RelationType
 
 
 @dataclass

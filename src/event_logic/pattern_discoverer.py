@@ -23,8 +23,8 @@ except ImportError:
     DBSCAN = None
     silhouette_score = None
 
-from ..models.event_data_model import Event
-from ..event_logic.data_models import EventRelation, RelationType
+from src.models.event_data_model import Event
+from src.event_logic.data_models import EventRelation, RelationType
 from .hybrid_retriever import HybridRetriever, BGEEmbedder
 
 

@@ -7,8 +7,8 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from models.event_data_model import Event, EventType
-from event_logic.hybrid_retriever import (
+from src.models.event_data_model import Event, EventType
+from src.event_logic.hybrid_retriever import (
     BGEEmbedder, ChromaDBRetriever, Neo4jGraphRetriever, 
     HybridRetriever, VectorSearchResult, GraphSearchResult, HybridSearchResult
 )

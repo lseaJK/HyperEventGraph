@@ -8,8 +8,8 @@ from typing import List, Dict, Set, Optional, Tuple
 from collections import defaultdict, deque
 from datetime import datetime
 
-from local_models import Event
-from data_models import (
+from src.models.event_data_model import Event
+from .data_models import (
     EventRelation, RelationType, ValidationResult, ValidatedRelation
 )
 

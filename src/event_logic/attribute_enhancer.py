@@ -13,7 +13,8 @@ from datetime import datetime
 from collections import Counter, defaultdict
 import statistics
 
-from .data_models import Event, EventRelation, RelationType
+from src.models.event_data_model import Event
+from .data_models import EventRelation, RelationType
 from .hybrid_retriever import HybridRetriever, BGEEmbedder
 
 
