@@ -9,7 +9,7 @@
 
 from typing import Dict, List, Any, Optional, Tuple
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import math
 from collections import defaultdict
 
@@ -229,6 +229,57 @@ class EventLayerManager:
             
         except Exception as e:
             self.logger.error(f"获取时间范围事件失败: {str(e)}")
+            return []
+    
+    def get_events_after(self, event_id: str, window_days: int = 7) -> List[Event]:
+        """获取指定事件之后的事件
+        
+        Args:
+            event_id: 事件ID
+            window_days: 时间窗口（天数）
+            
+        Returns:
+            List[Event]: 后续事件列表
+        """
+        try:
+            # 获取指定事件
+            target_event = self.get_event(event_id)
+            if not target_event or not target_event.timestamp:
+                return []
+            
+            # 计算时间范围
+            if isinstance(target_event.timestamp, str):
+                start_dt = datetime.fromisoformat(target_event.timestamp.replace('Z', '+00:00'))
+            else:
+                start_dt = target_event.timestamp
+            
+            end_dt = start_dt + timedelta(days=window_days)
+            
+            # 查询后续事件
+            subsequent_events = self.query_events(
+                time_range=(start_dt, end_dt),
+                limit=1000
+            )
+            
+            # 过滤掉目标事件本身，只返回之后的事件
+            filtered_events = []
+            for event in subsequent_events:
+                if event.id != event_id and event.timestamp:
+                    if isinstance(event.timestamp, str):
+                        event_dt = datetime.fromisoformat(event.timestamp.replace('Z', '+00:00'))
+                    else:
+                        event_dt = event.timestamp
+                    
+                    if event_dt > start_dt:
+                        filtered_events.append(event)
+            
+            # 按时间排序
+            filtered_events.sort(key=lambda x: x.timestamp)
+            
+            return filtered_events
+            
+        except Exception as e:
+            self.logger.error(f"获取后续事件失败: {str(e)}")
             return []
     
     def analyze_event_frequency(self, 

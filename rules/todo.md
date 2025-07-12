@@ -208,6 +208,9 @@
 - [x] 🔥 4.3.1.2 修复Event对象创建参数错误（event_id vs id字段不匹配）
 - [x] 🔥 4.3.1.3 修复Neo4j类型兼容性问题（event_type枚举/字符串处理）
 - [x] 🔥 4.3.1.4 修复实体关系创建错误（subject/object字符串处理）
+- [x] 🔥 4.3.1.5 修复EventLayerManager缺少get_events_after方法
+- [x] 🔥 4.3.1.6 修复GraphProcessor中Event对象属性名称错误（event_id vs id）
+- [x] 🔥 4.3.1.7 修复EventType枚举转换错误（字符串到枚举的正确映射）
 - [ ] ⏸️ 4.3.2 实现高效批量数据插入（Neo4j批量操作优化）- 降低优先级
   - 验收标准：批量插入和更新操作性能提升50%以上
   - 技术要求：使用事务批处理和并行写入，优化大规模数据导入

@@ -397,9 +397,26 @@ class GraphProcessor:
                     normalized_prob = prob / total_prob
                     
                     # 创建预测事件对象
+                    # 将字符串转换为EventType枚举
+                    try:
+                        if isinstance(event_type, str):
+                            # 尝试通过value匹配EventType
+                            event_type_enum = None
+                            for et in EventType:
+                                if et.value == event_type:
+                                    event_type_enum = et
+                                    break
+                            if event_type_enum is None:
+                                # 如果找不到匹配的枚举值，使用OTHER
+                                event_type_enum = EventType.OTHER
+                        else:
+                            event_type_enum = event_type
+                    except:
+                        event_type_enum = EventType.OTHER
+                    
                     predicted_event = Event(
                         id=f"predicted_{event_type}_{hash(str(current_events))}"[:16],
-                        event_type=EventType(event_type) if isinstance(event_type, str) else event_type,
+                        event_type=event_type_enum,
                         text=f"预测的{event_type}事件",
                         summary=f"基于模式预测的{event_type}事件",
                         confidence=normalized_prob
@@ -814,7 +831,7 @@ class GraphProcessor:
         for similar_event, _ in similar_events:
             # 获取该事件后的事件
             subsequent_events = self.event_manager.get_events_after(
-                similar_event.event_id, window_days
+                similar_event.id, window_days
             )
             
             for subsequent_event in subsequent_events:
