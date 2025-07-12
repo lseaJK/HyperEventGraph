@@ -23,7 +23,8 @@ except ImportError:
     DBSCAN = None
     silhouette_score = None
 
-from .data_models import Event, EventRelation, RelationType
+from ..models.event_data_model import Event
+from ..event_logic.data_models import EventRelation, RelationType
 from .hybrid_retriever import HybridRetriever, BGEEmbedder
 
 
@@ -50,8 +51,8 @@ class FrequentSubgraph:
     support: float  # 支持度
     confidence: float  # 置信度
     pattern_type: str  # 模式类型：sequential, causal, conditional等
-    temporal_order: List[str]  # 时序顺序
-    abstraction_level: str  # 抽象级别：concrete, abstract, general
+    temporal_order: List[str] = field(default_factory=list)  # 时序顺序
+    abstraction_level: str = "concrete"  # 抽象级别：concrete, abstract, general
 
 
 @dataclass
@@ -64,7 +65,7 @@ class EventPattern:
     event_sequence: List[str]  # 事件类型序列
     relation_sequence: List[RelationType]  # 关系类型序列
     temporal_constraints: Dict[str, Any]  # 时序约束
-    causal_structure: Dict[str, List[str]]  # 因果结构
+    causal_structure: Dict[str, Any]  # 因果结构
     frequency: int
     support: float
     confidence: float
