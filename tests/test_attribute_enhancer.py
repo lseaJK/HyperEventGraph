@@ -2,6 +2,7 @@ import unittest
 import numpy as np
 from unittest.mock import Mock, patch, MagicMock
 from typing import List, Dict, Any
+from datetime import datetime
 
 import sys
 import os
@@ -57,9 +58,8 @@ class TestEnhancedEvent(unittest.TestCase):
         """测试增强事件创建"""
         original_event = Event(
             id="original_1",
-            event_type=EventType.OTHER,
-            text="原始事件",
-            summary="原始摘要"
+            description="原始事件",
+            timestamp=datetime.now()
         )
         
         enhanced_event = EnhancedEvent(
@@ -98,17 +98,13 @@ class TestAttributeEnhancer(unittest.TestCase):
         similar_events = [
             Event(
                 id="similar_1",
-                event_type=EventType.OTHER,
-                text="类似事件1",
-                summary="摘要1",
-                location="北京"
+                description="类似事件1",
+                timestamp=datetime.now()
             ),
             Event(
                 id="similar_2",
-                event_type=EventType.OTHER,
-                text="类似事件2",
-                summary="摘要2",
-                location="北京"
+                description="类似事件2",
+                timestamp=datetime.now()
             )
         ]
         
@@ -140,29 +136,26 @@ class TestAttributeEnhancer(unittest.TestCase):
         similar_events = [
             Event(
                 id="event_1",
-                event_type=EventType.OTHER,
-                text="事件1",
-                summary="摘要1",
-                location="北京"
+                description="事件1",
+                timestamp=datetime.now()
             ),
             Event(
                 id="event_2",
-                event_type=EventType.OTHER,
-                text="事件2",
-                summary="摘要2",
-                location="上海"
+                description="事件2",
+                timestamp=datetime.now()
             ),
             Event(
                 id="event_3",
-                event_type=EventType.BUSINESS_ACQUISITION,
-                text="事件3",
-                summary="摘要3",
-                location="北京"
+                description="事件3",
+                timestamp=datetime.now()
             )
         ]
         
-        missing_attributes = ['event_type', 'location']
-        templates = self.enhancer._generate_attribute_templates(similar_events, missing_attributes)
+        # 模拟相似事件的搜索结果格式
+        relevant_events = [
+            {'event': event, 'fused_score': 0.8} for event in similar_events
+        ]
+        templates = self.enhancer._generate_attribute_templates(relevant_events)
         
         self.assertIsInstance(templates, dict)
         self.assertIn('event_type', templates)
@@ -187,21 +180,38 @@ class TestAttributeEnhancer(unittest.TestCase):
                 attribute_name='event_type',
                 possible_values=['OTHER', 'BUSINESS_ACQUISITION'],
                 value_frequencies={'OTHER': 3, 'BUSINESS_ACQUISITION': 1},
-                confidence_scores={'OTHER': 0.8, 'BUSINESS_ACQUISITION': 0.6},
+                confidence_distribution={'OTHER': [0.8, 0.7, 0.9], 'BUSINESS_ACQUISITION': [0.6]},
+                context_patterns=['事件1', '事件2', '事件3'],
                 coverage_rate=0.9,
-                accuracy_rate=0.85
+                inference_accuracy=0.85
             ),
             'location': AttributeTemplate(
                 attribute_name='location',
                 possible_values=['北京', '上海'],
                 value_frequencies={'北京': 2, '上海': 1},
-                confidence_scores={'北京': 0.9, '上海': 0.7},
+                confidence_distribution={'北京': [0.9, 0.8], '上海': [0.7]},
+                context_patterns=['北京事件1', '北京事件2', '上海事件1'],
                 coverage_rate=0.8,
-                accuracy_rate=0.9
+                inference_accuracy=0.9
             )
         }
         
-        inferred_attrs, confidences = self.enhancer._infer_missing_attributes(templates)
+        # 创建模拟的IncompleteEvent
+        incomplete_event = IncompleteEvent(
+            id="test_event",
+            description="测试事件",
+            missing_attributes={'event_type', 'location'}
+        )
+        
+        # 模拟相似事件
+        relevant_events = [
+            {'event': Event(id="event_1", description="事件1", timestamp=datetime.now()), 'fused_score': 0.8},
+            {'event': Event(id="event_2", description="事件2", timestamp=datetime.now()), 'fused_score': 0.7}
+        ]
+        
+        result = self.enhancer._infer_missing_attributes(incomplete_event, templates, relevant_events)
+        inferred_attrs = result['attributes']
+        confidences = result['confidences']
         
         self.assertIsInstance(inferred_attrs, dict)
         self.assertIsInstance(confidences, dict)
@@ -216,9 +226,10 @@ class TestAttributeEnhancer(unittest.TestCase):
             attribute_name='event_type',
             possible_values=['OTHER', 'BUSINESS_ACQUISITION'],
             value_frequencies={'OTHER': 3, 'BUSINESS_ACQUISITION': 1},
-            confidence_scores={'OTHER': 0.8, 'BUSINESS_ACQUISITION': 0.6},
+            confidence_distribution={'OTHER': [0.8, 0.7, 0.9], 'BUSINESS_ACQUISITION': [0.6]},
+            context_patterns=['事件1', '事件2', '事件3'],
             coverage_rate=0.9,
-            accuracy_rate=0.85
+            inference_accuracy=0.85
         )
         
         confidence = self.enhancer._calculate_attribute_confidence(
@@ -237,19 +248,36 @@ class TestAttributeEnhancer(unittest.TestCase):
             'importance_score': 0.8
         }
         
-        # Mock图谱上下文验证
-        with patch.object(self.enhancer, '_validate_with_graph_context', return_value=True):
-            is_valid, validation_details = self.enhancer._validate_attributes(inferred_attrs)
+        # 创建模拟的IncompleteEvent
+        incomplete_event = IncompleteEvent(
+            id="test_event",
+            description="测试事件",
+            missing_attributes={'event_type', 'location'}
+        )
         
-        self.assertIsInstance(is_valid, bool)
-        self.assertIsInstance(validation_details, dict)
+        # 模拟enhanced_attributes格式
+        enhanced_attrs = {
+            'attributes': inferred_attrs,
+            'confidences': {'event_type': 0.8, 'location': 0.9, 'importance_score': 0.7}
+        }
+        
+        # Mock图谱上下文验证
+        graph_results = []
+        validation_results = self.enhancer._validate_attributes(
+            incomplete_event, enhanced_attrs, graph_results
+        )
+        
+        self.assertIsInstance(validation_results, dict)
+        self.assertIn('event_type', validation_results)
+        self.assertIn('location', validation_results)
+        self.assertIn('importance_score', validation_results)
     
     def test_batch_enhance_events(self):
         """测试批量事件补充"""
         incomplete_events = [
             IncompleteEvent(
                 id=f"incomplete_{i}",
-                raw_text=f"事件{i}",
+                description=f"事件{i}",
                 missing_attributes=['event_type', 'location']
             ) for i in range(3)
         ]
@@ -258,13 +286,14 @@ class TestAttributeEnhancer(unittest.TestCase):
         mock_enhanced_event = EnhancedEvent(
             original_event=Event(
                 id="test",
-                event_type=EventType.OTHER,
-                text="测试",
-                summary="测试"
+                description="测试",
+                timestamp=datetime.now()
             ),
             enhanced_attributes={'location': '北京'},
             attribute_confidences={'location': 0.8},
-            enhancement_sources={'location': ['similar_1']},
+            inference_sources={'location': ['similar_1']},
+            validation_results={},
+            enhancement_metadata={},
             total_confidence=0.8
         )
         
@@ -280,13 +309,14 @@ class TestAttributeEnhancer(unittest.TestCase):
             EnhancedEvent(
                 original_event=Event(
                     id=f"event_{i}",
-                    event_type=EventType.OTHER,
-                    text=f"事件{i}",
-                    summary=f"摘要{i}"
+                    description=f"事件{i}",
+                    timestamp=datetime.now()
                 ),
                 enhanced_attributes={'location': '北京', 'importance_score': 0.8},
                 attribute_confidences={'location': 0.9, 'importance_score': 0.7},
-                enhancement_sources={'location': ['similar_1']},
+                inference_sources={'location': ['similar_1']},
+                validation_results={},
+                enhancement_metadata={},
                 total_confidence=0.8
             ) for i in range(3)
         ]
