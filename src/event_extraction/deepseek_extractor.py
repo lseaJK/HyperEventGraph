@@ -134,24 +134,29 @@ class DeepSeekEventExtractor:
             # 解析JSON结果
             result = self._parse_json_response(response)
             
-            # 处理多事件结果
+            # --- 终极加固逻辑 ---
             events = []
             events_list = []
 
             # Case 1: 结果是包含 'events' 键的字典
             if isinstance(result, dict) and "events" in result and isinstance(result.get("events"), list):
                 events_list = result["events"]
-            # Case 2: 结果本身就是事件列表
+            # Case 2: 结果本身就是事件列���
             elif isinstance(result, list):
                 events_list = result
-            # 其他情况 (None, str, etc.)，events_list 保持为空
+            # 其他情况 (None, str, etc.)，events_list 保持为空，不进行处理
 
             for event in events_list:
-                # 增加对None值的检查
+                # 增加对None值和非字典项的严格检查
                 if not event or not isinstance(event, dict):
+                    logger.warning(f"在事件列表中发现无效项目，已跳过: {event}")
                     continue
+                
                 if metadata:
-                    event.setdefault("metadata", {}).update(metadata)
+                    # 使用 .copy() 避免在循环中修改共享的元数据对象
+                    event_metadata = metadata.copy()
+                    event.setdefault("metadata", {}).update(event_metadata)
+                
                 event.setdefault("metadata", {})["extraction_timestamp"] = datetime.now().isoformat()
                 event.setdefault("metadata", {})["model_used"] = self.model_name
                 events.append(event)
@@ -161,7 +166,8 @@ class DeepSeekEventExtractor:
             
         except Exception as e:
             logger.error(f"多事件抽取失败: {str(e)}")
-            return [self._create_error_response(str(e), "multi", "multi_event")]
+            # 在失败时返回空列表，而不是包含错误信息的列表，以简化上游处理
+            return []
     
     async def batch_extract(self, 
                           texts: List[str],
