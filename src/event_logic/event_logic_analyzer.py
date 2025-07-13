@@ -135,8 +135,10 @@ class EventLogicAnalyzer:
             
             # 调用LLM分析（如果没有LLM客户端，使用规则方法）
             if self.llm_client:
-                response = self._call_llm_for_relation_analysis(prompt)
-                return self._parse_llm_response(response, source_event.id, target_event.id)
+                response_str = self._call_llm_for_relation_analysis(prompt)
+                if response_str:
+                    return self._parse_llm_response(response_str, source_event.id, target_event.id)
+                return None
             else:
                 # 使用简单规则方法作为fallback
                 return self._rule_based_relation_analysis(source_event, target_event)
@@ -219,19 +221,19 @@ class EventLogicAnalyzer:
         except Exception as e:
             logger.warning(f"LLM调用失败，使用默认响应: {e}")
             # 返回模拟响应作为fallback
-            return '''{
-    "relation_type": "时间先后",
-    "confidence": 0.7,
-    "strength": 0.6,
-    "description": "事件1在时间上先于事件2发生",
-    "evidence": "基于时间戳分析"
-}'''
+            return {
+                "relation_type": "时间先后",
+                "confidence": 0.7,
+                "strength": 0.6,
+                "description": "事件1在时间上先于事件2发生",
+                "evidence": "基于时间戳分析"
+            }
     
     def _parse_llm_response(self, response: str, source_id: str, target_id: str) -> Optional[EventRelation]:
         """解析LLM响应
         
         Args:
-            response: LLM响应
+            response: LLM响应的JSON字符串
             source_id: 源事件ID
             target_id: 目标事件ID
             
@@ -239,14 +241,15 @@ class EventLogicAnalyzer:
             事件关系或None
         """
         try:
+            # The response is a JSON string, so we need to load it.
             data = json.loads(response)
             
             # 映射关系类型
             relation_type_str = data.get('relation_type', '未知')
-            relation_type = self.relation_type_mapping.get(relation_type_str, RelationType.UNKNOWN)
+            relation_type = self.relation_type_mapping.get(relation_type_str, RelationType.COOCCURRENCE)
             
             # 如果是无关系，返回None
-            if relation_type == RelationType.UNKNOWN and data.get('confidence', 0) < 0.3:
+            if relation_type == RelationType.COOCCURRENCE and data.get('confidence', 0) < 0.3:
                 return None
             
             return EventRelation(
@@ -262,7 +265,7 @@ class EventLogicAnalyzer:
                 source='llm_analysis'
             )
             
-        except (json.JSONDecodeError, KeyError) as e:
+        except (json.JSONDecodeError, KeyError, TypeError) as e:
             logger.error(f"解析LLM响应失败: {e}")
             return None
     

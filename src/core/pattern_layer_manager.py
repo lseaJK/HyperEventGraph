@@ -223,7 +223,6 @@ class PatternLayerManager:
         text_parts = [
             f"模式名称: {pattern.pattern_name or pattern.id}",
             f"模式类型: {pattern.pattern_type}",
-            f"描述: {pattern.description}",
             f"事件序列: {' -> '.join(pattern.event_sequence)}",
             f"领域: {pattern.domain or 'general'}",
             f"支持度: {pattern.support}",

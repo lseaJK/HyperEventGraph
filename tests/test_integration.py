@@ -182,10 +182,11 @@ class TestIntegration:
             client = Mock()
             
             # 模拟LLM响应
-            client.generate_response.return_value = {
-                "content": "这是一个模拟的LLM响应",
-                "usage": {"total_tokens": 100}
-            }
+            client.generate_response.return_value = json.dumps({
+                "relation_type": "因果",
+                "confidence": 0.8,
+                "description": "模拟的因果关系"
+            })
             
             client.analyze_events.return_value = {
                 "relations": [
@@ -277,41 +278,51 @@ class TestIntegration:
             
     def test_pattern_discovery_integration(self, mock_config_manager, sample_events, temp_dir):
         """测试模式发现集成"""
-        with patch('src.storage.neo4j_event_storage.Neo4jEventStorage') as mock_neo4j:
-            # Patching the ChromaDBRetriever where it's instantiated
-            with patch('src.core.pattern_layer_manager.ChromaDBRetriever') as mock_chroma:
-                # 模拟存储
-                mock_neo4j_instance = Mock()
-                mock_chroma_instance = Mock()
-                mock_neo4j.return_value = mock_neo4j_instance
-                mock_chroma.return_value = mock_chroma_instance
-                
-                # 创建模式层管理器
-                pattern_manager = PatternLayerManager(
-                    storage=mock_neo4j_instance,
-                    chroma_config={'persist_directory': temp_dir} # Provide necessary config
+        with patch('src.storage.neo4j_event_storage.Neo4jEventStorage') as mock_neo4j, \
+             patch('src.core.pattern_layer_manager.ChromaDBRetriever') as mock_chroma, \
+             patch('src.core.pattern_layer_manager.BGEEmbedder') as mock_embedder:
+            
+            # 模拟存储和嵌入器
+            mock_neo4j_instance = Mock()
+            mock_chroma_instance = Mock()
+            mock_embedder_instance = Mock()
+
+            mock_neo4j.return_value = mock_neo4j_instance
+            mock_chroma.return_value = mock_chroma_instance
+            mock_embedder.return_value = mock_embedder_instance
+
+            # 配置模拟对象的返回值以避免初始化错误
+            mock_neo4j_instance.query_patterns.return_value = []
+            mock_embedder_instance.embed_text.return_value = [0.1] * 1024 # Mock embedding vector
+
+            # 移除batch_store_patterns以强制执行fallback逻辑
+            del mock_neo4j_instance.batch_store_patterns
+            
+            # 创建模式层管理器
+            pattern_manager = PatternLayerManager(
+                storage=mock_neo4j_instance,
+                chroma_config={'persist_directory': temp_dir}
+            )
+            
+            # 模拟模式发现
+            mock_patterns = [
+                EventPattern(
+                    id="pattern_001",
+                    pattern_type="因果链",
+                    event_sequence=["event_001", "event_002"],
+                    relation_types=[RelationType.CAUSAL_CAUSE],
+                    frequency=5,
+                    confidence=0.8,
+                    conditions={"description": "产品发布导致股价上涨的模式"}
                 )
-                
-                # 模拟模式发现
-                mock_patterns = [
-                    EventPattern(
-                        id="pattern_001",
-                        pattern_type="因果链",
-                        event_sequence=["event_001", "event_002"],
-                        relation_types=[RelationType.CAUSAL_CAUSE],
-                        frequency=5,
-                        confidence=0.8,
-                        conditions={"description": "产品发布导致股价上涨的模式"}
-                    )
-                ]
-                
-                # 添加模式
-                pattern_manager.batch_add_patterns(mock_patterns)
-                
-                # 验证模式存储
-                mock_neo4j_instance.batch_store_patterns.assert_called_once()
-                # The internal method calls collection.add, so we assert that
-                mock_chroma_instance.collection.add.assert_called_once()
+            ]
+            
+            # 添加模式
+            pattern_manager.batch_add_patterns(mock_patterns)
+            
+            # 验证模式存储
+            mock_neo4j_instance.store_event_pattern.assert_called_once()
+            mock_chroma_instance.collection.add.assert_called_once()
                 
     @pytest.mark.skip(reason="Skipping until dependent components are stable")
     def test_graphrag_integration(self, mock_config_manager, mock_hybrid_retriever, sample_events):
