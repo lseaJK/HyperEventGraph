@@ -55,7 +55,7 @@ class DeepSeekEventExtractor:
         self.output_validator = StructuredOutputValidator()
         
         # 模型配置
-        self.model_name = "deepseek-reasoner"
+        self.model_name ="deepseek-chat" # "deepseek-reasoner"
         self.max_retries = 3
         self.timeout = 60
         
@@ -136,16 +136,20 @@ class DeepSeekEventExtractor:
             
             # 处理多事件结果
             events = []
-            # 如果结果是字典且包含 'events' 列表
-            if isinstance(result, dict) and "events" in result and isinstance(result["events"], list):
+            events_list = []
+
+            # Case 1: 结果是包含 'events' 键的字典
+            if isinstance(result, dict) and "events" in result and isinstance(result.get("events"), list):
                 events_list = result["events"]
-            # 如果结果本身就是列表
+            # Case 2: 结果本身就是事件列表
             elif isinstance(result, list):
                 events_list = result
-            else:
-                events_list = []
+            # 其他情况 (None, str, etc.)，events_list 保持为空
 
             for event in events_list:
+                # 确保列表中的每个项目都是字典
+                if not isinstance(event, dict):
+                    continue
                 if metadata:
                     event.setdefault("metadata", {}).update(metadata)
                 event.setdefault("metadata", {})["extraction_timestamp"] = datetime.now().isoformat()

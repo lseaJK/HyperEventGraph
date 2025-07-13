@@ -46,12 +46,14 @@ class RealDataPipeline:
         self.hybrid_retriever = HybridRetriever()
         self.attribute_enhancer = AttributeEnhancer(self.hybrid_retriever)
         self.pattern_discoverer = PatternDiscoverer(self.hybrid_retriever)
-        self.jsonl_manager = JSONLManager()
-        self.graph_exporter = GraphExporter()
         
         # 创建输出目录
         self.output_dir = Path("output/real_data_results")
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 使用正确的输出目录初始化管理器
+        self.jsonl_manager = JSONLManager(output_dir=str(self.output_dir))
+        self.graph_exporter = GraphExporter(output_dir=str(self.output_dir))
         
         print(f"✅ 流水线初始化完成，输出目录: {self.output_dir}")
     
@@ -76,18 +78,15 @@ class RealDataPipeline:
             try:
                 print(f"处理第 {i}/{len(texts)} 条新闻...")
                 
-                # 确保传入的是字符串
                 if not isinstance(text_content, str):
                     print(f"  ⚠️ 第 {i} 条数据不是有效文本，已跳过。")
                     continue
 
-                # 使用DeepSeek进行事件抽取
                 extracted_events_data = await self.event_extractor.extract_multi_events(text_content)
                 
                 if extracted_events_data:
                     print(f"  ✅ 抽取到 {len(extracted_events_data)} 个事件")
                     
-                    # 转换为Event对象
                     for event_data in extracted_events_data:
                         if not isinstance(event_data, dict):
                             print(f"  ⚠️ 无效的事件数据格式，已跳过: {event_data}")
@@ -129,12 +128,9 @@ class RealDataPipeline:
         print("\n🔄 开始GraphRAG增强...")
         
         try:
-            # 属性补充
             enhanced_events_data = []
             for event in events:
-                # 1. 将Event转换为IncompleteEvent
                 missing_attrs = self.attribute_enhancer.supported_attributes
-                
                 incomplete_event = IncompleteEvent(
                     id=event.id,
                     description=event.summary or event.text,
@@ -143,21 +139,16 @@ class RealDataPipeline:
                     participants=event.participants,
                     missing_attributes=missing_attrs
                 )
-                
-                # 2. 调用enhance_event
                 enhanced_event_data = self.attribute_enhancer.enhance_event(incomplete_event)
                 enhanced_events_data.append(enhanced_event_data)
 
-            # 3. 从增强后的数据创建新的Event对象列表
             final_enhanced_events = []
             for enhanced_data in enhanced_events_data:
                 original_event = next((e for e in events if e.id == enhanced_data.original_event.id), None)
                 if not original_event:
                     continue
-
                 new_properties = original_event.properties.copy()
                 new_properties.update(enhanced_data.enhanced_attributes)
-
                 enhanced_event = Event(
                     id=original_event.id,
                     summary=original_event.summary,
@@ -169,7 +160,6 @@ class RealDataPipeline:
                 )
                 final_enhanced_events.append(enhanced_event)
 
-            # 模式发现
             print(f"  - 属性补充完成，现在开始模式发现...")
             patterns = self.pattern_discoverer.discover_patterns(final_enhanced_events)
             
@@ -192,18 +182,20 @@ class RealDataPipeline:
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             
-            events_file = self.output_dir / f"events_{timestamp}.jsonl"
-            relations_file = self.output_dir / f"relations_{timestamp}.jsonl"
-            combined_file = self.output_dir / f"combined_{timestamp}.jsonl"
+            # 只传递文件名给管理器
+            events_filename = f"events_{timestamp}.jsonl"
+            relations_filename = f"relations_{timestamp}.jsonl"
+            combined_filename = f"combined_{timestamp}.jsonl"
+            graph_filename = f"graph_{timestamp}.graphml"
+            report_filename = f"report_{timestamp}.json"
+
+            self.jsonl_manager.write_events_to_jsonl(events, events_filename)
+            self.jsonl_manager.write_relations_to_jsonl(relations, relations_filename)
+            self.jsonl_manager.write_combined_to_jsonl(events, relations, combined_filename)
+            self.graph_exporter.export_to_graphml(events, relations, graph_filename)
             
-            self.jsonl_manager.write_events_to_jsonl(events, str(events_file))
-            self.jsonl_manager.write_relations_to_jsonl(relations, str(relations_file))
-            self.jsonl_manager.write_combined_to_jsonl(events, relations, str(combined_file))
-            
-            graph_file = self.output_dir / f"graph_{timestamp}.graphml"
-            self.graph_exporter.export_to_graphml(events, relations, str(graph_file))
-            
-            report_file = self.output_dir / f"report_{timestamp}.json"
+            # 为报告构建完整路径
+            full_report_path = self.output_dir / report_filename
             report = {
                 "timestamp": timestamp,
                 "statistics": {
@@ -214,25 +206,27 @@ class RealDataPipeline:
                     "relation_types": list(set(rel.relation_type.value for rel in relations) if relations else [])
                 },
                 "files": {
-                    "events": str(events_file),
-                    "relations": str(relations_file),
-                    "combined": str(combined_file),
-                    "graph": str(graph_file)
+                    "events": str(self.output_dir / events_filename),
+                    "relations": str(self.output_dir / relations_filename),
+                    "combined": str(self.output_dir / combined_filename),
+                    "graph": str(self.output_dir / graph_filename)
                 }
             }
             
-            with open(report_file, 'w', encoding='utf-8') as f:
+            with open(full_report_path, 'w', encoding='utf-8') as f:
                 json.dump(report, f, ensure_ascii=False, indent=2)
             
             print(f"✅ 结果导出完成:")
-            print(f"  - 事件文件: {events_file}")
-            print(f"  - 关系文件: {relations_file}")
-            print(f"  - 合并文件: {combined_file}")
-            print(f"  - 图谱文件: {graph_file}")
-            print(f"  - 统计报告: {report_file}")
+            print(f"  - 事件文件: {self.output_dir / events_filename}")
+            print(f"  - 关系文件: {self.output_dir / relations_filename}")
+            print(f"  - 合并文件: {self.output_dir / combined_filename}")
+            print(f"  - 图谱文件: {self.output_dir / graph_filename}")
+            print(f"  - 统计报告: {full_report_path}")
             
         except Exception as e:
             print(f"❌ 结果导出失败: {e}")
+            import traceback
+            traceback.print_exc()
     
     async def run_pipeline(self, data_path: str):
         """运行完整流水线"""
@@ -288,3 +282,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
