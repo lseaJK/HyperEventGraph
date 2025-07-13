@@ -21,7 +21,7 @@ try:
     with open(data_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
     # 只取前几条作为测试样本
-    SAMPLE_TEXTS = [item['content'] for item in data[:3] if isinstance(item, dict) and 'content' in item]
+    SAMPLE_TEXTS = data[:3]
     if not SAMPLE_TEXTS:
         logging.warning("未能从数据文件中加载示例文本，将使用默认文本。")
         SAMPLE_TEXTS = ["这是第一条测试新闻。", "这是第二条。"]
