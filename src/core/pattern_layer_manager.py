@@ -259,6 +259,15 @@ class PatternLayerManager:
             (current_avg * (total_queries - 1) + operation_time) / total_queries
         )
     
+    def batch_add_patterns(self, patterns: List[EventPattern]) -> Dict[str, bool]:
+        """批量添加模式"""
+        # 调用存储层的batch_store_patterns方法（如果存在）
+        if hasattr(self.storage, 'batch_store_patterns'):
+            return self.storage.batch_store_patterns(patterns)
+        else:
+            # 回退到现有的批量添加方法
+            return self.add_patterns_batch(patterns)
+    
     def add_patterns_batch(self, patterns: List[EventPattern]) -> Dict[str, bool]:
         """批量添加模式"""
         results = {}

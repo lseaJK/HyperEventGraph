@@ -10,6 +10,7 @@ Date: 2024-12-19
 
 import sys
 import os
+from datetime import datetime
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
@@ -22,7 +23,6 @@ from unittest.mock import Mock, patch, MagicMock
 from typing import List, Dict, Any
 import json
 import yaml
-from datetime import datetime
 
 # 导入被测试的模块
 from src.core.workflow_controller import WorkflowController, PipelineConfig
@@ -50,8 +50,26 @@ class TestIntegration:
     @pytest.fixture
     def mock_config_manager(self, temp_dir):
         """模拟配置管理器"""
-        # 使用一个真实的PipelineConfig对象，而不是纯粹的Mock
-        config = PipelineConfig(
+        with patch('src.config.workflow_config.get_config_manager') as mock_get_cm:
+            cm = Mock(spec=ConfigManager)
+            cm.database = Mock()
+            cm.database.neo4j_uri = "bolt://localhost:7687"
+            cm.database.neo4j_username = "neo4j"
+            cm.database.neo4j_password = "password"
+            cm.database.chroma_host = "localhost"
+            cm.database.chroma_port = 8000
+            cm.database.chroma_persist_directory = temp_dir
+            
+            cm.workflow = Mock()
+            cm.workflow.batch_size = 10
+            
+            mock_get_cm.return_value = cm
+            yield cm
+
+    @pytest.fixture
+    def pipeline_config(self, temp_dir):
+        """创建一个真实的PipelineConfig对象"""
+        return PipelineConfig(
             chroma_config={
                 "host": "localhost",
                 "port": 8000,
@@ -63,22 +81,21 @@ class TestIntegration:
                 "password": "password"
             },
             llm_config={
-                "primary_llm_model": "qwen2.5:14b",
-                "bge_model_name": "smartcreation/bge-large-zh-v1.5:latest",
-                "llm_base_url": "http://localhost:11434",
-                "bge_base_url": "http://localhost:11434"
+                "provider": "deepseek",
+                "api_key": "test_key",
+                "model": "deepseek-chat",
+                "base_url": "http://localhost:11434"
             },
             batch_size=10,
             max_workers=5,
             enable_monitoring=True
         )
-        yield config
 
     @pytest.fixture
     def sample_text_data(self):
         """示例文本数据"""
         return [
-            "2024年12月19日，���科技公司发布了新的AI产品，引起了市场的广泛关注。",
+            "2024年12月19日，某科技公司发布了新的AI产品，引起了市场的广泛关注。",
             "该产品采用了最新的大语言模型技术，能够实现更加智能的对话交互。",
             "投资者对此反应积极，公司股价在发布会后上涨了15%。",
             "分析师认为，这一产品将对整个AI行业产生重要影响。",
@@ -94,7 +111,7 @@ class TestIntegration:
                 summary="科技公司发布AI产品",
                 text="某科技公司发布了新的AI产品",
                 event_type=EventType.PRODUCT_LAUNCH,
-                timestamp=datetime.fromisoformat("2024-12-19T10:00:00+00:00"),
+                timestamp=datetime.now(),
                 participants=[Entity(name="科技公司"), Entity(name="AI产品")],
                 properties={"影响范围": "市场", "关注度": "广泛"}
             ),
@@ -103,7 +120,7 @@ class TestIntegration:
                 summary="股价上涨",
                 text="公司股价在发布会后上涨了15%",
                 event_type=EventType.OTHER,
-                timestamp=datetime.fromisoformat("2024-12-19T14:00:00+00:00"),
+                timestamp=datetime.now(),
                 participants=[Entity(name="公司"), Entity(name="股价")],
                 properties={"涨幅": "15%", "时机": "发布会后"}
             ),
@@ -112,7 +129,7 @@ class TestIntegration:
                 summary="竞争对手加快研发",
                 text="竞争对手开始加快产品研发进度",
                 event_type=EventType.ACTION,
-                timestamp=datetime.fromisoformat("2024-12-19T16:00:00+00:00"),
+                timestamp=datetime.now(),
                 participants=[Entity(name="竞争对手"), Entity(name="产品研发")],
                 properties={"目的": "应对竞争", "行动": "加快进度"}
             )
@@ -131,7 +148,7 @@ class TestIntegration:
                     summary="测试事件1",
                     text="这是一个测试事件",
                     event_type=EventType.OTHER,
-                    timestamp=datetime.fromisoformat("2024-12-19T10:00:00+00:00"),
+                    timestamp=datetime.now(),
                     participants=[Entity(name="实体1"), Entity(name="实体2")],
                     properties={"属性1": "值1"}
                 )
@@ -178,7 +195,7 @@ class TestIntegration:
     @pytest.fixture
     def mock_llm_client(self):
         """模拟LLM客户端"""
-        with patch('src.llm_integration.llm_event_extractor.LLMEventExtractor') as mock:
+        with patch('src.llm_integration.llm_client.LLMClient') as mock:
             client = Mock()
             
             # 模拟LLM响应
@@ -202,12 +219,12 @@ class TestIntegration:
             yield client
 
     @pytest.mark.skip(reason="Skipping until dependent components are stable")
-    def test_end_to_end_pipeline(self, mock_config_manager, mock_dual_layer_architecture, 
+    def test_end_to_end_pipeline(self, pipeline_config, mock_dual_layer_architecture, 
                                  mock_hybrid_retriever, mock_llm_client, sample_text_data, temp_dir):
         """测试端到端流水线"""
         # 创建工作流控制器
         with patch('src.core.workflow_controller.DualLayerArchitecture', return_value=mock_dual_layer_architecture):
-            workflow = WorkflowController(config=mock_config_manager)
+            workflow = WorkflowController(config=pipeline_config)
             
             # 执行完整流水线
             results = asyncio.run(workflow.execute_pipeline(
@@ -220,17 +237,17 @@ class TestIntegration:
             assert results.status == 'completed'
             assert len(results.stage_results) > 0
             
-    def test_configuration_integration(self, mock_config_manager, temp_dir):
+    def test_configuration_integration(self, pipeline_config, temp_dir):
         """测试配置集成"""
         # 测试配置管理器
-        config = mock_config_manager
+        config = pipeline_config
         
         # 验证配置加载
         assert config.neo4j_config["uri"] == "bolt://localhost:7687"
-        assert config.llm_config["primary_llm_model"] == "qwen2.5:14b"
+        assert config.llm_config["model"] == "deepseek-chat"
         assert config.batch_size == 10
         
-    def test_database_integration(self, mock_config_manager, mock_hybrid_retriever, temp_dir):
+    def test_database_integration(self, mock_hybrid_retriever, temp_dir):
         """测试数据库集成"""
         # 测试Neo4j和ChromaDB连接状态
         status = mock_hybrid_retriever.get_connection_status()
@@ -241,57 +258,59 @@ class TestIntegration:
         
     def test_event_processing_pipeline(self, mock_config_manager, sample_events, temp_dir):
         """测试事件处理流水线"""
-        with patch('src.storage.neo4j_event_storage.Neo4jEventStorage') as mock_neo4j:
-            with patch('src.event_logic.hybrid_retriever.ChromaDBRetriever') as mock_chroma:
-                # 模拟存储操作
-                mock_neo4j_instance = Mock()
-                mock_chroma_instance = Mock()
-                mock_neo4j.return_value = mock_neo4j_instance
-                mock_chroma.return_value = mock_chroma_instance
-                
-                # 创建事件层管理器
-                event_manager = EventLayerManager(
-                    storage=mock_neo4j_instance
-                )
+        with patch('src.storage.neo4j_event_storage.Neo4jEventStorage') as mock_neo4j, \
+             patch('src.event_logic.hybrid_retriever.ChromaDBRetriever') as mock_chroma:
+            
+            # 模拟存储操作
+            mock_neo4j_instance = Mock()
+            mock_chroma_instance = Mock()
+            mock_neo4j.return_value = mock_neo4j_instance
+            mock_chroma.return_value = mock_chroma_instance
+            
+            # 创建事件层管理器
+            with patch('src.core.event_layer_manager.get_config_manager', return_value=mock_config_manager):
+                event_manager = EventLayerManager()
+                # Manually inject mocks since __init__ is now simple
+                event_manager.neo4j_storage = mock_neo4j_instance
+                event_manager.chroma_retriever = mock_chroma_instance
 
                 # 批量添加事件
                 event_manager.batch_add_events(sample_events)
-
+                
                 # 验证存储操作
                 mock_neo4j_instance.batch_store_events.assert_called_once()
-                # EventLayerManager不直接与ChromaDB交互，因此移除对mock_chroma_instance的断言
+                mock_chroma_instance.add_events.assert_called_once()
                 
-    def test_relation_analysis_integration(self, mock_config_manager, sample_events, mock_llm_client):
+    def test_relation_analysis_integration(self, sample_events, mock_llm_client):
         """测试关系分析集成"""
-        with patch('src.llm_integration.llm_event_extractor.LLMEventExtractor', return_value=mock_llm_client):
-            # 创建事理逻辑分析器
-            analyzer = EventLogicAnalyzer(llm_client=mock_llm_client)
-            
-            # 分析事件关系
-            relations = analyzer.analyze_event_relations(sample_events)
-            
-            # 验证关系分析结果
-            assert len(relations) > 0
-            assert all(isinstance(rel.relation_type, RelationType) for rel in relations)
-            assert all(hasattr(rel, 'confidence') for rel in relations)
+        # 创建事理逻辑分析器
+        analyzer = EventLogicAnalyzer(llm_client=mock_llm_client)
+        
+        # 分析事件关系
+        relations = analyzer.analyze_event_relations(sample_events)
+        
+        # 验证关系分析结果
+        assert len(relations) > 0
+        assert all(isinstance(rel.relation_type, RelationType) for rel in relations)
+        assert all(hasattr(rel, 'confidence') for rel in relations)
             
     def test_pattern_discovery_integration(self, mock_config_manager, sample_events, temp_dir):
         """测试模式发现集成"""
-        with patch('src.storage.neo4j_event_storage.Neo4jEventStorage') as mock_neo4j:
-            # Patching the ChromaDBRetriever where it's instantiated
-            with patch('src.core.pattern_layer_manager.ChromaDBRetriever') as mock_chroma:
-                # 模拟存储
-                mock_neo4j_instance = Mock()
-                mock_chroma_instance = Mock()
-                mock_neo4j.return_value = mock_neo4j_instance
-                mock_chroma.return_value = mock_chroma_instance
-                
-                # 创建模式层管理器
-                pattern_manager = PatternLayerManager(
-                    storage=mock_neo4j_instance,
-                    chroma_config={'persist_directory': temp_dir} # Provide necessary config
-                )
-                
+        with patch('src.storage.neo4j_event_storage.Neo4jEventStorage') as mock_neo4j, \
+             patch('src.event_logic.hybrid_retriever.ChromaDBRetriever') as mock_chroma:
+            # 模拟存储
+            mock_neo4j_instance = Mock()
+            mock_chroma_instance = Mock()
+            mock_neo4j.return_value = mock_neo4j_instance
+            mock_chroma.return_value = mock_chroma_instance
+            
+            # 创建模式层管理器
+            with patch('src.core.pattern_layer_manager.get_config_manager', return_value=mock_config_manager):
+                pattern_manager = PatternLayerManager()
+                # Manually inject mocks
+                pattern_manager.neo4j_storage = mock_neo4j_instance
+                pattern_manager.chroma_retriever = mock_chroma_instance
+
                 # 模拟模式发现
                 mock_patterns = [
                     EventPattern(
@@ -310,11 +329,10 @@ class TestIntegration:
                 
                 # 验证模式存储
                 mock_neo4j_instance.batch_store_patterns.assert_called_once()
-                # The internal method calls collection.add, so we assert that
-                mock_chroma_instance.collection.add.assert_called_once()
+                mock_chroma_instance.add_patterns.assert_called_once()
                 
     @pytest.mark.skip(reason="Skipping until dependent components are stable")
-    def test_graphrag_integration(self, mock_config_manager, mock_hybrid_retriever, sample_events):
+    def test_graphrag_integration(self, mock_hybrid_retriever, sample_events):
         """测试GraphRAG集成"""
         with patch('src.rag.knowledge_retriever.HybridRetriever', return_value=mock_hybrid_retriever):
             # 创建知识检索器
@@ -336,14 +354,14 @@ class TestIntegration:
             assert "events" in results
             assert "summary" in results
             
-    def test_output_generation_integration(self, mock_config_manager, sample_events, temp_dir):
+    def test_output_generation_integration(self, sample_events, temp_dir):
         """测试输出生成集成"""
         # 测试JSONL输出
         jsonl_manager = JSONLManager()
         
         # 生成事件JSONL
         events_file = os.path.join(temp_dir, "events.jsonl")
-        jsonl_manager.write_events_to_jsonl([e.to_dict() for e in sample_events], events_file)
+        jsonl_manager.save_to_jsonl([e.to_dict() for e in sample_events], events_file)
         
         # 验证文件生成
         assert os.path.exists(events_file)
@@ -360,7 +378,7 @@ class TestIntegration:
                 assert "summary" in event_data
                 assert "event_type" in event_data
                 
-    def test_graph_export_integration(self, mock_config_manager, temp_dir):
+    def test_graph_export_integration(self, pipeline_config, temp_dir):
         """测试图谱导出集成"""
         with patch('src.output.graph_exporter.GraphDatabase') as mock_graph_db:
             mock_driver = MagicMock()
@@ -368,42 +386,62 @@ class TestIntegration:
             mock_result = MagicMock()
             
             # 模拟Neo4j数据
-            mock_result.data.return_value = [
-                {
-                    "n": {"id": "event_001", "labels": ["Event"], "properties": {"title": "测试事件1"}},
-                    "m": {"id": "event_002", "labels": ["Event"], "properties": {"title": "测试事件2"}},
-                    "r": {"source": "event_001", "target": "event_002", "type": "CAUSES", "properties": {"confidence": 0.8}}
-                }
-            ]
+            # Create mock node/rel objects that have the required attributes
+            mock_node1 = MagicMock()
+            mock_node1.id = 'event_001'
+            mock_node1.labels = ['Event']
+            mock_node1.items.return_value = {'title': '测试事件1'}.items()
+            # To make it subscriptable for dict(node)
+            mock_node1.__getitem__ = lambda s, k: {'title': '测试事件1'}[k]
+
+
+            mock_node2 = MagicMock()
+            mock_node2.id = 'event_002'
+            mock_node2.labels = ['Event']
+            mock_node2.items.return_value = {'title': '测试事件2'}.items()
+            mock_node2.__getitem__ = lambda s, k: {'title': '测试事件2'}[k]
+
+            mock_rel = MagicMock()
+            mock_rel.id = 'rel_1'
+            mock_rel.type = 'CAUSES'
+            mock_rel.start_node = mock_node1
+            mock_rel.end_node = mock_node2
+            mock_rel.items.return_value = {'confidence': 0.8}.items()
+            mock_rel.__getitem__ = lambda s, k: {'confidence': 0.8}[k]
+
+            # A record can be accessed by key
+            mock_record = MagicMock()
+            def getitem(key):
+                if key == 'n': return mock_node1
+                if key == 'm': return mock_node2
+                if key == 'r': return mock_rel
+            mock_record.__getitem__.side_effect = getitem
+            mock_record.keys.return_value = ['n', 'm', 'r']
+
+
+            # The result of session.run is iterable
+            mock_result.__iter__.return_value = [mock_record]
+
             mock_session.run.return_value = mock_result
-            mock_driver.session.return_value = mock_session
+            mock_driver.session.return_value.__enter__.return_value = mock_session
             mock_graph_db.driver.return_value = mock_driver
 
             # 创建图谱导出器
             exporter = GraphExporter(
                 output_dir=temp_dir,
-                neo4j_uri=mock_config_manager.neo4j_config['uri'],
-                neo4j_user=mock_config_manager.neo4j_config['username'],
-                neo4j_password=mock_config_manager.neo4j_config['password']
+                neo4j_uri=pipeline_config.neo4j_config['uri'],
+                neo4j_user=pipeline_config.neo4j_config['username'],
+                neo4j_password=pipeline_config.neo4j_config['password']
             )
-            
-            # 准备图数据
-            nodes = [
-                {"id": "event_001", "labels": ["Event"], "properties": {"title": "测试事件1"}},
-                {"id": "event_002", "labels": ["Event"], "properties": {"title": "测试事件2"}}
-            ]
-            edges = [
-                {"source": "event_001", "target": "event_002", "type": "CAUSES", "properties": {"confidence": 0.8}}
-            ]
             
             # 导出GraphML
             graphml_file = os.path.join(temp_dir, "graph.graphml")
-            exporter.export_to_graphml(filename=graphml_file, nodes=nodes, edges=edges)
+            exporter.export_to_graphml(filename=graphml_file, cypher_query="MATCH (n)-[r]->(m) RETURN n,r,m")
             
             # 验证文件生成
             assert os.path.exists(graphml_file)
             
-    def test_error_handling_integration(self, mock_config_manager, sample_text_data, temp_dir):
+    def test_error_handling_integration(self, pipeline_config, sample_text_data, temp_dir):
         """测试错误处理集成"""
         # 模拟数据库连接失败
         with patch('src.core.workflow_controller.WorkflowController._init_components') as mock_init:
@@ -411,12 +449,12 @@ class TestIntegration:
             
             # 创建工作流控制器并验证错误处理
             with pytest.raises(Exception) as exc_info:
-                WorkflowController(config=mock_config_manager)
+                WorkflowController(config=pipeline_config)
                 
             assert "数据库连接失败" in str(exc_info.value)
             
     @pytest.mark.skip(reason="Skipping until dependent components are stable")
-    def test_performance_monitoring_integration(self, mock_config_manager, sample_events):
+    def test_performance_monitoring_integration(self, sample_events):
         """测试性能监控集成"""
         with patch('src.rag.knowledge_retriever.HybridRetriever') as mock_retriever:
             # 模拟检索器
@@ -448,7 +486,7 @@ class TestIntegration:
             assert stats["total_queries"] == 5
             
     @pytest.mark.skip(reason="Skipping until dependent components are stable")
-    def test_concurrent_processing_integration(self, mock_config_manager, sample_events, temp_dir):
+    def test_concurrent_processing_integration(self, sample_events, temp_dir):
         """测试并发处理集成"""
         with patch('src.rag.knowledge_retriever.HybridRetriever') as mock_retriever:
             # 模拟检索器
@@ -476,7 +514,7 @@ class TestIntegration:
             assert all("events" in result for result in results.values())
             
     @pytest.mark.skip(reason="Skipping until dependent components are stable")
-    def test_cache_integration(self, mock_config_manager, sample_events):
+    def test_cache_integration(self, sample_events):
         """测试缓存集成"""
         with patch('src.rag.knowledge_retriever.HybridRetriever') as mock_retriever:
             # 模拟检索器
@@ -510,8 +548,8 @@ class TestIntegration:
             assert stats["cache_hit_rate"] > 0
             
     @pytest.mark.asyncio
-    async def test_async_processing_integration(self, mock_config_manager, sample_text_data):
-        """测试异步处理��成"""
+    async def test_async_processing_integration(self, sample_text_data):
+        """测试异步处理集成"""
         # 模拟异步工作流
         async def mock_async_process(text):
             await asyncio.sleep(0.01)  # 模拟异步处理

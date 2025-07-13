@@ -142,6 +142,22 @@ class EventLayerManager:
             self.logger.error(f"添加事件失败: {str(e)}")
             return False
     
+    def batch_add_events(self, events: List[Event]) -> Dict[str, bool]:
+        """批量添加事件
+        
+        Args:
+            events: 事件列表
+            
+        Returns:
+            Dict[str, bool]: 事件ID -> 是否成功
+        """
+        # 调用存储层的batch_store_events方法（如果存在）
+        if hasattr(self.storage, 'batch_store_events'):
+            return self.storage.batch_store_events(events)
+        else:
+            # 回退到现有的批量添加方法
+            return self.add_events_batch(events)
+    
     def add_events_batch(self, events: List[Event]) -> Dict[str, bool]:
         """批量添加事件
         
