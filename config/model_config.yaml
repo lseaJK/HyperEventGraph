@@ -1,0 +1,329 @@
+# HyperEventGraph 模型配置文件
+# 包含LLM模型、BGE嵌入模型配置和提示词模板
+
+# LLM 模型配置
+llm_models:
+  # 主要模型配置
+  primary:
+    provider: "ollama"
+    model_name: "qwen2.5:14b"
+    base_url: "http://localhost:11434"
+    api_key: null
+    timeout: 120
+    max_retries: 3
+    temperature: 0.1
+    max_tokens: 4096
+    top_p: 0.9
+    frequency_penalty: 0.0
+    presence_penalty: 0.0
+    
+  # 备用模型配置
+  fallback:
+    provider: "ollama"
+    model_name: "qwen2.5:7b"
+    base_url: "http://localhost:11434"
+    api_key: null
+    timeout: 60
+    max_retries: 2
+    temperature: 0.2
+    max_tokens: 2048
+    
+  # 专用模型配置
+  specialized:
+    # 事件抽取专用模型
+    event_extraction:
+      provider: "ollama"
+      model_name: "qwen2.5:14b"
+      temperature: 0.05
+      max_tokens: 2048
+      
+    # 关系分析专用模型
+    relation_analysis:
+      provider: "ollama"
+      model_name: "qwen2.5:14b"
+      temperature: 0.1
+      max_tokens: 3072
+      
+    # 模式发现专用模型
+    pattern_discovery:
+      provider: "ollama"
+      model_name: "qwen2.5:14b"
+      temperature: 0.15
+      max_tokens: 4096
+      
+    # 属性增强专用模型
+    attribute_enhancement:
+      provider: "ollama"
+      model_name: "qwen2.5:7b"
+      temperature: 0.1
+      max_tokens: 1024
+
+# BGE 嵌入模型配置
+embedding_models:
+  # 主要嵌入模型
+  primary:
+    provider: "ollama"
+    model_name: "smartcreation/bge-large-zh-v1.5:latest"
+    base_url: "http://localhost:11434"
+    embedding_dim: 1024
+    max_length: 512
+    normalize: true
+    batch_size: 32
+    timeout: 60
+    
+  # 备用嵌入模型
+  fallback:
+    provider: "ollama"
+    model_name: "smartcreation/bge-base-zh-v1.5:latest"
+    base_url: "http://localhost:11434"
+    embedding_dim: 768
+    max_length: 512
+    normalize: true
+    batch_size: 64
+    
+  # 多语言嵌入模型
+  multilingual:
+    provider: "ollama"
+    model_name: "smartcreation/bge-m3:latest"
+    base_url: "http://localhost:11434"
+    embedding_dim: 1024
+    max_length: 8192
+    normalize: true
+    batch_size: 16
+
+# 提示词模板配置
+prompt_templates:
+  # 事件抽取提示词
+  event_extraction:
+    system_prompt: |
+      你是一个专业的事件抽取专家。请从给定的文本中识别和抽取所有重要事件。
+      
+      对于每个事件，请提供以下信息：
+      1. 事件类型（ACTION, STATE_CHANGE, COMMUNICATION, DECISION, OBSERVATION）
+      2. 事件描述（简洁明确）
+      3. 参与者（人物、组织等）
+      4. 时间信息（如果有）
+      5. 地点信息（如果有）
+      6. 相关实体
+      
+      请以JSON格式输出结果。
+      
+    user_prompt: |
+      请从以下文本中抽取事件：
+      
+      文本：{text}
+      
+      请按照指定格式输出事件信息。
+      
+  # 关系分析提示词
+  relation_analysis:
+    system_prompt: |
+      你是一个专业的事件关系分析专家。请分析给定事件之间的关系。
+      
+      关系类型包括：
+      1. CAUSAL - 因果关系
+      2. TEMPORAL - 时序关系
+      3. CONDITIONAL - 条件关系
+      4. PARALLEL - 并行关系
+      5. HIERARCHICAL - 层次关系
+      
+      对于每个关系，请提供：
+      1. 源事件ID
+      2. 目标事件ID
+      3. 关系类型
+      4. 置信度（0-1）
+      5. 关系描述
+      
+      请以JSON格式输出结果。
+      
+    user_prompt: |
+      请分析以下事件之间的关系：
+      
+      事件列表：
+      {events}
+      
+      请识别事件间的关系并按照指定格式输出。
+      
+  # 模式发现提示词
+  pattern_discovery:
+    system_prompt: |
+      你是一个专业的事件模式发现专家。请从给定的事件序列中发现重复出现的模式。
+      
+      模式特征：
+      1. 事件序列的重复性
+      2. 时间间隔的规律性
+      3. 参与者的一致性
+      4. 结果的相似性
+      
+      对于每个模式，请提供：
+      1. 模式名称
+      2. 模式描述
+      3. 包含的事件类型序列
+      4. 支持度（出现频率）
+      5. 置信度
+      6. 典型实例
+      
+      请以JSON格式输出结果。
+      
+    user_prompt: |
+      请从以下事件序列中发现模式：
+      
+      事件序列：
+      {event_sequences}
+      
+      请识别重复模式并按照指定格式输出。
+      
+  # 属性增强提示词
+  attribute_enhancement:
+    system_prompt: |
+      你是一个专业的事件属性增强专家。请为给定事件补充缺失的属性信息。
+      
+      可增强的属性包括：
+      1. 时间信息（具体时间、持续时间）
+      2. 地点信息（具体位置、地理范围）
+      3. 参与者信息（角色、关系）
+      4. 影响范围（直接影响、间接影响）
+      5. 重要程度（1-10评分）
+      6. 情感倾向（正面、负面、中性）
+      
+      请基于上下文和常识进行合理推断。
+      
+    user_prompt: |
+      请为以下事件补充属性信息：
+      
+      事件：{event}
+      
+      上下文：{context}
+      
+      请补充缺失的属性并以JSON格式输出。
+      
+  # 子图检索提示词
+  subgraph_retrieval:
+    system_prompt: |
+      你是一个专业的图检索专家。请根据查询需求从事件图中检索相关的子图。
+      
+      检索策略：
+      1. 关键词匹配
+      2. 语义相似度
+      3. 结构相似度
+      4. 时间相关性
+      5. 因果相关性
+      
+      请返回最相关的事件和关系，并提供相关性评分。
+      
+    user_prompt: |
+      查询需求：{query}
+      
+      可用事件图：{graph_info}
+      
+      请检索相关子图并按相关性排序。
+      
+  # 知识检索提示词
+  knowledge_retrieval:
+    system_prompt: |
+      你是一个专业的知识检索专家。请根据用户查询检索相关的事件知识。
+      
+      检索类型：
+      1. 事件搜索 - 基于关键词和实体
+      2. 关系查询 - 查找事件间关系
+      3. 因果分析 - 分析因果链条
+      4. 时序分析 - 分析时间序列
+      5. 实体查询 - 查找实体相关事件
+      
+      请提供准确、相关的检索结果。
+      
+    user_prompt: |
+      用户查询：{query}
+      
+      查询类型：{query_type}
+      
+      请检索相关知识并提供结构化结果。
+
+# 模型性能配置
+model_performance:
+  # 推理性能配置
+  inference:
+    # 批处理配置
+    batch_processing:
+      enabled: true
+      max_batch_size: 16
+      batch_timeout: 5  # 秒
+      
+    # 并发配置
+    concurrency:
+      max_concurrent_requests: 4
+      request_queue_size: 100
+      
+    # 缓存配置
+    caching:
+      enable_response_cache: true
+      cache_ttl: 1800  # 秒
+      max_cache_size: 1000
+      
+  # 嵌入性能配置
+  embedding:
+    # 批处理配置
+    batch_processing:
+      enabled: true
+      max_batch_size: 64
+      batch_timeout: 10  # 秒
+      
+    # 向量缓存
+    vector_caching:
+      enabled: true
+      cache_ttl: 3600  # 秒
+      max_cache_size: 10000
+      
+# 模型监控配置
+model_monitoring:
+  # 性能监控
+  performance_monitoring:
+    enabled: true
+    log_response_times: true
+    log_token_usage: true
+    alert_slow_responses: true
+    slow_response_threshold: 10  # 秒
+    
+  # 质量监控
+  quality_monitoring:
+    enabled: true
+    sample_outputs: true
+    sample_rate: 0.1
+    quality_metrics: ["relevance", "coherence", "completeness"]
+    
+  # 错误监控
+  error_monitoring:
+    enabled: true
+    log_all_errors: true
+    alert_error_rate: true
+    error_rate_threshold: 0.05
+
+# 模型优化配置
+model_optimization:
+  # 自动调优
+  auto_tuning:
+    enabled: false
+    tune_temperature: true
+    tune_max_tokens: true
+    tune_batch_size: true
+    
+  # 模型选择
+  model_selection:
+    enable_auto_fallback: true
+    fallback_on_error: true
+    fallback_on_timeout: true
+    performance_based_selection: false
+    
+# 实验配置
+experimental:
+  # A/B 测试
+  ab_testing:
+    enabled: false
+    test_groups: []
+    traffic_split: 0.5
+    
+  # 新模型测试
+  model_testing:
+    enabled: false
+    test_models: []
+    test_traffic_percentage: 0.1

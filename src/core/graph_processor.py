@@ -17,6 +17,8 @@ from datetime import datetime, timedelta
 
 from ..models.event_data_model import Event, EventPattern, EventRelation, EventType, RelationType
 from ..storage.neo4j_event_storage import Neo4jEventStorage
+from ..storage.chroma_event_storage import ChromaEventStorage
+from ..event_logic.event_logic_analyzer import EventLogicAnalyzer
 from .event_layer_manager import EventLayerManager
 from .pattern_layer_manager import PatternLayerManager
 from .layer_mapper import LayerMapper
@@ -63,12 +65,16 @@ class GraphProcessor:
     """图处理器"""
     
     def __init__(self, 
-                 storage: Neo4jEventStorage,
+                 neo4j_storage: Neo4jEventStorage,
+                 chroma_storage: ChromaEventStorage,
+                 event_logic_analyzer: EventLogicAnalyzer,
                  event_manager: EventLayerManager,
                  pattern_manager: PatternLayerManager,
                  layer_mapper: LayerMapper,
                  config: GraphAnalysisConfig = None):
-        self.storage = storage
+        self.neo4j_storage = neo4j_storage
+        self.chroma_storage = chroma_storage
+        self.event_logic_analyzer = event_logic_analyzer
         self.event_manager = event_manager
         self.pattern_manager = pattern_manager
         self.layer_mapper = layer_mapper
@@ -595,9 +601,19 @@ class GraphProcessor:
     
     def _get_event_relations(self, events: List[Event]) -> List[EventRelation]:
         """获取事件关系"""
-        # 这里应该从存储层获取关系
-        # 简化实现：返回空列表
-        return []
+        try:
+            # 从Neo4j存储获取关系
+            relations = []
+            event_ids = [event.id for event in events]
+            
+            for event_id in event_ids:
+                event_relations = self.neo4j_storage.get_event_relations(event_id)
+                relations.extend(event_relations)
+            
+            return relations
+        except Exception as e:
+            self.logger.error(f"获取事件关系失败: {str(e)}")
+            return []
     
     def _add_pattern_similarity_edges(self, graph: nx.Graph, patterns: List[EventPattern]):
         """添加模式相似性边"""
@@ -1047,3 +1063,411 @@ class GraphProcessor:
                         anomalies.append(anomaly)
         
         return anomalies
+    
+    def analyze_event_logic_relations(self, events: List[Event]) -> Dict[str, Any]:
+        """分析事理关系
+        
+        Args:
+            events: 事件列表
+            
+        Returns:
+            Dict[str, Any]: 事理关系分析结果
+        """
+        try:
+            if not events:
+                return {"error": "事件列表为空"}
+            
+            # 使用事理关系分析器分析关系
+            logic_relations = self.event_logic_analyzer.analyze_relations(events)
+            
+            # 分析结果统计
+            relation_stats = {
+                "total_relations": len(logic_relations),
+                "relation_types": {},
+                "confidence_distribution": {},
+                "temporal_patterns": {},
+                "causal_chains": []
+            }
+            
+            # 统计关系类型
+            for relation in logic_relations:
+                rel_type = str(relation.relation_type)
+                relation_stats["relation_types"][rel_type] = relation_stats["relation_types"].get(rel_type, 0) + 1
+                
+                # 统计置信度分布
+                confidence_range = self._get_confidence_range(relation.confidence)
+                relation_stats["confidence_distribution"][confidence_range] = relation_stats["confidence_distribution"].get(confidence_range, 0) + 1
+            
+            # 分析因果链
+            causal_chains = self._extract_causal_chains(logic_relations)
+            relation_stats["causal_chains"] = causal_chains
+            
+            # 分析时序模式
+            temporal_patterns = self._analyze_temporal_logic_patterns(logic_relations)
+            relation_stats["temporal_patterns"] = temporal_patterns
+            
+            return {
+                "relations": [self._relation_to_dict(rel) for rel in logic_relations],
+                "statistics": relation_stats,
+                "analysis_timestamp": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            self.logger.error(f"事理关系分析失败: {str(e)}")
+            return {"error": f"分析失败: {str(e)}"}
+    
+    def store_to_dual_databases(self, events: List[Event], relations: List[EventRelation], 
+                               patterns: List[EventPattern] = None) -> Dict[str, bool]:
+        """存储到双数据库（ChromaDB和Neo4j）
+        
+        Args:
+            events: 事件列表
+            relations: 关系列表
+            patterns: 模式列表（可选）
+            
+        Returns:
+            Dict[str, bool]: 存储结果状态
+        """
+        storage_results = {
+            "neo4j_events": False,
+            "neo4j_relations": False,
+            "neo4j_patterns": False,
+            "chroma_events": False,
+            "chroma_patterns": False
+        }
+        
+        try:
+            # 存储到Neo4j
+            if events:
+                try:
+                    for event in events:
+                        self.neo4j_storage.store_event(event)
+                    storage_results["neo4j_events"] = True
+                    self.logger.info(f"成功存储 {len(events)} 个事件到Neo4j")
+                except Exception as e:
+                    self.logger.error(f"存储事件到Neo4j失败: {str(e)}")
+            
+            if relations:
+                try:
+                    for relation in relations:
+                        self.neo4j_storage.store_relation(relation)
+                    storage_results["neo4j_relations"] = True
+                    self.logger.info(f"成功存储 {len(relations)} 个关系到Neo4j")
+                except Exception as e:
+                    self.logger.error(f"存储关系到Neo4j失败: {str(e)}")
+            
+            if patterns:
+                try:
+                    for pattern in patterns:
+                        self.neo4j_storage.store_pattern(pattern)
+                    storage_results["neo4j_patterns"] = True
+                    self.logger.info(f"成功存储 {len(patterns)} 个模式到Neo4j")
+                except Exception as e:
+                    self.logger.error(f"存储模式到Neo4j失败: {str(e)}")
+            
+            # 存储到ChromaDB
+            if events:
+                try:
+                    self.chroma_storage.store_events(events)
+                    storage_results["chroma_events"] = True
+                    self.logger.info(f"成功存储 {len(events)} 个事件到ChromaDB")
+                except Exception as e:
+                    self.logger.error(f"存储事件到ChromaDB失败: {str(e)}")
+            
+            if patterns:
+                try:
+                    self.chroma_storage.store_patterns(patterns)
+                    storage_results["chroma_patterns"] = True
+                    self.logger.info(f"成功存储 {len(patterns)} 个模式到ChromaDB")
+                except Exception as e:
+                    self.logger.error(f"存储模式到ChromaDB失败: {str(e)}")
+            
+            return storage_results
+            
+        except Exception as e:
+            self.logger.error(f"双数据库存储失败: {str(e)}")
+            return storage_results
+    
+    def query_from_dual_databases(self, query_type: str, **kwargs) -> Dict[str, Any]:
+        """从双数据库查询数据
+        
+        Args:
+            query_type: 查询类型 ('events', 'relations', 'patterns', 'hybrid')
+            **kwargs: 查询参数
+            
+        Returns:
+            Dict[str, Any]: 查询结果
+        """
+        try:
+            results = {
+                "neo4j_results": [],
+                "chroma_results": [],
+                "merged_results": [],
+                "query_metadata": {
+                    "query_type": query_type,
+                    "timestamp": datetime.now().isoformat()
+                }
+            }
+            
+            if query_type == "events":
+                # 从Neo4j查询结构化数据
+                try:
+                    neo4j_events = self.neo4j_storage.query_events(**kwargs)
+                    results["neo4j_results"] = [self._event_to_dict(event) for event in neo4j_events]
+                except Exception as e:
+                    self.logger.error(f"Neo4j事件查询失败: {str(e)}")
+                
+                # 从ChromaDB查询向量相似数据
+                try:
+                    if "query_text" in kwargs:
+                        chroma_events = self.chroma_storage.search_similar_events(
+                            kwargs["query_text"], 
+                            limit=kwargs.get("limit", 10)
+                        )
+                        results["chroma_results"] = [self._event_to_dict(event) for event, _ in chroma_events]
+                except Exception as e:
+                    self.logger.error(f"ChromaDB事件查询失败: {str(e)}")
+            
+            elif query_type == "relations":
+                try:
+                    neo4j_relations = self.neo4j_storage.query_relations(**kwargs)
+                    results["neo4j_results"] = [self._relation_to_dict(rel) for rel in neo4j_relations]
+                except Exception as e:
+                    self.logger.error(f"Neo4j关系查询失败: {str(e)}")
+            
+            elif query_type == "patterns":
+                # 从Neo4j查询结构化模式
+                try:
+                    neo4j_patterns = self.neo4j_storage.query_patterns(**kwargs)
+                    results["neo4j_results"] = [self._pattern_to_dict(pattern) for pattern in neo4j_patterns]
+                except Exception as e:
+                    self.logger.error(f"Neo4j模式查询失败: {str(e)}")
+                
+                # 从ChromaDB查询相似模式
+                try:
+                    if "query_text" in kwargs:
+                        chroma_patterns = self.chroma_storage.search_similar_patterns(
+                            kwargs["query_text"],
+                            limit=kwargs.get("limit", 10)
+                        )
+                        results["chroma_results"] = [self._pattern_to_dict(pattern) for pattern, _ in chroma_patterns]
+                except Exception as e:
+                    self.logger.error(f"ChromaDB模式查询失败: {str(e)}")
+            
+            elif query_type == "hybrid":
+                # 混合查询：结合两个数据库的优势
+                results = self._perform_hybrid_query(**kwargs)
+            
+            # 合并结果
+            results["merged_results"] = self._merge_query_results(
+                results["neo4j_results"], 
+                results["chroma_results"],
+                query_type
+            )
+            
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"双数据库查询失败: {str(e)}")
+            return {"error": f"查询失败: {str(e)}"}
+    
+    def synchronize_databases(self) -> Dict[str, Any]:
+        """同步两个数据库的数据
+        
+        Returns:
+            Dict[str, Any]: 同步结果
+        """
+        try:
+            sync_results = {
+                "events_synced": 0,
+                "patterns_synced": 0,
+                "inconsistencies_found": 0,
+                "sync_timestamp": datetime.now().isoformat(),
+                "status": "success"
+            }
+            
+            # 检查事件数据一致性
+            neo4j_events = self.neo4j_storage.get_all_events(limit=1000)
+            chroma_event_ids = self.chroma_storage.get_all_event_ids()
+            
+            # 同步缺失的事件到ChromaDB
+            missing_in_chroma = []
+            for event in neo4j_events:
+                if event.id not in chroma_event_ids:
+                    missing_in_chroma.append(event)
+            
+            if missing_in_chroma:
+                try:
+                    self.chroma_storage.store_events(missing_in_chroma)
+                    sync_results["events_synced"] = len(missing_in_chroma)
+                    self.logger.info(f"同步了 {len(missing_in_chroma)} 个事件到ChromaDB")
+                except Exception as e:
+                    self.logger.error(f"同步事件到ChromaDB失败: {str(e)}")
+                    sync_results["status"] = "partial_failure"
+            
+            # 检查模式数据一致性
+            neo4j_patterns = self.neo4j_storage.get_all_patterns(limit=500)
+            chroma_pattern_ids = self.chroma_storage.get_all_pattern_ids()
+            
+            # 同步缺失的模式到ChromaDB
+            missing_patterns_in_chroma = []
+            for pattern in neo4j_patterns:
+                if pattern.id not in chroma_pattern_ids:
+                    missing_patterns_in_chroma.append(pattern)
+            
+            if missing_patterns_in_chroma:
+                try:
+                    self.chroma_storage.store_patterns(missing_patterns_in_chroma)
+                    sync_results["patterns_synced"] = len(missing_patterns_in_chroma)
+                    self.logger.info(f"同步了 {len(missing_patterns_in_chroma)} 个模式到ChromaDB")
+                except Exception as e:
+                    self.logger.error(f"同步模式到ChromaDB失败: {str(e)}")
+                    sync_results["status"] = "partial_failure"
+            
+            return sync_results
+            
+        except Exception as e:
+            self.logger.error(f"数据库同步失败: {str(e)}")
+            return {
+                "status": "failure",
+                "error": str(e),
+                "sync_timestamp": datetime.now().isoformat()
+            }
+    
+    # 辅助方法
+    
+    def _get_confidence_range(self, confidence: float) -> str:
+        """获取置信度范围"""
+        if confidence >= 0.8:
+            return "high"
+        elif confidence >= 0.6:
+            return "medium"
+        elif confidence >= 0.4:
+            return "low"
+        else:
+            return "very_low"
+    
+    def _extract_causal_chains(self, relations: List[EventRelation]) -> List[Dict[str, Any]]:
+        """提取因果链"""
+        causal_relations = [rel for rel in relations if rel.relation_type == RelationType.CAUSAL]
+        
+        # 构建因果图
+        causal_graph = nx.DiGraph()
+        for rel in causal_relations:
+            causal_graph.add_edge(rel.source_event_id, rel.target_event_id, 
+                                confidence=rel.confidence)
+        
+        # 查找因果链（简单路径）
+        chains = []
+        for source in causal_graph.nodes():
+            for target in causal_graph.nodes():
+                if source != target:
+                    try:
+                        paths = list(nx.all_simple_paths(causal_graph, source, target, cutoff=5))
+                        for path in paths:
+                            if len(path) > 2:  # 至少3个事件的链
+                                chain_confidence = self._calculate_chain_confidence(causal_graph, path)
+                                chains.append({
+                                    "chain": path,
+                                    "length": len(path),
+                                    "confidence": chain_confidence
+                                })
+                    except nx.NetworkXNoPath:
+                        continue
+        
+        # 按置信度排序，返回前10个
+        chains.sort(key=lambda x: x["confidence"], reverse=True)
+        return chains[:10]
+    
+    def _calculate_chain_confidence(self, graph: nx.DiGraph, path: List[str]) -> float:
+        """计算链的置信度"""
+        confidences = []
+        for i in range(len(path) - 1):
+            edge_data = graph.get_edge_data(path[i], path[i + 1])
+            if edge_data:
+                confidences.append(edge_data.get("confidence", 0.5))
+        
+        return sum(confidences) / len(confidences) if confidences else 0.0
+    
+    def _analyze_temporal_logic_patterns(self, relations: List[EventRelation]) -> Dict[str, Any]:
+        """分析时序逻辑模式"""
+        temporal_relations = [rel for rel in relations if rel.relation_type == RelationType.TEMPORAL]
+        
+        patterns = {
+            "sequential_patterns": len(temporal_relations),
+            "average_time_gap": 0.0,
+            "pattern_types": {}
+        }
+        
+        # 简化的时序模式分析
+        for rel in temporal_relations:
+            pattern_type = "sequential"  # 简化分类
+            patterns["pattern_types"][pattern_type] = patterns["pattern_types"].get(pattern_type, 0) + 1
+        
+        return patterns
+    
+    def _relation_to_dict(self, relation: EventRelation) -> Dict[str, Any]:
+        """将关系转换为字典"""
+        return {
+            "id": relation.id,
+            "source_event_id": relation.source_event_id,
+            "target_event_id": relation.target_event_id,
+            "relation_type": str(relation.relation_type),
+            "confidence": relation.confidence,
+            "metadata": relation.metadata
+        }
+    
+    def _event_to_dict(self, event: Event) -> Dict[str, Any]:
+        """将事件转换为字典"""
+        return {
+            "id": event.id,
+            "event_type": str(event.event_type),
+            "text": event.text,
+            "summary": event.summary,
+            "timestamp": event.timestamp,
+            "participants": event.participants,
+            "properties": event.properties,
+            "confidence": event.confidence
+        }
+    
+    def _pattern_to_dict(self, pattern: EventPattern) -> Dict[str, Any]:
+        """将模式转换为字典"""
+        return {
+            "id": pattern.id,
+            "pattern_type": pattern.pattern_type,
+            "event_sequence": pattern.event_sequence,
+            "support": pattern.support,
+            "confidence": pattern.confidence,
+            "domain": pattern.domain,
+            "metadata": pattern.metadata
+        }
+    
+    def _perform_hybrid_query(self, **kwargs) -> Dict[str, Any]:
+        """执行混合查询"""
+        # 混合查询的具体实现
+        # 这里可以结合Neo4j的图查询能力和ChromaDB的向量搜索能力
+        return {
+            "neo4j_results": [],
+            "chroma_results": [],
+            "merged_results": []
+        }
+    
+    def _merge_query_results(self, neo4j_results: List[Dict], chroma_results: List[Dict], 
+                           query_type: str) -> List[Dict]:
+        """合并查询结果"""
+        # 简化的结果合并逻辑
+        merged = []
+        
+        # 添加Neo4j结果
+        for result in neo4j_results:
+            result["source"] = "neo4j"
+            merged.append(result)
+        
+        # 添加ChromaDB结果（去重）
+        existing_ids = {result.get("id") for result in merged}
+        for result in chroma_results:
+            if result.get("id") not in existing_ids:
+                result["source"] = "chroma"
+                merged.append(result)
+        
+        return merged

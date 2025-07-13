@@ -1,0 +1,240 @@
+# HyperEventGraph 系统配置文件
+# 包含ChromaDB、Neo4j、BGE模型和事理关系分析的完整配置
+
+# 应用基础配置
+app:
+  name: "HyperEventGraph"
+  version: "1.0.0"
+  debug: false
+  log_level: "INFO"
+  max_workers: 4
+  timeout: 300
+
+# 数据库配置
+database:
+  # Neo4j 图数据库配置
+  neo4j:
+    uri: "bolt://localhost:7687"
+    user: "neo4j"
+    password: "password"
+    database: "neo4j"
+    max_connection_lifetime: 3600
+    max_connection_pool_size: 50
+    connection_acquisition_timeout: 60
+    trust: "TRUST_ALL_CERTIFICATES"
+    encrypted: false
+    
+  # ChromaDB 向量数据库配置
+  chromadb:
+    persist_directory: "./data/chromadb"
+    host: "localhost"
+    port: 8000
+    collection_name: "hyper_events"
+    distance_function: "cosine"
+    hnsw_space: "cosine"
+    ef_construction: 200
+    ef_search: 50
+    max_elements: 100000
+    
+# BGE 嵌入模型配置
+embedding:
+  # Ollama BGE 模型配置
+  ollama:
+    base_url: "http://localhost:11434"
+    model_name: "smartcreation/bge-large-zh-v1.5:latest"
+    timeout: 60
+    max_retries: 3
+    retry_delay: 1
+    
+  # BGE 模型参数
+  bge:
+    model_name: "BAAI/bge-large-zh-v1.5"
+    max_length: 512
+    normalize_embeddings: true
+    batch_size: 32
+    device: "auto"  # auto, cpu, cuda
+    
+# 事理关系分析配置
+event_logic:
+  # 关系识别参数
+  relation_detection:
+    confidence_threshold: 0.7
+    max_hop_distance: 3
+    temporal_window: 3600  # 秒
+    causal_strength_threshold: 0.6
+    
+  # 事件聚合参数
+  event_clustering:
+    similarity_threshold: 0.8
+    min_cluster_size: 2
+    max_cluster_size: 50
+    temporal_tolerance: 300  # 秒
+    
+  # 模式发现参数
+  pattern_discovery:
+    min_support: 0.1
+    min_confidence: 0.7
+    max_pattern_length: 5
+    temporal_constraint: true
+    
+# GraphRAG 配置
+graphrag:
+  # 混合检索配置
+  hybrid_retrieval:
+    vector_weight: 0.6
+    graph_weight: 0.4
+    top_k_vector: 20
+    top_k_graph: 10
+    similarity_threshold: 0.7
+    max_depth: 3
+    
+  # 属性增强配置
+  attribute_enhancement:
+    enable_semantic_enhancement: true
+    enable_temporal_enhancement: true
+    enable_causal_enhancement: true
+    enhancement_threshold: 0.6
+    
+  # 子图检索配置
+  subgraph_retrieval:
+    max_nodes: 100
+    max_edges: 200
+    expansion_strategy: "breadth_first"
+    relevance_threshold: 0.5
+    
+# 缓存配置
+cache:
+  # 查询缓存
+  query_cache:
+    enabled: true
+    ttl: 3600  # 秒
+    max_size: 1000
+    cleanup_interval: 300
+    
+  # 向量缓存
+  vector_cache:
+    enabled: true
+    ttl: 7200  # 秒
+    max_size: 5000
+    memory_limit: "1GB"
+    
+  # 模式缓存
+  pattern_cache:
+    enabled: true
+    ttl: 1800  # 秒
+    max_size: 500
+    
+# 性能配置
+performance:
+  # 并发配置
+  concurrency:
+    max_concurrent_queries: 10
+    max_concurrent_embeddings: 5
+    thread_pool_size: 8
+    
+  # 批处理配置
+  batch_processing:
+    batch_size: 100
+    max_batch_wait_time: 5  # 秒
+    enable_parallel_processing: true
+    
+  # 内存管理
+  memory:
+    max_memory_usage: "4GB"
+    gc_threshold: 0.8
+    enable_memory_monitoring: true
+    
+# 监控配置
+monitoring:
+  # 性能监控
+  performance_monitoring:
+    enabled: true
+    metrics_interval: 60  # 秒
+    log_slow_queries: true
+    slow_query_threshold: 1000  # 毫秒
+    
+  # 健康检查
+  health_check:
+    enabled: true
+    check_interval: 30  # 秒
+    timeout: 10  # 秒
+    
+  # 数据库监控
+  database_monitoring:
+    neo4j_monitoring: true
+    chromadb_monitoring: true
+    connection_pool_monitoring: true
+    
+# 日志配置
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file_path: "./logs/hypereventgraph.log"
+  max_file_size: "100MB"
+  backup_count: 5
+  
+  # 组件日志级别
+  loggers:
+    "src.core": "INFO"
+    "src.rag": "INFO"
+    "src.storage": "INFO"
+    "src.event_logic": "DEBUG"
+    "chromadb": "WARNING"
+    "neo4j": "WARNING"
+    
+# 安全配置
+security:
+  # API 安全
+  api_security:
+    enable_authentication: false
+    api_key_required: false
+    rate_limiting: true
+    max_requests_per_minute: 100
+    
+  # 数据安全
+  data_security:
+    encrypt_sensitive_data: false
+    mask_personal_info: true
+    audit_logging: true
+    
+# 开发配置
+development:
+  # 调试选项
+  debug:
+    enable_query_logging: true
+    enable_performance_profiling: false
+    save_intermediate_results: false
+    
+  # 测试配置
+  testing:
+    use_test_database: false
+    mock_external_services: false
+    generate_test_data: false
+    
+# 生产环境配置
+production:
+  # 优化选项
+  optimization:
+    enable_query_optimization: true
+    enable_connection_pooling: true
+    enable_result_caching: true
+    
+  # 容错配置
+  fault_tolerance:
+    enable_auto_retry: true
+    max_retry_attempts: 3
+    retry_backoff_factor: 2
+    enable_circuit_breaker: true
+    
+# 扩展配置
+extensions:
+  # 插件配置
+  plugins:
+    enabled_plugins: []
+    plugin_directory: "./plugins"
+    
+  # 自定义处理器
+  custom_processors:
+    event_processors: []
+    relation_processors: []
+    pattern_processors: []

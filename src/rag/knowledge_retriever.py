@@ -8,6 +8,10 @@ from typing import Dict, List, Optional, Tuple, Any, Set
 from dataclasses import dataclass
 from datetime import datetime
 import logging
+import asyncio
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
+from enum import Enum
 
 # 导入双层架构组件
 try:
@@ -28,6 +32,16 @@ except ImportError:
     EventType = str
     EventRelation = dict
     RelationType = str
+
+try:
+    from ..event_logic.hybrid_retriever import HybridRetriever, HybridSearchResult, BGEEmbedder
+    from ..storage.chroma_impl import ChromaVectorDBStorage
+except ImportError:
+    # 如果导入失败，使用None作为占位符
+    HybridRetriever = None
+    HybridSearchResult = None
+    BGEEmbedder = None
+    ChromaVectorDBStorage = None
 
 from .query_processor import QueryIntent, QueryType
 
@@ -59,9 +73,25 @@ class RetrievalResult:
 
 
 class KnowledgeRetriever:
-    """知识检索器 - 基于双层架构的智能检索"""
+    """知识检索器
     
-    def __init__(self, dual_layer_core=None, dual_layer_arch: DualLayerArchitecture = None, max_events: int = 100, max_relations: int = 50, **kwargs):
+    基于双层架构的知识检索系统，支持多种检索模式：
+    - 事件检索：基于关键词、实体、时间范围
+    - 关系查询：查找事件间的关联关系
+    - 因果分析：识别因果链和影响路径
+    - 时序分析：分析事件的时间序列模式
+    - 实体查询：查找特定实体相关的所有事件
+    - 混合检索：结合向量检索和图检索的混合模式
+    """
+    
+    def __init__(self, dual_layer_core=None, dual_layer_arch: DualLayerArchitecture = None, 
+                 max_events: int = 100, max_relations: int = 50,
+                 max_events_per_query: int = 100,
+                 max_hop_distance: int = 3,
+                 hybrid_config: Optional[Dict[str, Any]] = None,
+                 enable_caching: bool = True,
+                 cache_ttl: int = 3600,
+                 **kwargs):
         """初始化知识检索器
         
         Args:
@@ -69,6 +99,11 @@ class KnowledgeRetriever:
             dual_layer_arch: 双层架构实例（向后兼容）
             max_events: 最大事件数量限制
             max_relations: 最大关系数量限制
+            max_events_per_query: 每次查询最大事件数
+            max_hop_distance: 最大跳跃距离
+            hybrid_config: 混合检索配置
+            enable_caching: 是否启用缓存
+            cache_ttl: 缓存生存时间（秒）
             **kwargs: 其他参数（用于兼容性）
         """
         # 支持两种参数名以保持兼容性
@@ -78,17 +113,209 @@ class KnowledgeRetriever:
         self.logger = logging.getLogger(__name__)
         
         # 检索参数配置
-        self.max_events_per_query = 50
-        self.max_hop_distance = 3
+        self.max_events_per_query = max_events_per_query or 50
+        self.max_hop_distance = max_hop_distance
         self.min_relevance_score = 0.3
         self.max_events = max_events
         self.max_relations = max_relations
         
+        # 混合检索配置
+        self.hybrid_config = hybrid_config or {}
+        self.hybrid_retriever = None
+        self.embedder = None
+        
+        # 缓存配置
+        self.enable_caching = enable_caching
+        self.cache_ttl = cache_ttl
+        self._query_cache = {}
+        self._cache_timestamps = {}
+        
+        # 性能统计
+        self.performance_stats = {
+            'total_queries': 0,
+            'cache_hits': 0,
+            'cache_misses': 0,
+            'hybrid_queries': 0,
+            'traditional_queries': 0,
+            'avg_response_time': 0.0
+        }
+        
+        # 线程池用于并发处理
+        self.executor = ThreadPoolExecutor(max_workers=4)
+        
+        # 初始化混合检索器
+        self._init_hybrid_retriever()
+    
+    def _init_hybrid_retriever(self):
+        """初始化混合检索器"""
+        try:
+            if HybridRetriever is not None and self.hybrid_config:
+                self.hybrid_retriever = HybridRetriever(
+                    chroma_collection=self.hybrid_config.get('chroma_collection', 'events'),
+                    chroma_persist_dir=self.hybrid_config.get('chroma_persist_dir', './chroma_db'),
+                    neo4j_uri=self.hybrid_config.get('neo4j_uri', 'bolt://localhost:7687'),
+                    neo4j_user=self.hybrid_config.get('neo4j_user', 'neo4j'),
+                    neo4j_password=self.hybrid_config.get('neo4j_password', 'password')
+                )
+                
+                if BGEEmbedder is not None:
+                    self.embedder = BGEEmbedder(
+                        ollama_url=self.hybrid_config.get('ollama_url', 'http://localhost:11434'),
+                        model_name=self.hybrid_config.get('model_name', 'smartcreation/bge-large-zh-v1.5:latest')
+                    )
+                    
+                self.logger.info("混合检索器初始化成功")
+            else:
+                self.logger.info("混合检索器未配置，使用传统检索模式")
+        except Exception as e:
+            self.logger.warning(f"混合检索器初始化失败: {e}，将使用传统检索模式")
+    
+    def _generate_cache_key(self, query_intent: QueryIntent) -> str:
+        """生成缓存键"""
+        key_parts = [
+            str(query_intent.query_type),
+            '|'.join(sorted(query_intent.keywords)),
+            '|'.join(sorted(query_intent.entities)),
+            str(query_intent.time_range) if query_intent.time_range else 'None'
+        ]
+        return '|'.join(key_parts)
+    
+    def _is_cache_valid(self, cache_key: str) -> bool:
+        """检查缓存是否有效"""
+        if not self.enable_caching or cache_key not in self._cache_timestamps:
+            return False
+        
+        cache_time = self._cache_timestamps[cache_key]
+        return (time.time() - cache_time) < self.cache_ttl
+    
+    def _update_cache(self, cache_key: str, result: RetrievalResult):
+        """更新缓存"""
+        if self.enable_caching:
+            self._query_cache[cache_key] = result
+            self._cache_timestamps[cache_key] = time.time()
+    
+    def _get_from_cache(self, cache_key: str) -> Optional[RetrievalResult]:
+        """从缓存获取结果"""
+        if self.enable_caching and self._is_cache_valid(cache_key):
+            return self._query_cache.get(cache_key)
+        return None
+         
     def retrieve_knowledge(self, query_intent: QueryIntent) -> RetrievalResult:
         """根据查询意图检索相关知识"""
+        start_time = time.time()
+        self.performance_stats['total_queries'] += 1
+        
         self.logger.info(f"开始检索知识，查询类型: {query_intent.query_type}")
         
-        # 根据查询类型选择检索策略
+        # 检查缓存
+        cache_key = self._generate_cache_key(query_intent)
+        cached_result = self._get_from_cache(cache_key)
+        if cached_result:
+            self.performance_stats['cache_hits'] += 1
+            self.logger.info("从缓存返回结果")
+            return cached_result
+        
+        self.performance_stats['cache_misses'] += 1
+        
+        try:
+            # 优先使用混合检索
+            if self.hybrid_retriever and query_intent.query_type in [QueryType.EVENT_SEARCH, QueryType.GENERAL]:
+                result = self._retrieve_with_hybrid(query_intent)
+                self.performance_stats['hybrid_queries'] += 1
+            else:
+                # 传统检索方法
+                result = self._retrieve_traditional(query_intent)
+                self.performance_stats['traditional_queries'] += 1
+            
+            # 更新缓存
+            self._update_cache(cache_key, result)
+            
+            # 更新性能统计
+            response_time = time.time() - start_time
+            self._update_performance_stats(response_time)
+            
+            return result
+                 
+        except Exception as e:
+             self.logger.error(f"知识检索失败: {e}")
+             return RetrievalResult(
+                 query_type=query_intent.query_type,
+                 events=[],
+                 relations=[],
+                 paths=[],
+                 relevance_scores={},
+                 subgraph_summary=f"检索失败: {str(e)}",
+                 metadata={"error": str(e)}
+             )
+    
+    def _retrieve_with_hybrid(self, query_intent: QueryIntent) -> RetrievalResult:
+        """使用混合检索模式"""
+        try:
+            # 构建查询事件
+            query_text = ' '.join(query_intent.keywords + query_intent.entities)
+            query_event = Event(
+                id="query_event",
+                event_type=EventType.ACTION,
+                text=query_text,
+                summary=query_text,
+                timestamp=datetime.now()
+            )
+            
+            # 执行混合检索
+            hybrid_result = self.hybrid_retriever.search(
+                query_event=query_event,
+                vector_top_k=self.max_events_per_query // 2,
+                graph_max_depth=self.max_hop_distance,
+                similarity_threshold=0.7
+            )
+            
+            # 提取事件和关系
+            events = []
+            relations = []
+            
+            # 从向量检索结果提取事件
+            for vector_result in hybrid_result.vector_results:
+                if hasattr(vector_result, 'event'):
+                    events.append(vector_result.event)
+            
+            # 从图检索结果提取事件和关系
+            for graph_result in hybrid_result.graph_results:
+                if hasattr(graph_result, 'events'):
+                    events.extend(graph_result.events)
+                if hasattr(graph_result, 'relations'):
+                    relations.extend(graph_result.relations)
+            
+            # 去重和过滤
+            events = self._deduplicate_events(events)
+            events = events[:self.max_events_per_query]
+            
+            # 计算相关性得分
+            relevance_scores = self._calculate_relevance_scores(events, query_intent)
+            
+            # 生成摘要
+            summary = self._generate_subgraph_summary(events, relations)
+            
+            return RetrievalResult(
+                query_type=query_intent.query_type,
+                events=events,
+                relations=relations,
+                paths=[],
+                relevance_scores=relevance_scores,
+                subgraph_summary=summary,
+                metadata={
+                    "hybrid_search": True,
+                    "vector_results": len(hybrid_result.vector_results),
+                    "graph_results": len(hybrid_result.graph_results)
+                }
+            )
+            
+        except Exception as e:
+            self.logger.warning(f"混合检索失败，回退到传统检索: {e}")
+            return self._retrieve_traditional(query_intent)
+    
+    def _retrieve_traditional(self, query_intent: QueryIntent) -> RetrievalResult:
+        """传统检索方法"""
+        # 根据查询类型分发到不同的检索方法
         if query_intent.query_type == QueryType.EVENT_SEARCH:
             return self._retrieve_events(query_intent)
         elif query_intent.query_type == QueryType.RELATION_QUERY:
@@ -102,6 +329,15 @@ class KnowledgeRetriever:
         else:
             return self._retrieve_general(query_intent)
     
+    def _update_performance_stats(self, response_time: float):
+        """更新性能统计"""
+        total_queries = self.performance_stats['total_queries']
+        current_avg = self.performance_stats['avg_response_time']
+        
+        # 计算新的平均响应时间
+        new_avg = ((current_avg * (total_queries - 1)) + response_time) / total_queries
+        self.performance_stats['avg_response_time'] = new_avg
+     
     def retrieve(self, query_intent: QueryIntent) -> RetrievalResult:
         """检索方法的别名，用于兼容测试"""
         return self.retrieve_knowledge(query_intent)
@@ -308,7 +544,7 @@ class KnowledgeRetriever:
     def _retrieve_entity_events(self, query_intent: QueryIntent) -> RetrievalResult:
         """检索实体相关事件"""
         events = []
-       # 基于实体检索
+        # 基于实体检索
         for entity in query_intent.entities:
             entity_events = self.dual_layer.event_layer.query_events(
                 participants=[entity],
@@ -522,3 +758,172 @@ class KnowledgeRetriever:
             summary_parts.append(f"时间范围: {min_time.strftime('%Y-%m-%d')} 至 {max_time.strftime('%Y-%m-%d')}")
         
         return "; ".join(summary_parts)
+    
+    def semantic_search_events(self, query_text: str, top_k: int = 10, 
+                              similarity_threshold: float = 0.7) -> List[Event]:
+        """语义搜索事件"""
+        if not self.hybrid_retriever:
+            self.logger.warning("混合检索器未初始化，无法执行语义搜索")
+            return []
+        
+        try:
+            # 构建查询事件
+            query_event = Event(
+                id="semantic_query",
+                event_type=EventType.ACTION,
+                text=query_text,
+                summary=query_text,
+                timestamp=datetime.now()
+            )
+            
+            # 执行向量检索
+            vector_results = self.hybrid_retriever.chroma_retriever.search_similar_events(
+                query_event=query_event,
+                top_k=top_k,
+                similarity_threshold=similarity_threshold
+            )
+            
+            # 提取事件
+            events = [result.event for result in vector_results if hasattr(result, 'event')]
+            return events
+            
+        except Exception as e:
+            self.logger.error(f"语义搜索失败: {e}")
+            return []
+    
+    def batch_retrieve(self, query_intents: List[QueryIntent], 
+                      max_workers: int = 4) -> List[RetrievalResult]:
+        """批量检索"""
+        results = []
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # 提交所有任务
+            future_to_query = {
+                executor.submit(self.retrieve_knowledge, query): query 
+                for query in query_intents
+            }
+            
+            # 收集结果
+            for future in as_completed(future_to_query):
+                try:
+                    result = future.result()
+                    results.append(result)
+                except Exception as e:
+                    query = future_to_query[future]
+                    self.logger.error(f"批量检索失败 {query.query_type}: {e}")
+                    results.append(RetrievalResult(
+                        query_type=query.query_type,
+                        events=[],
+                        relations=[],
+                        paths=[],
+                        relevance_scores={},
+                        subgraph_summary=f"检索失败: {str(e)}",
+                        metadata={"error": str(e)}
+                    ))
+        
+        return results
+    
+    def get_performance_stats(self) -> Dict[str, Any]:
+        """获取性能统计"""
+        stats = self.performance_stats.copy()
+        
+        # 计算缓存命中率
+        total_queries = stats['total_queries']
+        if total_queries > 0:
+            stats['cache_hit_rate'] = stats['cache_hits'] / total_queries
+            stats['hybrid_usage_rate'] = stats['hybrid_queries'] / total_queries
+        else:
+            stats['cache_hit_rate'] = 0.0
+            stats['hybrid_usage_rate'] = 0.0
+        
+        # 缓存信息
+        stats['cache_size'] = len(self._query_cache)
+        stats['cache_enabled'] = self.enable_caching
+        
+        return stats
+    
+    def clear_cache(self):
+        """清空缓存"""
+        self._query_cache.clear()
+        self._cache_timestamps.clear()
+        self.logger.info("缓存已清空")
+    
+    def optimize_cache(self, max_cache_size: int = 1000):
+        """优化缓存，移除过期和最少使用的条目"""
+        if len(self._query_cache) <= max_cache_size:
+            return
+        
+        current_time = time.time()
+        
+        # 移除过期条目
+        expired_keys = [
+            key for key, timestamp in self._cache_timestamps.items()
+            if (current_time - timestamp) > self.cache_ttl
+        ]
+        
+        for key in expired_keys:
+            self._query_cache.pop(key, None)
+            self._cache_timestamps.pop(key, None)
+        
+        # 如果仍然超过限制，移除最旧的条目
+        if len(self._query_cache) > max_cache_size:
+            sorted_items = sorted(
+                self._cache_timestamps.items(),
+                key=lambda x: x[1]
+            )
+            
+            items_to_remove = len(self._query_cache) - max_cache_size
+            for key, _ in sorted_items[:items_to_remove]:
+                self._query_cache.pop(key, None)
+                self._cache_timestamps.pop(key, None)
+        
+        self.logger.info(f"缓存优化完成，当前大小: {len(self._query_cache)}")
+    
+    def add_events_to_hybrid_storage(self, events: List[Event]):
+        """将事件添加到混合存储"""
+        if not self.hybrid_retriever:
+            self.logger.warning("混合检索器未初始化")
+            return
+        
+        try:
+            # 添加到ChromaDB
+            self.hybrid_retriever.chroma_retriever.add_events(events)
+            
+            # 添加到Neo4j（通过dual_layer）
+            for event in events:
+                self.dual_layer.event_layer.add_event(event)
+            
+            self.logger.info(f"成功添加 {len(events)} 个事件到混合存储")
+            
+        except Exception as e:
+            self.logger.error(f"添加事件到混合存储失败: {e}")
+    
+    def get_hybrid_retriever_status(self) -> Dict[str, Any]:
+        """获取混合检索器状态"""
+        status = {
+            "hybrid_retriever_available": self.hybrid_retriever is not None,
+            "embedder_available": self.embedder is not None,
+            "hybrid_config": self.hybrid_config
+        }
+        
+        if self.hybrid_retriever:
+            try:
+                # 检查ChromaDB连接
+                chroma_status = hasattr(self.hybrid_retriever.chroma_retriever, 'client') and \
+                               self.hybrid_retriever.chroma_retriever.client is not None
+                status["chromadb_connected"] = chroma_status
+                
+                # 检查Neo4j连接
+                neo4j_status = hasattr(self.hybrid_retriever.neo4j_retriever, 'driver') and \
+                              self.hybrid_retriever.neo4j_retriever.driver is not None
+                status["neo4j_connected"] = neo4j_status
+                
+            except Exception as e:
+                status["connection_error"] = str(e)
+        
+        return status
+    
+    def __del__(self):
+        """清理资源"""
+        if hasattr(self, 'executor'):
+            self.executor.shutdown(wait=True)
