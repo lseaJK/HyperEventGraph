@@ -33,9 +33,9 @@ class TestPatternLayerManagerEnhanced:
     def mock_neo4j_storage(self):
         """模拟Neo4j存储"""
         storage = Mock(spec=Neo4jEventStorage)
-        storage.add_pattern.return_value = True
-        storage.get_pattern.return_value = None
-        storage.query_patterns.return_value = []
+        storage.store_event_pattern.return_value = True
+        storage.get_event_pattern.return_value = None
+        storage.query_event_patterns.return_value = []
         storage.delete_pattern.return_value = True
         storage.update_pattern.return_value = True
         return storage
@@ -82,8 +82,7 @@ class TestPatternLayerManagerEnhanced:
         config = PatternMiningConfig(
             min_support=2,
             min_confidence=0.5,
-            max_pattern_length=5,
-            time_window=3600
+            max_pattern_length=5
         )
         
         chroma_config = {
@@ -121,7 +120,7 @@ class TestPatternLayerManagerEnhanced:
         assert result is True
         
         # 验证Neo4j调用
-        mock_neo4j_storage.add_pattern.assert_called_once_with(sample_pattern)
+        mock_neo4j_storage.store_event_pattern.assert_called_once_with(sample_pattern)
         
         # 验证ChromaDB调用
         mock_chroma_retriever.collection.add.assert_called_once()
@@ -173,7 +172,7 @@ class TestPatternLayerManagerEnhanced:
         assert result == sample_pattern
         
         # 验证没有调用Neo4j（因为缓存命中）
-        mock_neo4j_storage.get_pattern.assert_not_called()
+        mock_neo4j_storage.get_event_pattern.assert_not_called()
         
         # 验证缓存统计
         stats = pattern_manager.get_performance_stats()
@@ -182,7 +181,7 @@ class TestPatternLayerManagerEnhanced:
     def test_get_pattern_cache_miss(self, pattern_manager, sample_pattern, mock_neo4j_storage):
         """测试缓存未命中的模式获取"""
         # 设置Neo4j返回模式
-        mock_neo4j_storage.get_pattern.return_value = sample_pattern
+        mock_neo4j_storage.get_event_pattern.return_value = sample_pattern
         
         # 获取模式
         result = pattern_manager.get_pattern(sample_pattern.id)
@@ -191,7 +190,7 @@ class TestPatternLayerManagerEnhanced:
         assert result == sample_pattern
         
         # 验证调用了Neo4j
-        mock_neo4j_storage.get_pattern.assert_called_once_with(sample_pattern.id)
+        mock_neo4j_storage.get_event_pattern.assert_called_once_with(sample_pattern.id)
         
         # 验证模式被添加到缓存
         assert sample_pattern.id in pattern_manager._pattern_cache
@@ -216,7 +215,7 @@ class TestPatternLayerManagerEnhanced:
         }
         
         # 设置Neo4j返回
-        mock_neo4j_storage.get_pattern.side_effect = lambda pid: patterns.get(pid)
+        mock_neo4j_storage.get_event_pattern.side_effect = lambda pid: patterns.get(pid)
         
         # 执行批量获取
         results = pattern_manager.get_patterns_batch(pattern_ids)
@@ -509,7 +508,7 @@ class TestPatternLayerManagerEnhanced:
                 conditions={}
             )
         ]
-        mock_neo4j_storage.query_patterns.return_value = mock_patterns
+        mock_neo4j_storage.query_event_patterns.return_value = mock_patterns
         
         # 第一次查询（缓存未命中）
         results1 = pattern_manager.query_patterns(conditions)
@@ -517,7 +516,7 @@ class TestPatternLayerManagerEnhanced:
         assert results1[0].id == "pattern_1"
         
         # 验证Neo4j被调用
-        mock_neo4j_storage.query_patterns.assert_called_once_with(conditions)
+        mock_neo4j_storage.query_event_patterns.assert_called_once_with(conditions=conditions, limit=50)
         
         # 重置mock
         mock_neo4j_storage.reset_mock()
@@ -528,7 +527,7 @@ class TestPatternLayerManagerEnhanced:
         assert results2[0].id == "pattern_1"
         
         # 验证Neo4j没有被再次调用
-        mock_neo4j_storage.query_patterns.assert_not_called()
+        mock_neo4j_storage.query_event_patterns.assert_not_called()
 
 
 if __name__ == "__main__":

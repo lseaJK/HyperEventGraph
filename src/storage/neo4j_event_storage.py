@@ -853,6 +853,73 @@ class Neo4jEventStorage:
                 logger.error(f"查询时间序列事件失败: {e}")
                 return []
     
+    def delete_pattern(self, pattern_id: str) -> bool:
+        """删除事理模式"""
+        with self.driver.session() as session:
+            try:
+                query = "MATCH (p:EventPattern {id: $pattern_id}) DELETE p"
+                session.run(query, pattern_id=pattern_id)
+                return True
+            except Exception as e:
+                logger.error(f"删除事理模式失败: {e}")
+                return False
+
+    def update_pattern(self, pattern_id: str, updates: Dict[str, Any]) -> bool:
+        """更新事理模式"""
+        with self.driver.session() as session:
+            try:
+                set_clauses = []
+                params = {"pattern_id": pattern_id}
+                
+                for key, value in updates.items():
+                    set_clauses.append(f"p.{key} = ${key}")
+                    params[key] = value
+                
+                if not set_clauses:
+                    return True # No updates needed
+                    
+                query = f"""
+                MATCH (p:EventPattern {{id: $pattern_id}})
+                SET {', '.join(set_clauses)}
+                RETURN p
+                """
+                
+                result = session.run(query, **params)
+                return result.single() is not None
+            except Exception as e:
+                logger.error(f"更新事理模式失败: {e}")
+                return False
+
+    def get_event_pattern(self, pattern_id: str) -> Optional[EventPattern]:
+        """根据ID获取事理模式"""
+        with self.driver.session() as session:
+            try:
+                query = "MATCH (p:EventPattern {id: $pattern_id}) RETURN p"
+                result = session.run(query, pattern_id=pattern_id)
+                record = result.single()
+                
+                if not record:
+                    return None
+                
+                pattern_data = dict(record["p"])
+                
+                # 反序列化
+                return EventPattern(
+                    id=pattern_data.get('id'),
+                    pattern_name=pattern_data.get('pattern_name'),
+                    pattern_type=pattern_data.get('pattern_type'),
+                    description=pattern_data.get('description'),
+                    event_sequence=pattern_data.get('event_sequence', []),
+                    conditions=self._deserialize_json_field(pattern_data.get('conditions', '{}')),
+                    support=pattern_data.get('support', 0),
+                    confidence=pattern_data.get('confidence', 0.0),
+                    domain=pattern_data.get('domain'),
+                    frequency=pattern_data.get('frequency', 0)
+                )
+            except Exception as e:
+                logger.error(f"获取事理模式失败: {e}")
+                return None
+
     def store_event_pattern(self, pattern: EventPattern) -> bool:
         """
         存储事理模式
