@@ -7,6 +7,7 @@
 import asyncio
 import sys
 import os
+import os
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
@@ -20,7 +21,13 @@ async def test_pipeline():
     # 配置
     config = PipelineConfig(
         chroma_config={"host": "localhost", "port": 8000},
-        neo4j_config={"uri": "bolt://localhost:7687", "user": "neo4j", "password": "password"},
+        neo4j_config={"uri": "bolt://localhost:7687", "user": "neo4j", "password": "neo123456"},
+        llm_config={
+            "provider": "deepseek",
+            "api_key": os.getenv("DEEPSEEK_API_KEY"),
+            "model_name": "deepseek-chat",
+            "base_url": "https://api.deepseek.com"
+        },
         batch_size=10,
         max_workers=2,
         enable_monitoring=True,

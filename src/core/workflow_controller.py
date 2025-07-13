@@ -18,7 +18,7 @@ from pathlib import Path
 import json
 
 # 导入项目模块
-from src.data_models.event import Event
+from src.models.event_data_model import Event
 from src.event_logic.hybrid_retriever import HybridRetriever
 from src.event_logic.attribute_enhancer import AttributeEnhancer, EnhancedEvent, IncompleteEvent
 from src.event_logic.pattern_discoverer import PatternDiscoverer, EventPattern
@@ -50,6 +50,7 @@ class PipelineConfig:
     # 数据库配置
     chroma_config: Dict[str, Any] = field(default_factory=dict)
     neo4j_config: Dict[str, Any] = field(default_factory=dict)
+    llm_config: Dict[str, Any] = field(default_factory=dict)
     
     # 处理配置
     batch_size: int = 100
@@ -221,58 +222,78 @@ class WorkflowController:
     def _init_components(self):
         """初始化组件"""
         try:
-            # 初始化LLM事件抽取器
+            # 1. LLM Config
+            from ..llm_integration.llm_config import LLMConfig, LLMProvider
+            llm_config_dict = self.config.llm_config
+            if llm_config_dict and llm_config_dict.get("api_key"):
+                provider_str = llm_config_dict.get("provider", "deepseek")
+                llm_config_dict["provider"] = LLMProvider(provider_str)
+                llm_config = LLMConfig(**llm_config_dict)
+            else:
+                llm_config = LLMConfig.from_env()
+
+            # 2. Event Extractor
             from ..llm_integration.llm_event_extractor import LLMEventExtractor
-            from ..llm_integration.llm_config import LLMConfig
-            
-            llm_config = LLMConfig.from_env()
             self.event_extractor = LLMEventExtractor(config=llm_config)
             self.logger.info("✅ LLM事件抽取器初始化成功")
-            
-            # 初始化事理关系分析器
+
+            # 3. Relation Analyzer
             from ..event_logic.event_logic_analyzer import EventLogicAnalyzer
             self.relation_analyzer = EventLogicAnalyzer(llm_client=self.event_extractor.client)
             self.logger.info("✅ 事理关系分析器初始化成功")
-            
-            # 初始化Neo4j存储
+
+            # 4. Neo4j Storage
             from ..storage.neo4j_event_storage import Neo4jEventStorage, Neo4jConfig
-            neo4j_config = Neo4jConfig.from_env()
+            neo4j_config_dict = self.config.neo4j_config
+            if neo4j_config_dict:
+                if 'user' in neo4j_config_dict and 'username' not in neo4j_config_dict:
+                    neo4j_config_dict['username'] = neo4j_config_dict.pop('user')
+                neo4j_config = Neo4jConfig(**neo4j_config_dict)
+            else:
+                neo4j_config = Neo4jConfig.from_env()
             self.neo4j_storage = Neo4jEventStorage(config=neo4j_config)
-            
-            # 测试Neo4j连接
             if self.neo4j_storage.test_connection():
                 self.logger.info("✅ Neo4j存储连接成功")
             else:
                 self.logger.warning("⚠️ Neo4j连接失败，将使用模拟存储")
                 self.neo4j_storage = None
-            
-            # 初始化混合检索器
+
+            # 5. Hybrid Retriever
+            chroma_collection = self.config.chroma_config.get("collection_name", "events")
+            chroma_persist_dir = self.config.chroma_config.get("persist_directory", "./chroma_db")
+            neo4j_uri = self.config.neo4j_config.get("uri")
+            neo4j_user = self.config.neo4j_config.get("user") or self.config.neo4j_config.get("username")
+            neo4j_password = self.config.neo4j_config.get("password")
             self.hybrid_retriever = HybridRetriever(
-                chroma_config=self.config.chroma_config,
-                neo4j_config=self.config.neo4j_config
+                chroma_collection=chroma_collection,
+                chroma_persist_dir=chroma_persist_dir,
+                neo4j_uri=neo4j_uri,
+                neo4j_user=neo4j_user,
+                neo4j_password=neo4j_password
             )
-            
-            # 初始化属性补充器
+            self.logger.info("✅ 混合检索器初始化成功")
+
+            # 6. Attribute Enhancer
             self.attribute_enhancer = AttributeEnhancer(self.hybrid_retriever)
-            
-            # 初始化模式发现器
-            self.pattern_discoverer = PatternDiscoverer(
-                chroma_config=self.config.chroma_config,
-                neo4j_config=self.config.neo4j_config
-            )
-            
-            # 初始化GraphRAG协调器
-            self.graphrag_coordinator = GraphRAGCoordinator(
+            self.logger.info("✅ 属性补充器初始化成��")
+
+            # 7. Pattern Discoverer
+            self.pattern_discoverer = PatternDiscoverer(hybrid_retriever=self.hybrid_retriever)
+            self.logger.info("✅ 模式发现器初始化成功")
+
+            # 8. GraphRAG Coordinator
+            self.graphrag_enhancer = GraphRAGCoordinator(
                 hybrid_retriever=self.hybrid_retriever,
                 attribute_enhancer=self.attribute_enhancer,
                 pattern_discoverer=self.pattern_discoverer,
                 max_workers=self.config.max_workers
             )
-            
+            self.logger.info("✅ GraphRAG协调器初始化成功")
+
             self.logger.info("工作流组件初始化完成")
-            
+
         except Exception as e:
-            self.logger.error(f"组件初始化失败: {e}")
+            self.logger.error(f"组件初始化失败: {e}", exc_info=True)
             # 设置为None以便后续使用fallback方法
             self.event_extractor = None
             self.relation_analyzer = None
@@ -280,7 +301,7 @@ class WorkflowController:
             self.hybrid_retriever = None
             self.attribute_enhancer = None
             self.pattern_discoverer = None
-            self.graphrag_coordinator = None
+            self.graphrag_enhancer = None
     
     def _init_stage_handlers(self) -> Dict[PipelineStage, Callable]:
         """初始化阶段处理器"""
@@ -585,7 +606,7 @@ class WorkflowController:
         )
         
         # 执行GraphRAG增强
-        response = await self.graphrag_coordinator.process_query(query)
+        response = await self.graphrag_enhancer.process_query(query)
         
         # 整合结果
         enhanced_data = {
@@ -803,8 +824,8 @@ class WorkflowController:
         self.executor.shutdown(wait=True)
         
         # 关闭组件连接
-        if hasattr(self.hybrid_retriever, 'close'):
-            await self.hybrid_retriever.close()
+        if self.hybrid_retriever and hasattr(self.hybrid_retriever, 'close'):
+            self.hybrid_retriever.close()
         
         self.logger.info("工作流控制器已关闭")
 
@@ -815,7 +836,7 @@ if __name__ == "__main__":
         # 配置
         config = PipelineConfig(
             chroma_config={"host": "localhost", "port": 8000},
-            neo4j_config={"uri": "bolt://localhost:7687", "user": "neo4j", "password": "password"},
+            neo4j_config={"uri": "bolt://localhost:7687", "user": "neo4j", "password": "neo123456"},
             batch_size=50,
             max_workers=2,
             enable_monitoring=True,
