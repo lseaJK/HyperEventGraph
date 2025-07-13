@@ -105,7 +105,9 @@ class PatternDiscoverer:
     
     def discover_patterns(self, events: List[Event],
                          cluster_method: str = 'kmeans',
-                         frequency_threshold: int = 2) -> List[EventPattern]:
+                         frequency_threshold: int = 2,
+                         min_support: Optional[float] = None,
+                         min_confidence: Optional[float] = None) -> List[EventPattern]:
         """发现事理模式"""
         try:
             self.logger.info(f"开始模式发现，事件数量: {len(events)}")
@@ -123,7 +125,7 @@ class PatternDiscoverer:
             
             # 4. 模式抽象与验证
             patterns = self._abstract_and_validate_patterns(
-                clusters, frequent_subgraphs, events
+                clusters, frequent_subgraphs, events, min_support, min_confidence
             )
             
             # 5. 存储模式到数据库
@@ -524,9 +526,13 @@ class PatternDiscoverer:
     
     def _abstract_and_validate_patterns(self, clusters: List[EventCluster],
                                       frequent_subgraphs: List[FrequentSubgraph],
-                                      events: List[Event]) -> List[EventPattern]:
+                                      events: List[Event],
+                                      min_support: Optional[float] = None,
+                                      min_confidence: Optional[float] = None) -> List[EventPattern]:
         """抽象与验证模式"""
         patterns = []
+        
+        min_pattern_support = min_support if min_support is not None else self.config['min_pattern_support']
         
         # 从聚类生成模式
         for cluster in clusters:
@@ -537,7 +543,7 @@ class PatternDiscoverer:
         
         # 从频繁子图生成模式
         for subgraph in frequent_subgraphs:
-            if subgraph.support >= self.config['min_pattern_support']:
+            if subgraph.support >= min_pattern_support:
                 pattern = self._create_pattern_from_subgraph(subgraph)
                 if pattern:
                     patterns.append(pattern)

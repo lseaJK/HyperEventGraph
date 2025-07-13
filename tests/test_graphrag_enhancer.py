@@ -27,7 +27,8 @@ from src.event_logic.hybrid_retriever import (
     HybridRetriever, 
     VectorSearchResult, 
     GraphSearchResult, 
-    HybridSearchResult
+    HybridSearchResult,
+    BGEEmbedding
 )
 from src.event_logic.attribute_enhancer import (
     AttributeEnhancer,
@@ -45,7 +46,8 @@ from src.event_logic.graphrag_coordinator import (
     GraphRAGQuery,
     GraphRAGResponse
 )
-from src.data_models.event import Event
+from src.models.event_data_model import Event
+
 
 
 class TestGraphRAGEnhancer(unittest.TestCase):
@@ -72,15 +74,15 @@ class TestGraphRAGEnhancer(unittest.TestCase):
                 id="event_001",
                 event_type="user_action",
                 timestamp="2024-01-01T10:00:00Z",
-                description="用户登录系统",
-                attributes={"user_id": "user_123", "ip": "192.168.1.1"}
+                text="用户登录系统",
+                properties={"user_id": "user_123", "ip": "192.168.1.1"}
             ),
             Event(
                 id="event_002",
                 event_type="system_alert",
                 timestamp="2024-01-01T10:05:00Z",
-                description="系统CPU使用率过高",
-                attributes={"cpu_usage": 85.5, "server_id": "srv_001"}
+                text="系统CPU使用率过高",
+                properties={"cpu_usage": 85.5, "server_id": "srv_001"}
             )
         ]
         
@@ -89,7 +91,7 @@ class TestGraphRAGEnhancer(unittest.TestCase):
             event_type="user_action",
             timestamp="2024-01-01T11:00:00Z",
             description="用户操作",
-            missing_attributes=["user_id", "session_id"]
+            missing_attributes={"user_id", "session_id"}
         )
     
     def test_subgraph_retrieval_integration(self):
@@ -97,26 +99,35 @@ class TestGraphRAGEnhancer(unittest.TestCase):
         # 模拟混合检索结果
         mock_vector_results = [
             VectorSearchResult(
+                event_id=self.sample_events[0].id,
                 event=self.sample_events[0],
                 similarity_score=0.85,
-                embedding_vector=[0.1, 0.2, 0.3]
+                embedding=BGEEmbedding(vector=[0.1, 0.2, 0.3], dimension=3)
             )
         ]
         
         mock_graph_results = [
             GraphSearchResult(
+                event_id=self.sample_events[1].id,
                 event=self.sample_events[1],
                 structural_score=0.75,
-                subgraph_nodes=["event_001", "event_002"],
-                relationship_paths=[("event_001", "PRECEDES", "event_002")]
+                subgraph={},
+                relations=[],
+                path_length=2
             )
         ]
         
         mock_hybrid_result = HybridSearchResult(
+            query_event=self.sample_events[0],
             vector_results=mock_vector_results,
             graph_results=mock_graph_results,
-            fused_events=self.sample_events,
-            fusion_scores=[0.80, 0.75]
+            fused_results=[
+                {'event': self.sample_events[0]},
+                {'event': self.sample_events[1]}
+            ],
+            fusion_weights={"vector": 0.6, "graph": 0.4},
+            total_results=2,
+            search_time_ms=10.0
         )
         
         self.mock_hybrid_retriever.search.return_value = mock_hybrid_result
@@ -145,26 +156,21 @@ class TestGraphRAGEnhancer(unittest.TestCase):
         """测试属性补充集成功能"""
         # 模拟属性补充结果
         enhanced_event = EnhancedEvent(
-            id="enhanced_001",
-            event_type="user_action",
-            timestamp="2024-01-01T11:00:00Z",
-            description="用户操作",
-            attributes={
+            original_event=self.sample_incomplete_event,
+            enhanced_attributes={
                 "user_id": "user_456",
                 "session_id": "sess_789"
             },
-            enhanced_attributes={
-                "user_id": {
-                    "value": "user_456",
-                    "confidence": 0.9,
-                    "source": "similar_events"
-                },
-                "session_id": {
-                    "value": "sess_789",
-                    "confidence": 0.8,
-                    "source": "pattern_inference"
-                }
+            attribute_confidences={
+                "user_id": 0.9,
+                "session_id": 0.8
             },
+            inference_sources={
+                "user_id": ["similar_events"],
+                "session_id": ["pattern_inference"]
+            },
+            validation_results={"user_id": True, "session_id": True},
+            enhancement_metadata={},
             total_confidence=0.85
         )
         
@@ -201,15 +207,25 @@ class TestGraphRAGEnhancer(unittest.TestCase):
         # 模拟模式发现结果
         discovered_pattern = EventPattern(
             pattern_id="pattern_001",
+            pattern_name="用户登录后系统告警模式",
             pattern_type="sequential",
-            events=self.sample_events,
-            confidence=0.75,
-            support=0.6,
             description="用户登录后系统告警模式",
+            event_sequence=["user_action", "system_alert"],
+            relation_sequence=[],
             temporal_constraints={
                 "max_time_gap": "5m",
                 "sequence_order": ["user_action", "system_alert"]
-            }
+            },
+            causal_structure={},
+            frequency=1,
+            support=0.6,
+            confidence=0.75,
+            generality_score=0.5,
+            semantic_coherence=0.8,
+            validation_score=0.9,
+            source_clusters=[],
+            source_subgraphs=[],
+            examples=[]
         )
         
         self.mock_pattern_discoverer.discover_patterns.return_value = [discovered_pattern]
@@ -244,30 +260,44 @@ class TestGraphRAGEnhancer(unittest.TestCase):
         # 模拟混合查询结果
         mock_retrieved_events = self.sample_events
         enhanced_event = EnhancedEvent(
-            id="enhanced_002",
-            event_type="user_action",
-            timestamp="2024-01-01T12:00:00Z",
-            description="增强后的用户操作",
-            attributes={"user_id": "user_789"},
-            enhanced_attributes={},
+            original_event=self.sample_incomplete_event,
+            enhanced_attributes={"user_id": "user_789"},
+            attribute_confidences={"user_id": 0.9},
+            inference_sources={},
+            validation_results={},
+            enhancement_metadata={},
             total_confidence=0.9
         )
         
         discovered_pattern = EventPattern(
             pattern_id="pattern_002",
+            pattern_name="并发操作模式",
             pattern_type="concurrent",
-            events=[enhanced_event],
-            confidence=0.8,
+            description="并发操作模式",
+            event_sequence=[],
+            relation_sequence=[],
+            temporal_constraints={},
+            causal_structure={},
+            frequency=1,
             support=0.5,
-            description="并发操作模式"
+            confidence=0.8,
+            generality_score=0.5,
+            semantic_coherence=0.8,
+            validation_score=0.9,
+            source_clusters=[],
+            source_subgraphs=[],
+            examples=[]
         )
         
         # 设置Mock返回值
         self.mock_hybrid_retriever.search.return_value = HybridSearchResult(
+            query_event=self.sample_events[0],
             vector_results=[],
             graph_results=[],
-            fused_events=mock_retrieved_events,
-            fusion_scores=[0.8, 0.7]
+            fused_results=[{'event': self.sample_events[0]}, {'event': self.sample_events[1]}],
+            fusion_weights={"vector": 0.6, "graph": 0.4},
+            total_results=2,
+            search_time_ms=10.0
         )
         
         self.mock_attribute_enhancer.batch_enhance_events.return_value = [enhanced_event]
@@ -279,7 +309,7 @@ class TestGraphRAGEnhancer(unittest.TestCase):
         query = GraphRAGQuery(
             query_id="hybrid_test_001",
             query_text="混合查询测试",
-            query_type="hybrid",
+            query_type="comprehensive",
             incomplete_events=[self.sample_incomplete_event],
             target_events=self.sample_events,
             parameters={
@@ -330,10 +360,13 @@ class TestGraphRAGEnhancer(unittest.TestCase):
         """测试性能监控集成"""
         # 模拟正常查询
         self.mock_hybrid_retriever.search.return_value = HybridSearchResult(
+            query_event=self.sample_events[0],
             vector_results=[],
             graph_results=[],
-            fused_events=self.sample_events,
-            fusion_scores=[0.8]
+            fused_results=[],
+            fusion_weights={"vector": 0.6, "graph": 0.4},
+            total_results=0,
+            search_time_ms=10.0
         )
         
         query = GraphRAGQuery(
@@ -346,22 +379,25 @@ class TestGraphRAGEnhancer(unittest.TestCase):
         result = asyncio.run(self.coordinator.process_query(query))
         
         # 验证性能统计
-        stats = self.coordinator.get_query_statistics()
+        stats = self.coordinator.get_performance_stats()
         self.assertGreater(stats["total_queries"], 0)
         self.assertGreater(stats["successful_queries"], 0)
         
         # 验证响应时间记录
-        self.assertIsNotNone(result.processing_time)
-        self.assertGreater(result.processing_time, 0)
+        self.assertIsNotNone(result.execution_time)
+        self.assertGreater(result.execution_time, 0)
     
     def test_concurrent_queries_integration(self):
         """测试并发查询集成"""
         # 模拟并发查询
         self.mock_hybrid_retriever.search.return_value = HybridSearchResult(
+            query_event=self.sample_events[0],
             vector_results=[],
             graph_results=[],
-            fused_events=self.sample_events,
-            fusion_scores=[0.8]
+            fused_results=[],
+            fusion_weights={"vector": 0.6, "graph": 0.4},
+            total_results=0,
+            search_time_ms=10.0
         )
         
         queries = [
@@ -404,14 +440,18 @@ class TestGraphRAGEnhancerComponents(unittest.TestCase):
              patch('src.event_logic.hybrid_retriever.Neo4jGraphRetriever') as mock_neo4j:
             
             retriever = HybridRetriever(
-                chroma_config={"host": "localhost", "port": 8000},
-                neo4j_config={"uri": "bolt://localhost:7687"}
+                chroma_collection="test_events",
+                chroma_persist_dir="./test_chroma_db",
+                neo4j_uri="bolt://localhost:7687",
+                neo4j_user="neo4j",
+                neo4j_password="password"
             )
             
             # 验证组件初始化
-            mock_chroma.assert_called_once()
-            mock_neo4j.assert_called_once()
-            self.assertIsNotNone(retriever.embedder)
+            mock_chroma.assert_called_once_with("test_events", "./test_chroma_db")
+            mock_neo4j.assert_called_once_with("bolt://localhost:7687", "neo4j", "password")
+            self.assertIsNotNone(retriever.chroma_retriever)
+            self.assertIsNotNone(retriever.neo4j_retriever)
     
     def test_attribute_enhancer_initialization(self):
         """测试属性补充器初始化"""
@@ -419,24 +459,18 @@ class TestGraphRAGEnhancerComponents(unittest.TestCase):
         enhancer = AttributeEnhancer(mock_retriever)
         
         # 验证初始化
-        self.assertEqual(enhancer.hybrid_retriever, mock_retriever)
+        self.assertEqual(enhancer.retriever, mock_retriever)
         self.assertIsNotNone(enhancer.attribute_templates)
-        self.assertIsInstance(enhancer.supported_types, set)
+        self.assertIsInstance(enhancer.supported_attributes, set)
     
     def test_pattern_discoverer_initialization(self):
         """测试模式发现器初始化"""
-        with patch('src.event_logic.pattern_discoverer.ChromaDBRetriever') as mock_chroma, \
-             patch('src.event_logic.pattern_discoverer.Neo4jGraphRetriever') as mock_neo4j:
-            
-            discoverer = PatternDiscoverer(
-                chroma_config={"host": "localhost", "port": 8000},
-                neo4j_config={"uri": "bolt://localhost:7687"}
-            )
-            
-            # 验证组件初始化
-            mock_chroma.assert_called_once()
-            mock_neo4j.assert_called_once()
-            self.assertIsNotNone(discoverer.embedder)
+        mock_retriever = Mock(spec=HybridRetriever)
+        discoverer = PatternDiscoverer(hybrid_retriever=mock_retriever)
+        
+        # 验证初始化
+        self.assertEqual(discoverer.retriever, mock_retriever)
+        self.assertIsNotNone(discoverer.embedder)
 
 
 if __name__ == '__main__':

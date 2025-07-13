@@ -4,6 +4,7 @@ from datetime import datetime
 import logging
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 
 from ..models.event_data_model import Event
 from .hybrid_retriever import HybridRetriever
@@ -105,23 +106,34 @@ class GraphRAGCoordinator:
         top_k = query.parameters.get("top_k", 10)
         vector_weight = query.parameters.get("vector_weight", 0.7)
         graph_weight = query.parameters.get("graph_weight", 0.3)
-        
-        # 执行混合检索
-        search_results = await asyncio.get_event_loop().run_in_executor(
-            self.executor,
+        similarity_threshold = query.parameters.get("similarity_threshold", 0.7)
+        graph_max_depth = query.parameters.get("graph_max_depth", 2)
+
+        # 使用 functools.partial 包装带关键字参数的调用
+        search_func = partial(
             self.hybrid_retriever.search,
-            query.query_text,
-            top_k,
-            vector_weight,
-            graph_weight
+            Event(text=query.query_text),
+            vector_top_k=top_k,
+            graph_max_depth=graph_max_depth,
+            similarity_threshold=similarity_threshold,
+            fusion_weights={"vector": vector_weight, "graph": graph_weight}
+        )
+
+        # 执行混合检索
+        search_result_obj = await asyncio.get_event_loop().run_in_executor(
+            self.executor,
+            search_func
         )
         
-        response.retrieved_events = search_results
-        response.confidence_scores["retrieval"] = self._calculate_retrieval_confidence(search_results)
+        retrieved_events = [res['event'] for res in search_result_obj.fused_results]
+        response.retrieved_events = retrieved_events
+        response.confidence_scores["retrieval"] = self._calculate_retrieval_confidence(retrieved_events)
         response.metadata["search_parameters"] = {
             "top_k": top_k,
             "vector_weight": vector_weight,
-            "graph_weight": graph_weight
+            "graph_weight": graph_weight,
+            "similarity_threshold": similarity_threshold,
+            "graph_max_depth": graph_max_depth
         }
         
         return response
@@ -142,7 +154,7 @@ class GraphRAGCoordinator:
         response.confidence_scores["enhancement"] = self._calculate_enhancement_confidence(enhanced_events)
         
         # 获取补充统计信息
-        stats = self.attribute_enhancer.get_attribute_statistics()
+        stats = self.attribute_enhancer.get_attribute_statistics(enhanced_events)
         response.metadata["enhancement_stats"] = stats
         
         return response
@@ -155,13 +167,18 @@ class GraphRAGCoordinator:
         min_support = query.parameters.get("min_support", 0.1)
         min_confidence = query.parameters.get("min_confidence", 0.5)
         
+        # 使用 functools.partial
+        discover_func = partial(
+            self.pattern_discoverer.discover_patterns,
+            query.target_events,
+            min_support=min_support,
+            min_confidence=min_confidence
+        )
+
         # 执行模式发现
         patterns = await asyncio.get_event_loop().run_in_executor(
             self.executor,
-            self.pattern_discoverer.discover_patterns,
-            query.target_events,
-            min_support,
-            min_confidence
+            discover_func
         )
         
         response.discovered_patterns = patterns
