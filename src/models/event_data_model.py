@@ -32,31 +32,30 @@ class EventType(Enum):
 
 
 class RelationType(Enum):
-    """关系类型枚举"""
-    # 时序关系
-    TEMPORAL_BEFORE = "temporal.before"  # 时间先后
-    TEMPORAL_AFTER = "temporal.after"
-    TEMPORAL_DURING = "temporal.during"  # 时间重叠
-    
+    """事理关系类型枚举"""
     # 因果关系
-    CAUSAL_CAUSE = "causal.cause"  # 因果关系
-    CAUSAL_EFFECT = "causal.effect"
-    CAUSAL_ENABLE = "causal.enable"  # 使能关系
+    CAUSAL = "causal"  # 因果关系
+    CAUSAL_DIRECT = "causal_direct"  # 直接因果
+    CAUSAL_INDIRECT = "causal_indirect"  # 间接因果
+    
+    # 时序关系
+    TEMPORAL_BEFORE = "temporal_before"  # 时间先后
+    TEMPORAL_AFTER = "temporal_after"  # 时间后续
+    TEMPORAL_SIMULTANEOUS = "temporal_simultaneous"  # 同时发生
     
     # 条件关系
-    CONDITIONAL_IF = "conditional.if"  # 条件关系
-    CONDITIONAL_UNLESS = "conditional.unless"
+    CONDITIONAL = "conditional"  # 条件关系
+    CONDITIONAL_NECESSARY = "conditional_necessary"  # 必要条件
+    CONDITIONAL_SUFFICIENT = "conditional_sufficient"  # 充分条件
     
     # 对比关系
-    CONTRAST_SIMILAR = "contrast.similar"  # 相似对比
-    CONTRAST_OPPOSITE = "contrast.opposite"  # 对立对比
+    CONTRAST = "contrast"  # 对比关系
+    CONTRAST_OPPOSITE = "contrast_opposite"  # 相反关系
+    CONTRAST_SIMILAR = "contrast_similar"  # 相似关系
     
-    # 层次关系
-    HIERARCHICAL_PART_OF = "hierarchical.part_of"  # 部分-整体
-    HIERARCHICAL_INSTANCE_OF = "hierarchical.instance_of"  # 实例-类别
-    
-    # 共现关系
-    COOCCURRENCE = "cooccurrence"  # 共现关系
+    # 其他关系
+    CORRELATION = "correlation"  # 相关关系
+    UNKNOWN = "unknown"  # 未知关系
 
 
 @dataclass
@@ -288,7 +287,7 @@ def create_sample_event() -> Event:
 def create_sample_relation(event1_id: str, event2_id: str) -> EventRelation:
     """创建示例事件关系"""
     relation = EventRelation(
-        relation_type=RelationType.CAUSAL_CAUSE,
+        relation_type=RelationType.CAUSAL_DIRECT,
         source_event_id=event1_id,
         target_event_id=event2_id,
         confidence=0.8,

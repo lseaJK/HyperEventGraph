@@ -106,15 +106,15 @@ def test_output_export(events: list, relations: list):
         output_dir.mkdir(parents=True, exist_ok=True)
         
         # 创建JSONL管理器
-        jsonl_manager = JSONLManager()
+        jsonl_manager = JSONLManager(output_dir=str(output_dir))
         
         # 导出文件
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         events_file = output_dir / f"events_{timestamp}.jsonl"
         relations_file = output_dir / f"relations_{timestamp}.jsonl"
         
-        jsonl_manager.export_events(events, str(events_file))
-        jsonl_manager.export_relations(relations, str(relations_file))
+        jsonl_manager.write_events_to_jsonl(events, filename=events_file.name)
+        jsonl_manager.write_relations_to_jsonl(relations, filename=relations_file.name)
         
         print(f"✅ 输出导出完成:")
         print(f"  - 事件文件: {events_file}")
