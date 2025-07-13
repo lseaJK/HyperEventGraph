@@ -17,9 +17,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.rag.knowledge_retriever import KnowledgeRetriever
 from src.rag.query_processor import QueryIntent, QueryType
-from src.models.event import Event, EventType
-from src.models.relation import EventRelation, RelationType
+from src.models.event_data_model import Event, EventType,EventRelation, RelationType
 from src.rag.knowledge_retriever import RetrievalResult
+
 
 
 class TestKnowledgeRetrieverEnhanced(unittest.TestCase):
