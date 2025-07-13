@@ -17,7 +17,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.rag.knowledge_retriever import KnowledgeRetriever
 from src.rag.query_processor import QueryIntent, QueryType
-from src.models.event_data_model import Event, EventType,EventRelation, RelationType
+from src.models.event_data_model import Event, Entity, EventType,EventRelation, RelationType
 from src.rag.knowledge_retriever import RetrievalResult
 
 
@@ -62,17 +62,15 @@ class TestKnowledgeRetrieverEnhanced(unittest.TestCase):
                 text="用户登录系统",
                 summary="用户成功登录",
                 timestamp=datetime.now(),
-                participants=["user1"],
-                entities=["系统"]
+                participants=[Entity(name="user1"), Entity(name="系统")]
             ),
             Event(
                 id="event_2",
-                event_type=EventType.STATE_CHANGE,
+                event_type=EventType.OTHER,
                 text="系统状态更新",
                 summary="系统状态变更",
                 timestamp=datetime.now() + timedelta(minutes=5),
-                participants=["system"],
-                entities=["状态"]
+                participants=[Entity(name="system"), Entity(name="状态")]
             )
         ]
         
@@ -82,7 +80,7 @@ class TestKnowledgeRetrieverEnhanced(unittest.TestCase):
                 id="rel_1",
                 source_event_id="event_1",
                 target_event_id="event_2",
-                relation_type=RelationType.CAUSAL,
+                relation_type=RelationType.CAUSAL_CAUSE,
                 confidence=0.8
             )
         ]
@@ -108,7 +106,10 @@ class TestKnowledgeRetrieverEnhanced(unittest.TestCase):
             query_type=QueryType.EVENT_SEARCH,
             keywords=["登录"],
             entities=["用户"],
-            time_range=None
+            time_range=None,
+            confidence=0.9,
+            original_query="登录用户",
+            processed_query="登录用户"
         )
         
         # Mock传统检索方法
@@ -151,7 +152,10 @@ class TestKnowledgeRetrieverEnhanced(unittest.TestCase):
             query_type=QueryType.EVENT_SEARCH,
             keywords=["测试"],
             entities=[],
-            time_range=None
+            time_range=None,
+            confidence=0.9,
+            original_query="测试",
+            processed_query="测试"
         )
         
         expected_result = RetrievalResult(
@@ -207,7 +211,10 @@ class TestKnowledgeRetrieverEnhanced(unittest.TestCase):
             query_type=QueryType.EVENT_SEARCH,
             keywords=["登录"],
             entities=["用户"],
-            time_range=None
+            time_range=None,
+            confidence=0.9,
+            original_query="登录用户",
+            processed_query="登录用户"
         )
         
         result = retriever.retrieve_knowledge(query_intent)
@@ -252,13 +259,19 @@ class TestKnowledgeRetrieverEnhanced(unittest.TestCase):
                 query_type=QueryType.EVENT_SEARCH,
                 keywords=["登录"],
                 entities=["用户"],
-                time_range=None
+                time_range=None,
+                confidence=0.9,
+                original_query="登录用户",
+                processed_query="登录用户"
             ),
             QueryIntent(
                 query_type=QueryType.ENTITY_QUERY,
                 keywords=[],
                 entities=["系统"],
-                time_range=None
+                time_range=None,
+                confidence=0.9,
+                original_query="系统",
+                processed_query="系统"
             )
         ]
         
@@ -300,7 +313,10 @@ class TestKnowledgeRetrieverEnhanced(unittest.TestCase):
             query_type=QueryType.EVENT_SEARCH,
             keywords=["测试"],
             entities=[],
-            time_range=None
+            time_range=None,
+            confidence=0.9,
+            original_query="测试",
+            processed_query="测试"
         )
         
         expected_result = RetrievalResult(
@@ -335,7 +351,10 @@ class TestKnowledgeRetrieverEnhanced(unittest.TestCase):
             query_type=QueryType.EVENT_SEARCH,
             keywords=["测试"],
             entities=[],
-            time_range=None
+            time_range=None,
+            confidence=0.9,
+            original_query="测试",
+            processed_query="测试"
         )
         
         expected_result = RetrievalResult(
@@ -382,7 +401,10 @@ class TestKnowledgeRetrieverEnhanced(unittest.TestCase):
                     query_type=QueryType.EVENT_SEARCH,
                     keywords=[f"测试{i}"],
                     entities=[],
-                    time_range=None
+                    time_range=None,
+                    confidence=0.9,
+                    original_query=f"测试{i}",
+                    processed_query=f"测试{i}"
                 )
                 self.retriever.retrieve_knowledge(query_intent)
         
@@ -449,7 +471,10 @@ class TestKnowledgeRetrieverEnhanced(unittest.TestCase):
             query_type=QueryType.EVENT_SEARCH,
             keywords=["测试"],
             entities=[],
-            time_range=None
+            time_range=None,
+            confidence=0.9,
+            original_query="测试",
+            processed_query="测试"
         )
         
         # Mock混合检索器抛出异常

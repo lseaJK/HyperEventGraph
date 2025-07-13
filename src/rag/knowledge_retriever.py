@@ -219,7 +219,7 @@ class KnowledgeRetriever:
         
         try:
             # 优先使用混合检索
-            if self.hybrid_retriever and query_intent.query_type in [QueryType.EVENT_SEARCH, QueryType.GENERAL]:
+            if self.hybrid_retriever and query_intent.query_type in [QueryType.EVENT_SEARCH, QueryType.GENERAL_QA]:
                 result = self._retrieve_with_hybrid(query_intent)
                 self.performance_stats['hybrid_queries'] += 1
             else:
