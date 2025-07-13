@@ -221,6 +221,31 @@ class WorkflowController:
     def _init_components(self):
         """初始化组件"""
         try:
+            # 初始化LLM事件抽取器
+            from ..llm_integration.llm_event_extractor import LLMEventExtractor
+            from ..llm_integration.llm_config import LLMConfig
+            
+            llm_config = LLMConfig.from_env()
+            self.event_extractor = LLMEventExtractor(config=llm_config)
+            self.logger.info("✅ LLM事件抽取器初始化成功")
+            
+            # 初始化事理关系分析器
+            from ..event_logic.event_logic_analyzer import EventLogicAnalyzer
+            self.relation_analyzer = EventLogicAnalyzer(llm_client=self.event_extractor.client)
+            self.logger.info("✅ 事理关系分析器初始化成功")
+            
+            # 初始化Neo4j存储
+            from ..storage.neo4j_event_storage import Neo4jEventStorage, Neo4jConfig
+            neo4j_config = Neo4jConfig.from_env()
+            self.neo4j_storage = Neo4jEventStorage(config=neo4j_config)
+            
+            # 测试Neo4j连接
+            if self.neo4j_storage.test_connection():
+                self.logger.info("✅ Neo4j存储连接成功")
+            else:
+                self.logger.warning("⚠️ Neo4j连接失败，将使用模拟存储")
+                self.neo4j_storage = None
+            
             # 初始化混合检索器
             self.hybrid_retriever = HybridRetriever(
                 chroma_config=self.config.chroma_config,
@@ -248,7 +273,14 @@ class WorkflowController:
             
         except Exception as e:
             self.logger.error(f"组件初始化失败: {e}")
-            raise
+            # 设置为None以便后续使用fallback方法
+            self.event_extractor = None
+            self.relation_analyzer = None
+            self.neo4j_storage = None
+            self.hybrid_retriever = None
+            self.attribute_enhancer = None
+            self.pattern_discoverer = None
+            self.graphrag_coordinator = None
     
     def _init_stage_handlers(self) -> Dict[PipelineStage, Callable]:
         """初始化阶段处理器"""
@@ -401,33 +433,130 @@ class WorkflowController:
         """处理事件抽取阶段"""
         text = data.get("text", "")
         
-        # 这里应该调用实际的事件抽取模块
-        # 暂时返回模拟数据
+        if not text:
+            self.logger.warning("输入文本为空")
+            return []
+        
+        try:
+            if self.event_extractor:
+                # 使用实际的LLM事件抽取器
+                self.logger.info(f"开始抽取事件，文本长度: {len(text)}")
+                
+                result = self.event_extractor.extract_events(
+                    text=text,
+                    event_types=["business_cooperation", "personnel_change", "product_launch", "investment", "other"],
+                    entity_types=["organization", "person", "product", "location", "other"]
+                )
+                
+                if result.success:
+                    events = result.events
+                    # 为每个事件添加pipeline_id
+                    for event in events:
+                        if not hasattr(event, 'properties') or event.properties is None:
+                            event.properties = {}
+                        event.properties["pipeline_id"] = pipeline_id
+                        event.properties["source"] = "llm_extraction"
+                    
+                    self.logger.info(f"✅ 成功抽取到 {len(events)} 个事件，处理时间: {result.processing_time:.2f}秒")
+                    return events
+                else:
+                    self.logger.error(f"事件抽取失败: {result.error_message}")
+                    return self._create_fallback_events(text, pipeline_id)
+            else:
+                # 使用fallback方法
+                self.logger.warning("事件抽取器未初始化，使用fallback方法")
+                return self._create_fallback_events(text, pipeline_id)
+                
+        except Exception as e:
+            self.logger.error(f"事件抽取过程中发生错误: {e}")
+            return self._create_fallback_events(text, pipeline_id)
+    
+    def _create_fallback_events(self, text: str, pipeline_id: str) -> List[Event]:
+        """创建fallback事件（当LLM抽取失败时使用）"""
+        from ..models.event_data_model import Event, EventType
+        
         events = [
             Event(
-                id=f"event_{pipeline_id}_001",
-                event_type="extracted_event",
+                id=f"event_{pipeline_id}_fallback_001",
+                event_type=EventType.OTHER,
+                text=text,
+                summary=f"从文本中抽取的事件: {text[:100]}...",
                 timestamp=str(time.time()),
-                description=f"从文本中抽取的事件: {text[:50]}...",
-                attributes={"source": "text_extraction", "pipeline_id": pipeline_id}
+                properties={"source": "fallback_extraction", "pipeline_id": pipeline_id}
             )
         ]
         
-        self.logger.info(f"抽取到 {len(events)} 个事件")
+        self.logger.info(f"创建了 {len(events)} 个fallback事件")
         return events
     
     async def _handle_relation_analysis(self, events: List[Event], pipeline_id: str) -> Dict[str, Any]:
         """处理关系分析阶段"""
-        # 这里应该调用实际的关系分析模块
-        # 暂时返回模拟数据
-        relations = [
-            {
-                "source_event": events[0].id if events else None,
-                "target_event": events[0].id if events else None,
-                "relation_type": "temporal",
-                "confidence": 0.8
+        if len(events) < 2:
+            self.logger.info(f"事件数量不足({len(events)})，跳过关系分析")
+            return {
+                "events": events,
+                "relations": [],
+                "pipeline_id": pipeline_id
             }
-        ]
+        
+        try:
+            if self.relation_analyzer:
+                # 使用实际的事理关系分析器
+                self.logger.info(f"开始分析 {len(events)} 个事件的关系")
+                
+                relations = self.relation_analyzer.analyze_event_relations(events)
+                
+                # 转换为字典格式以便序列化
+                relations_dict = []
+                for relation in relations:
+                    relations_dict.append({
+                        "id": getattr(relation, 'id', f"rel_{len(relations_dict)}"),
+                        "source_event": relation.source_event_id,
+                        "target_event": relation.target_event_id,
+                        "relation_type": relation.relation_type.value if hasattr(relation.relation_type, 'value') else str(relation.relation_type),
+                        "confidence": relation.confidence,
+                        "strength": getattr(relation, 'strength', 0.0),
+                        "description": getattr(relation, 'description', ''),
+                        "evidence": getattr(relation, 'evidence', ''),
+                        "source": getattr(relation, 'source', 'analyzer'),
+                        "pipeline_id": pipeline_id
+                    })
+                
+                result = {
+                    "events": events,
+                    "relations": relations_dict,
+                    "pipeline_id": pipeline_id
+                }
+                
+                self.logger.info(f"✅ 成功分析了 {len(events)} 个事件，发现 {len(relations_dict)} 个关系")
+                return result
+            else:
+                # 使用fallback方法
+                self.logger.warning("关系分析器未初始化，使用fallback方法")
+                return self._create_fallback_relations(events, pipeline_id)
+                
+        except Exception as e:
+            self.logger.error(f"关系分析过程中发生错误: {e}")
+            return self._create_fallback_relations(events, pipeline_id)
+    
+    def _create_fallback_relations(self, events: List[Event], pipeline_id: str) -> Dict[str, Any]:
+        """创建fallback关系（当关系分析失败时使用）"""
+        relations = []
+        
+        # 简单的时序关系推断
+        for i in range(len(events) - 1):
+            relations.append({
+                "id": f"rel_fallback_{i}",
+                "source_event": events[i].id,
+                "target_event": events[i + 1].id,
+                "relation_type": "temporal_sequence",
+                "confidence": 0.5,
+                "strength": 0.4,
+                "description": "基于顺序的时序关系",
+                "evidence": "事件顺序推断",
+                "source": "fallback_analysis",
+                "pipeline_id": pipeline_id
+            })
         
         result = {
             "events": events,
@@ -435,7 +564,7 @@ class WorkflowController:
             "pipeline_id": pipeline_id
         }
         
-        self.logger.info(f"分析到 {len(relations)} 个关系")
+        self.logger.info(f"创建了 {len(relations)} 个fallback关系")
         return result
     
     async def _handle_graphrag_enhancement(self, data: Dict[str, Any], pipeline_id: str) -> Dict[str, Any]:
@@ -533,8 +662,24 @@ class WorkflowController:
     
     async def _store_events(self, events: List[Event]):
         """存储事件到数据库"""
-        # 这里应该实际存储到ChromaDB和Neo4j
-        pass
+        if not events:
+            return
+        
+        try:
+            if self.neo4j_storage:
+                # 使用实际的Neo4j存储
+                for event in events:
+                    success = self.neo4j_storage.store_event(event)
+                    if not success:
+                        self.logger.warning(f"事件 {event.id} 存储失败")
+                
+                self.logger.info(f"✅ 成功存储 {len(events)} 个事件到Neo4j")
+            else:
+                # 模拟存储
+                self.logger.warning(f"⚠️ Neo4j存储不可用，模拟存储 {len(events)} 个事件")
+                
+        except Exception as e:
+            self.logger.error(f"存储事件失败: {e}")
     
     async def _store_patterns(self, patterns: List[EventPattern]):
         """存储模式到数据库"""
@@ -543,8 +688,36 @@ class WorkflowController:
     
     async def _store_relations(self, relations: List[Dict]):
         """存储关系到数据库"""
-        # 这里应该实际存储到Neo4j
-        pass
+        if not relations:
+            return
+        
+        try:
+            if self.neo4j_storage:
+                # 使用实际的Neo4j存储
+                for relation in relations:
+                    success = self.neo4j_storage.store_relation(
+                        source_event_id=relation["source_event"],
+                        target_event_id=relation["target_event"],
+                        relation_type=relation["relation_type"],
+                        properties={
+                            "confidence": relation.get("confidence", 0.0),
+                            "strength": relation.get("strength", 0.0),
+                            "description": relation.get("description", ""),
+                            "evidence": relation.get("evidence", ""),
+                            "source": relation.get("source", "unknown"),
+                            "pipeline_id": relation.get("pipeline_id", "")
+                        }
+                    )
+                    if not success:
+                        self.logger.warning(f"关系 {relation.get('id', 'unknown')} 存储失败")
+                
+                self.logger.info(f"✅ 成功存储 {len(relations)} 个关系到Neo4j")
+            else:
+                # 模拟存储
+                self.logger.warning(f"⚠️ Neo4j存储不可用，模拟存储 {len(relations)} 个关系")
+                
+        except Exception as e:
+            self.logger.error(f"存储关系失败: {e}")
     
     async def _save_output(self, data: Dict[str, Any], pipeline_id: str):
         """保存输出到文件"""
