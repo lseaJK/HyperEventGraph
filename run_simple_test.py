@@ -31,7 +31,7 @@ def test_event_extraction(texts: list):
     
     try:
         # 导入事件抽取模块
-        from src.models.event_data_model import Event
+        from src.models.event_data_model import Event, EventType, Entity
         
         events = []
         for i, text in enumerate(texts[:3], 1):  # 只测试前3条
@@ -39,13 +39,17 @@ def test_event_extraction(texts: list):
             print(f"文本: {text[:100]}...")
             
             # 简单的事件创建（模拟抽取结果）
+            participants = [
+                Entity(name="半导体公司", entity_type="organization"),
+                Entity(name="行业分析师", entity_type="person")
+            ]
             event = Event(
                 id=f"evt_test_{i}",
                 summary=f"半导体行业事件 {i}",
                 text=text,
-                event_type="semiconductor.industry",
+                event_type=EventType.OTHER,
                 timestamp=datetime.now(),
-                participants=["半导体公司", "行业分析师"],
+                participants=participants,
                 properties={
                     "source": "科创板日报",
                     "industry": "半导体",
@@ -149,16 +153,16 @@ def test_data_models():
     print("\n🔄 测试数据模型...")
     
     try:
-        from src.models.event_data_model import Event, EventRelation, RelationType
+        from src.models.event_data_model import Event, EventRelation, RelationType, EventType, Entity
         
         # 创建测试事件
         event1 = Event(
             id="test_event_1",
             summary="测试事件1",
             text="这是一个测试事件",
-            event_type="test.event",
+            event_type=EventType.OTHER,
             timestamp=datetime.now(),
-            participants=["参与者1", "参与者2"],
+            participants=[Entity(name="参与者1"), Entity(name="参与者2")],
             properties={"test": "value"}
         )
         
@@ -166,9 +170,10 @@ def test_data_models():
             id="test_event_2",
             summary="测试事件2",
             text="这是另一个测试事件",
-            event_type="test.event",
+            event_type=EventType.OTHER,
             timestamp=datetime.now(),
-            participants=["参与者3", "参与者4"],
+            participants=[Entity(name="参与者3"), Entity(name="参与者4")],
+
             properties={"test": "value2"}
         )
         

@@ -55,7 +55,7 @@ class DeepSeekEventExtractor:
         self.output_validator = StructuredOutputValidator()
         
         # 模型配置
-        self.model_name = "deepseek-chat"
+        self.model_name = "deepseek-reasoner"
         self.max_retries = 3
         self.timeout = 60
         
@@ -136,13 +136,21 @@ class DeepSeekEventExtractor:
             
             # 处理多事件结果
             events = []
-            if "events" in result and isinstance(result["events"], list):
-                for event in result["events"]:
-                    if metadata:
-                        event.setdefault("metadata", {}).update(metadata)
-                    event.setdefault("metadata", {})["extraction_timestamp"] = datetime.now().isoformat()
-                    event.setdefault("metadata", {})["model_used"] = self.model_name
-                    events.append(event)
+            # 如果结果是字典且包含 'events' 列表
+            if isinstance(result, dict) and "events" in result and isinstance(result["events"], list):
+                events_list = result["events"]
+            # 如果结果本身就是列表
+            elif isinstance(result, list):
+                events_list = result
+            else:
+                events_list = []
+
+            for event in events_list:
+                if metadata:
+                    event.setdefault("metadata", {}).update(metadata)
+                event.setdefault("metadata", {})["extraction_timestamp"] = datetime.now().isoformat()
+                event.setdefault("metadata", {})["model_used"] = self.model_name
+                events.append(event)
             
             logger.info(f"成功抽取{len(events)}个事件")
             return events
@@ -218,7 +226,7 @@ class DeepSeekEventExtractor:
                 # 使用项目现有的deepseek_v3_complete函数
                 response = await deepseek_v3_complete(
                     prompt=full_prompt,
-                    model="deepseek-chat",
+                    model=self.model_name,  # 使用实例中配置的模型
                     max_tokens=4000,
                     temperature=0.1
                 )
@@ -231,7 +239,7 @@ class DeepSeekEventExtractor:
                     raise
                 await asyncio.sleep(2 ** attempt)  # 指数退避
     
-    def _parse_json_response(self, response: str, domain: str = None, event_type: str = None) -> Dict[str, Any]:
+    def _parse_json_response(self, response: str, domain: str = None, event_type: str = None) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """
         使用增强解析器解析JSON响应
         
@@ -241,7 +249,7 @@ class DeepSeekEventExtractor:
             event_type: 事件类型（用于获取模式）
             
         Returns:
-            解析后的字典
+            解析后的字典或字典列表
         """
         # 获取期望的模式
         expected_schema = None
@@ -262,6 +270,15 @@ class DeepSeekEventExtractor:
             logger.info(f"JSON解析成功，置信度: {self.json_parser.parse(response).confidence_score}")
             return data
         else:
+            # 如果验证失败，但看起来像一个JSON列表，尝试直接解析
+            try:
+                parsed_json = json.loads(response.strip())
+                if isinstance(parsed_json, list):
+                    logger.warning("JSON验证失败，但成功解析为列表。直接返回列表。")
+                    return parsed_json
+            except json.JSONDecodeError:
+                pass # 忽略解析错误，继续抛出原始验证错误
+
             error_msg = f"JSON解析失败: {'; '.join(errors)}"
             logger.error(f"{error_msg}\n原始响应: {response[:200]}...")
             raise ValueError(error_msg)

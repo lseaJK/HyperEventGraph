@@ -37,20 +37,20 @@ class EventLogicAnalyzer:
         
         # 关系类型映射
         self.relation_type_mapping = {
-            "因果": RelationType.CAUSAL_CAUSE,
-            "直接因果": RelationType.CAUSAL_CAUSE,
-            "间接因果": RelationType.CAUSAL_EFFECT,
+            "因果": RelationType.CAUSAL,
+            "直接因果": RelationType.CAUSAL_DIRECT,
+            "间接因果": RelationType.CAUSAL_INDIRECT,
             "时间先后": RelationType.TEMPORAL_BEFORE,
             "时间后续": RelationType.TEMPORAL_AFTER,
-            "同时发生": RelationType.TEMPORAL_DURING,
-            "条件": RelationType.CONDITIONAL_IF,
-            "必要条件": RelationType.CONDITIONAL_IF,
-            "充分条件": RelationType.CONDITIONAL_IF,
-            "对比": RelationType.CONTRAST_SIMILAR,
+            "同时发生": RelationType.TEMPORAL_SIMULTANEOUS,
+            "条件": RelationType.CONDITIONAL,
+            "必要条件": RelationType.CONDITIONAL_NECESSARY,
+            "充分条件": RelationType.CONDITIONAL_SUFFICIENT,
+            "对比": RelationType.CONTRAST,
             "相反": RelationType.CONTRAST_OPPOSITE,
             "相似": RelationType.CONTRAST_SIMILAR,
-            "相关": RelationType.COOCCURRENCE,
-            "未知": RelationType.COOCCURRENCE # Defaulting UNKNOWN to COOCCURRENCE for now
+            "相关": RelationType.CORRELATION,
+            "未知": RelationType.UNKNOWN
         }
     
     def analyze_event_relations(self, events: List[Event]) -> List[EventRelation]:

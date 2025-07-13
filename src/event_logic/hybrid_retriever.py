@@ -23,8 +23,11 @@ except ImportError:
 
 try:
     from neo4j import GraphDatabase
+    from neo4j.exceptions import ServiceUnavailable, AuthError
 except ImportError:
     GraphDatabase = None
+    ServiceUnavailable = None
+    AuthError = None
 
 from src.models.event_data_model import Event
 from .data_models import EventRelation, RelationType
@@ -105,6 +108,14 @@ class BGEEmbedder:
                 model_name=self.model_name
             )
             
+        except requests.exceptions.RequestException as e:
+            self.logger.error(f"无法连接到BGE嵌入服务 at {self.ollama_url}. 请确保服务正在运行. 错误: {e}")
+            # 返回零向量作为fallback
+            return BGEEmbedding(
+                vector=[0.0] * 1024,  # BGE-large默认维度
+                dimension=1024,
+                model_name=self.model_name
+            )
         except Exception as e:
             self.logger.error(f"BGE嵌入向量化失败: {e}")
             # 返回零向量作为fallback
@@ -174,11 +185,15 @@ class ChromaDBRetriever:
             )
             self.logger.info(f"ChromaDB客户端初始化成功，集合: {self.collection_name}")
         except Exception as e:
-            self.logger.error(f"ChromaDB初始化失败: {e}")
-            raise
+            self.logger.error(f"ChromaDB初始化失败: {e}. ChromaDB相关功能将不可用。")
+            self.client = None
+            self.collection = None
     
     def add_event(self, event: Event) -> bool:
         """添加事件到ChromaDB"""
+        if not self.collection:
+            self.logger.warning("ChromaDB未初始化，跳过添加事件。")
+            return False
         try:
             embedding = self.embedder.embed_event(event)
             
@@ -202,6 +217,9 @@ class ChromaDBRetriever:
     
     def add_events(self, events: List[Event]) -> bool:
         """批量添加事件到向量数据库"""
+        if not self.collection:
+            self.logger.warning("ChromaDB未初始化，跳过批量添加事件。")
+            return False
         try:
             # 批量向量化
             embeddings = self.embedder.batch_embed_events(events)
@@ -250,6 +268,9 @@ class ChromaDBRetriever:
                             top_k: int = 10, 
                             similarity_threshold: float = 0.7) -> List[VectorSearchResult]:
         """检索相似事件"""
+        if not self.collection:
+            self.logger.warning("ChromaDB未初始化，无法进行检索。")
+            return []
         try:
             query_embedding = self.embedder.embed_event(query_event)
             
@@ -373,7 +394,9 @@ class Neo4jGraphRetriever:
                     ))
                 
                 return graph_results
-                
+        except (ServiceUnavailable, AuthError) as e:
+            self.logger.error(f"无法连接到Neo4j或认证失败: {e}. 请检查连接配置和凭据。")
+            return []
         except Exception as e:
             self.logger.error(f"Neo4j图检索失败: {e}")
             return []
