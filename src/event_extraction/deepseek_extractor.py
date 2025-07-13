@@ -55,7 +55,7 @@ class DeepSeekEventExtractor:
         self.output_validator = StructuredOutputValidator()
         
         # 模型配置
-        self.model_name ="deepseek-chat" # "deepseek-reasoner"
+        self.model_name ="deepseek-reasoner" # "deepseek-reasoner"
         self.max_retries = 3
         self.timeout = 60
         

@@ -12,6 +12,7 @@ import json
 import asyncio
 from datetime import datetime
 from pathlib import Path
+import logging
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
@@ -26,8 +27,28 @@ from src.output.jsonl_manager import JSONLManager
 from src.output.graph_exporter import GraphExporter
 from src.core.workflow_controller import WorkflowController
 from src.config.workflow_config import ConfigManager
-from src.models.event_data_model import Event, EventRelation
+from src.models.event_data_model import Event, EventRelation, EventType
 from src.monitoring.performance_monitor import PerformanceMonitor
+
+# 配置日��
+logger = logging.getLogger(__name__)
+
+def _get_event_type_enum(type_str: str) -> EventType:
+    """安全地将字符串转换为EventType枚举"""
+    if not isinstance(type_str, str):
+        return EventType.OTHER
+    try:
+        # 尝试直接用值匹配
+        return EventType(type_str)
+    except ValueError:
+        # 如果失败，尝试按名称匹配（忽略大小写和下划线/点）
+        normalized_str = type_str.replace(".", "_").upper()
+        for member in EventType:
+            if member.name == normalized_str:
+                return member
+        # 如果仍然失败，返回默认值
+        logger.warning(f"无效的事件类型字符串: '{type_str}'，将使用默认值 'OTHER'。")
+        return EventType.OTHER
 
 class RealDataPipeline:
     """真实数据处理流水线"""
@@ -64,7 +85,7 @@ class RealDataPipeline:
                 data = json.load(f)
             print(f"✅ 成功加载 {len(data)} 条真实新闻数据")
             # 确保返回的是一个纯文本字符串列表
-            return data
+            return [item['content'] for item in data if isinstance(item, dict) and 'content' in item]
         except Exception as e:
             print(f"❌ 加载数据失败: {e}")
             return []
@@ -91,11 +112,16 @@ class RealDataPipeline:
                         if not isinstance(event_data, dict):
                             print(f"  ⚠️ 无效的事件数据格式，已跳过: {event_data}")
                             continue
+                        
+                        # 安全地将字符串转换为EventType枚举
+                        event_type_str = event_data.get('event_type', 'other')
+                        event_type_enum = _get_event_type_enum(event_type_str)
+
                         event = Event(
                             id=f"evt_{i}_{len(all_events)+1}",
                             summary=event_data.get('summary', ''),
                             text=text_content,
-                            event_type=event_data.get('event_type', 'unknown'),
+                            event_type=event_type_enum,
                             timestamp=datetime.now(),
                             participants=event_data.get('participants', []),
                             properties=event_data
@@ -202,7 +228,7 @@ class RealDataPipeline:
                     "total_events": len(events),
                     "total_relations": len(relations),
                     "total_patterns": len(patterns),
-                    "event_types": list(set(event.event_type for event in events)),
+                    "event_types": list(set(event.event_type.value for event in events)),
                     "relation_types": list(set(rel.relation_type.value for rel in relations) if relations else [])
                 },
                 "files": {
@@ -282,4 +308,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
