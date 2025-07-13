@@ -420,7 +420,7 @@ class HybridRetriever:
                  chroma_persist_dir: str = "./chroma_db",
                  neo4j_uri: str = "bolt://localhost:7687",
                  neo4j_user: str = "neo4j",
-                 neo4j_password: str = "password"):
+                 neo4j_password: str = "neo123456"):
         
         self.chroma_retriever = ChromaDBRetriever(chroma_collection, chroma_persist_dir)
         self.neo4j_retriever = Neo4jGraphRetriever(neo4j_uri, neo4j_user, neo4j_password)

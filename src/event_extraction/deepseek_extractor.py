@@ -147,8 +147,8 @@ class DeepSeekEventExtractor:
             # 其他情况 (None, str, etc.)，events_list 保持为空
 
             for event in events_list:
-                # 确保列表中的每个项目都是字典
-                if not isinstance(event, dict):
+                # 增加对None值的检查
+                if not event or not isinstance(event, dict):
                     continue
                 if metadata:
                     event.setdefault("metadata", {}).update(metadata)

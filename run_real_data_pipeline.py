@@ -64,7 +64,7 @@ class RealDataPipeline:
                 data = json.load(f)
             print(f"✅ 成功加载 {len(data)} 条真实新闻数据")
             # 确保返回的是一个纯文本字符串列表
-            return [item['content'] for item in data if isinstance(item, dict) and 'content' in item]
+            return data
         except Exception as e:
             print(f"❌ 加载数据失败: {e}")
             return []
