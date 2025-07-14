@@ -10,6 +10,9 @@ openai>=1.0.0
 tiktoken>=0.5.0
 transformers>=4.30.0
 
+# Agent Framework
+autogen-agentchat>=0.2.0
+
 # JSON处理和验证
 jsonschema>=4.17.0
 
