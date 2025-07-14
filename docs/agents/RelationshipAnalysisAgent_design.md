@@ -1,6 +1,6 @@
 # RelationshipAnalysisAgent - 技术设计文档
 
-**版本**: 1.0
+**版本**: 1.1 (AutoGen-based)
 **作者**: Gemini Architect
 **日期**: 2025-07-14
 
@@ -16,83 +16,74 @@
 
 ---
 
-## 2. 类与方法定义
+## 2. AutoGen框架集成
+
+`RelationshipAnalysisAgent` 将被实现为 `autogen.AssistantAgent` 的一个子类。其核心行为由其`system_message`和注册的`tools`定义。
+
+- **System Message**: "你是一个逻辑关系分析专家。当被提供一篇原文和其中已抽取的事件列表时，你必须使用`analyze_event_relationships`工具来识别这些事件之间的逻辑关系。"
+- **Tools**: 核心的关系分析逻辑将被封装成一个Agent可调用的工具。
+
+---
+
+## 3. 类与工具定义
 
 ```python
 # (伪代码)
-from some_llm_client import PowerfulLLMClient
+import autogen
 from some_config_loader import Config
-from graphrag_enhancer import GraphRAGEnhancer
+from event_logic_toolkit import EventLogicToolkit # 这是一个代表现有逻辑的封装
 
-class RelationshipAnalysisAgent:
+class RelationshipAnalysisAgent(autogen.AssistantAgent):
     """
     分析已抽取事件列表之间的逻辑关系。
     """
-    def __init__(self, llm_client: PowerfulLLMClient, config: Config, graph_enhancer: GraphRAGEnhancer = None):
+    def __init__(self, llm_config: dict, config: Config):
         """
-        :param llm_client: 强大的LLM客户端。
-        :param config: 全局配置对象。
-        :param graph_enhancer: (��选) GraphRAG增强器，用于上下文增强和关系验证。
+        :param llm_config: AutoGen格式的LLM配置。
+        :param config: 全局应用配置。
         """
-        self.llm_client = llm_client
-        self.config = config
-        self.graph_enhancer = graph_enhancer
-        self.prompt_template = self._load_prompt_template()
-
-    def run(self, original_text: str, extracted_events: list[dict]) -> list[dict]:
-        """
-        执行关系分析的核心方法。
+        super().__init__(
+            name="RelationshipAnalysisAgent",
+            system_message="你是一个逻辑关系分析专家...",
+            llm_config=llm_config,
+        )
         
-        :param original_text: 完整的原始文本。
-        :param extracted_events: 由ExtractionAgent抽取的事件列表。
-        :return: 一个包含所有识别出的关系字典的列表。
-        """
-        # ... 详细逻辑见下方 ...
-        pass
+        # 封装现有逻辑
+        self.toolkit = EventLogicToolkit(config)
+        
+        # 注册工具
+        self.register_function(
+            function_map={
+                "analyze_event_relationships": self.toolkit.analyze_event_relationships
+            }
+        )
 ```
 
 ---
 
-## 3. `.run()` 方法核心逻辑
+## 4. 工具核心逻辑 (`analyze_event_relationships`)
 
-1.  **前置检查**: 检查 `extracted_events` 列表中的事件数量。如果少于2个，直接返回空列表 `[]`。
-
-2.  **上下文增强 (可选)**:
-    *   如果 `self.graph_enhancer` 已被初始化：
-    *   调用 `enhanced_context = self.graph_enhancer.get_context_for_events(extracted_events)` 来获取与当前事件相关的历史背景或知识。
-    *   如果调用失败，记录警告并继续，`enhanced_context` 为空字符串。
-
-3.  **构建Prompt**:
-    *   将`original_text`、`extracted_events`列表（序列化为JSON字符串）以及`enhanced_context`填入`self.prompt_template`���
-    *   Prompt需明确指示LLM识别四种关系类型，并为每个判断提��`reasoning`。
-
-4.  **调用LLM进行关系推理**:
-    ```python
-    llm_response = self.llm_client.query(prompt)
-    ```
-
-5.  **解析响应**: 解析LLM返回的JSON列表。预期的格式为 `[{"source_event_id": "...", "target_event_id": "...", "relation_type": "...", "reasoning": "..."}, ...]`。
-
-6.  **关系验证 (可选)**:
-    *   如果 `self.graph_enhancer` 已被初始化：
-    *   调用 `validated_relations = self.graph_enhancer.validate_and_score_relations(parsed_relations)` 来对候选关系进行打分和验证，更新或添加`confidence`字段。
-    *   如果调用失败，记录警告，并使用未经验证的关系继续。
-
-7.  **返回结果**: 返回最终的关系列表 `list[dict]`。
-
-8.  **错误处理**:
-    *   LLM调用或解析失败，记录错误并返回空列表 `[]`。
+1.  **函数签名**: `def analyze_event_relationships(self, original_text: str, extracted_events: list[dict]) -> list[dict]:`
+2.  **前置检查**: 如果事件数量少于2，直接返回空列表。
+3.  **上下文增强 (可选)**: 调用`self.graph_enhancer`（在toolkit内部）获取历史上下文。
+4.  **构建Prompt**: 将原文、事件列表和增强后的上下文填入Prompt模板。
+5.  **调用LLM**: 执行LLM查询以推理关系。
+6.  **解析响应**: 解析LLM返回的关系列表JSON。
+7.  **关系验证 (可选)**: 调用`self.graph_enhancer`对候选关系进行验证和打分。
+8.  **返回结果**: 返回最终的关系字典列表。
 
 ---
 
-## 4. 数据结构定义
+## 5. 数据结构定义
 
-### 4.1 输入
+(与V1.0相同，定义了工具的输入和输出)
+
+### 5.1 工具输入
 
 - `original_text: str`: 完整的原始文本。
 - `extracted_events: list[dict]`: 事件列表，每个事件必须有唯一的`id`字段。
 
-### 4.2 输出
+### 5.2 工具输出
 
 - **成功**:
   ```json
@@ -101,8 +92,7 @@ class RelationshipAnalysisAgent:
       "source_event_id": "evt_uuid_1",
       "target_event_id": "evt_uuid_2",
       "relation_type": "causal",
-      "reasoning": "因为公司A发布��超预期的财报，所以其股价大幅上涨。",
-      "confidence": 0.92
+      ...
     }
   ]
   ```
@@ -110,23 +100,20 @@ class RelationshipAnalysisAgent:
 
 ---
 
-## 5. 与现有代码的映射关系
+## 6. 与现有代码的映射关系
 
-`RelationshipAnalysisAgent` 的核心功能将整合和重构当前 `src/event_logic` 目录下的多个模块。
+重构的核心是将 `src/event_logic` 的功能封装成一个`EventLogicToolkit`，并将其方法作为工具注册给Agent。
 
-- **核心分析逻辑**: `.run()` 方法中的关系推理步骤，将主要基于 `src/event_logic/event_logic_analyzer.py` 的实现。
-- **GraphRAG 增强**:
-    - 上下文增强步骤 (`get_context_for_events`) 将封装和调用 `src/event_logic/graphrag_coordinator.py` 和 `src/event_logic/hybrid_retriever.py` 的功能，以实现混合检索。
-    - 关系验证和评分步骤 (`validate_and_score_relations`) 将复用 `src/event_logic/relationship_validator.py` 的逻辑。
-- **数据模型**: Agent内部处理的数据结构（如Event, Relation）应与 `src/event_logic/data_models.py` 中定义的模型保持一致。
-- **LLM 客户端**: 可以复用项目级的 `PowerfulLLMClient`，其实现可以参考 `src/event_extraction` 中的已有实践。
-
-`RelationshipAnalysisAgent` 的作用是将 `src/event_logic` 中分散的组件（分析器、协调器、验证器）统一到一个有状态的、流程清晰的Agent中，由 `WorkflowController` 进行统一调度。
+- **`EventLogicToolkit`**:
+    - `analyze_event_relationships` 方法将整合 `event_logic_analyzer.py` 的核心逻辑。
+    - 该方法内部会调用一个`GraphRAGEnhancer`实例（可以作为toolkit的成员变量），该实例封装了`graphrag_coordinator.py`, `hybrid_retriever.py`, 和 `relationship_validator.py`的功能。
+- **`RelationshipAnalysisAgent`**: Agent本身保持精简，专注于理解任务并通过LLM对话决定何时调用`analyze_event_relationships`工具。
 
 ---
 
-## 6. 依赖项
+## 7. 依赖项
 
+- **`autogen-agentchat`**: AutoGen核心框架。
 - **PowerfulLLMClient**: 功能强大的LLM客户端。
 - **Config**: 全局配置模块。
 - **GraphRAGEnhancer (可选)**: 用于上下文增强和关系验证的模块。

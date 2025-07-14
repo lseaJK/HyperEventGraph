@@ -1,166 +1,106 @@
 # TriageAgent - 技术设计文档
 
-**版本**: 1.0
+**版本**: 1.1 (AutoGen-based)
 **作者**: Gemini Architect
 **日期**: 2025-07-14
 
 ---
 
-## 1. 目标与定位 (Goal & Positioning)
+## 1. 目标与定位
 
 **目标**: 快速、低成本地对输入的任意文本进行“分诊”，判断其核心内容是否属于任何一个系统已知的事件类型。
 
-**定位**: `TriageAgent`是整个实时处理工作流的“看门人”和“交通警察”。它位于流程的最前端，负责将流量导向正确的处理路径（深度抽取 or 存入未知事件池），从而避免将昂贵的计算资源（如功能强大的LLM）浪费在无法处理或不相关的文本上。
+**定位**: `TriageAgent`是整个实时处理工作流的“看门人”和“交通警察”。它位于流程的最前端，负责将流量导向正确的处理路径（深度抽取 or 存入未知事件池），从而避免将昂贵的计算资源浪费在无法处理或不相关的文本上。
 
 **核心原则**: 速度优先，成本敏感。
 
 ---
 
-## 2. 类与方法定义
+## 2. AutoGen框架集成
+
+`TriageAgent` 将被实现为 `autogen.AssistantAgent` 的一个子类。
+
+- **System Message**: "你是一个事件分类专家。你的任务是判断用户提供的文本属于哪个已知的事件类型。如果都不属于，就判断为未知。你必须使用`classify_event_type`工具来完成任务。"
+- **Tools**: 分诊的核心逻辑将被封装成一个Agent可调用的工具。
+
+---
+
+## 3. 类与工具定义
 
 ```python
 # (伪代码)
-from some_llm_client import LightweightLLMClient
+import autogen
 from some_config_loader import Config
+from triage_toolkit import TriageToolkit # 这是一个代表现有逻辑的封装
 
-class TriageAgent:
+class TriageAgent(autogen.AssistantAgent):
     """
     负责对输入文本进行快速事件类型分类。
     """
-    def __init__(self, llm_client: LightweightLLMClient, config: Config):
+    def __init__(self, llm_config: dict, config: Config):
         """
-        通过依赖注入初始化Agent。
+        :param llm_config: AutoGen格式的LLM配置 (应配置为使用轻量级模型)。
+        :param config: 全局应用配置。
+        """
+        super().__init__(
+            name="TriageAgent",
+            system_message="你是一个事件分类专家...",
+            llm_config=llm_config,
+        )
         
-        :param llm_client: 一个轻量级、快速的LLM客户端实例。
-        :param config: 全局配置对象，用于获取prompt模板路径、已知schema等。
-        """
-        self.llm_client = llm_client
-        self.config = config
-        self.prompt_template = self._load_prompt_template()
-        self.known_event_types = self._load_known_event_types()
-
-    def run(self, text: str) -> dict:
-        """
-        执行分诊的核心方法。
+        self.toolkit = TriageToolkit(config)
         
-        :param text: 待处理的原始文本。
-        :return: 一个包含分诊结果的字典。
-        """
-        # ... 详细逻辑见下方 ...
-        pass
-
-    def _load_prompt_template(self) -> str:
-        """从配置文件指定的路径加载Prompt模板。"""
-        # ... 实现 ...
-        pass
-
-    def _load_known_event_types(self) -> list[dict]:
-        """从event_schemas.json加载所有已知事件的类型和描述。"""
-        # ... 实现 ...
-        pass
-    
-    def _log_unknown_event(self, proposed_type: str, text: str):
-        """将未知事件记录到pending_new_types.jsonl文件中。"""
-        # ... 实现 ...
-        pass
+        self.register_function(
+            function_map={
+                "classify_event_type": self.toolkit.classify_event_type
+            }
+        )
 ```
 
 ---
 
-## 3. `.run()` 方法核心逻辑
+## 4. 工具核心逻辑 (`classify_event_type`)
 
-1.  **格式化已知类型**: 将`self.known_event_types`格式化为一个易于LLM理解的字符串列表。
-    ```
-    # 示例
-    event_type_list_str = ' - "企业收购": 描述一家公司对另一家公司的收购或合并行为。\n - "高管变动": 描述公司重要管理人员的任命、离职或退休。'
-    ```
-
-2.  **构建Prompt**: 将上一步的列表和输入的`text`填入`self.prompt_template`。
-
-3.  **调用LLM**:
-    ```python
-    llm_response = self.llm_client.query(prompt)
-    ```
-
-4.  **解析响应**: 对LLM返回的（可能是JSON格式的）字符串进行解析。
-    *   **预期格式**: `{"decision": "known" | "unknown", "type": "事件类型名"}`
-    *   需要有健壮的解析逻辑，能处理轻微的格式偏差。
-
-5.  **处理"已知"情况**:
-    *   如果`decision`是`"known"`，并且`type`在`self.known_event_types`的名称列表中。
-    *   返回结果: `{"status": "known", "event_type": type, "source_text": text}`
-
-6.  **处理"未知"情况**:
-    *   如果`decision`是`"unknown"`。
-    *   调用`self._log_unknown_event(proposed_type=type, text=text)`将该事件记录到日志文件。
-    *   返回结果: `{"status": "unknown", "proposed_type": type}`
-
-7.  **错误处理**:
-    *   如果LLM调用失败，记录错误并返回 `{"status": "error", "message": "LLM call failed."}`。
-    *   如果响应解析失败，记录错误和原始响应，并返回 `{"status": "error", "message": "Failed to parse LLM response."}`。
+1.  **函数签名**: `def classify_event_type(self, text: str) -> dict:`
+2.  **加载已知类型**: 从`event_schemas.json`加载事件类型和描述，格式化为字符串列表。
+3.  **构建Prompt**: 将类型列表和输入的`text`填入为分诊任务专门设计的Prompt模板。
+4.  **调用轻量级LLM**: 通过`self.llm_client`执行查询。
+5.  **解析响应**: 解析LLM返回的`{"decision": "known" | "unknown", "type": "..."}`。
+6.  **处理"已知"情况**: 如果是`"known"`，返回包含状态和类型的字典。
+7.  **处理"未知"情况**: 如果是`"unknown"`，调用内部方法`_log_unknown_event`将事件写入`.jsonl`文件，然后返回包含状态和建议类型的字典。
+8.  **返回结果**: 返回一个包含分诊结果的字典，这个字典将作为工具调用的结果在Agent之间传递。
 
 ---
 
-## 4. 数据结构定义
+## 5. 数据结构定义
 
-### 4.1 输入
+(与V1.0相同，定义了工具的输入和输出)
 
+### 5.1 工具输入
 - `text: str`: 原始文本。
 
-### 4.2 输出
-
-- **成功 (已知)**:
-  ```json
-  {
-    "status": "known",
-    "event_type": "企业收购", // LLM判断出的已知类型
-    "source_text": "..." // 原始文本
-  }
-  ```
-- **成功 (未知)**:
-  ```json
-  {
-    "status": "unknown",
-    "proposed_type": "新产品发布" // LLM建议的新类型
-  }
-  ```
-- **失败**:
-  ```json
-  {
-    "status": "error",
-    "message": "具体的错误信息"
-  }
-  ```
-
-### 4.3 `pending_new_types.jsonl` 文件条目
-
-```json
-{
-  "proposed_type": "新产品发布",
-  "source_text": "...",
-  "timestamp": "2025-07-14T12:00:00Z",
-  "status": "pending",
-  "cluster_id": null
-}
-```
+### 5.2 工具输出
+- **成功 (已知)**: `{"status": "known", "event_type": "企业收购", ...}`
+- **成功 (未知)**: `{"status": "unknown", "proposed_type": "新产品发布"}`
+- **失败**: `{"status": "error", "message": "..."}`
 
 ---
 
-## 5. 与现有代码的映射关系
+## 6. 与现有代码的映射关系
 
-`TriageAgent` 是一个新的功能概念，在现有代码库中没有直接对应的模块。它的实现将是创建新代码，但可以复用大量现有基础设施。
+`TriageAgent`的实现核心是创建一个新的`TriageToolkit`类，该类复用现有基础设施。
 
-- **LLM 客户端**: 可以复用或借鉴 `src/event_extraction/deepseek_extractor.py` 中已经实现的LLM调用逻辑，但需要将其配置为使用一个更轻量级、响应更快的模型，以符合其“快速分诊”的定位。
-- **配置管理**: 将复用项目已有的配置加载机制（可能在 `src/config/` 下），用于获取Prompt模板路径、已知Schema文件路径等。
-- **Schema 加载**: `_load_known_event_types` 方法可以复用 `src/event_extraction/schemas.py` 中的逻辑来读取 `event_schemas.json` 文件，但只加载 `event_type` 和 `description` 字段，以保持轻量。
-- **日志记录**: `_log_unknown_event` 方法在向 `.jsonl` 文件写入未知事件时，可以复用 `src/output/jsonl_manager.py` 中已经存在的逻辑。
-
-`TriageAgent` 的价值在于引入了“分流”这一新能力，它的实现重点是新开发的Prompt工程和对现有基础组件的巧妙复用。
+- **`TriageToolkit`**:
+    - `classify_event_type`方法是新开发的核心逻辑，主要负责Prompt工程和LLM调用。
+    - **LLM客户端**: 复用`src/event_extraction/deepseek_extractor.py`的调用逻辑，但配置为轻量级模型。
+    - **Schema加载**: 复用`src/event_extraction/schemas.py`的逻辑。
+    - **日志记录**: `_log_unknown_event`方法复用`src/output/jsonl_manager.py`的逻辑。
 
 ---
 
-## 6. 依赖项
+## 7. 依赖项
 
-- **LightweightLLMClient**: 一个实现了`.query(prompt)`方法的LLM客户端，配置为使用快速、低成本的模型。
-- **Config**: 全局配置模块，提供`event_schemas.json`和`pending_new_types.jsonl`的文件路径。
+- **`autogen-agentchat`**: AutoGen核心框架。
+- **LightweightLLMClient**: 轻量级LLM客户端。
+- **Config**: 全局配置模块。
 - **JSON Parser**: 用于解析LLM响应。
