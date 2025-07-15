@@ -46,6 +46,7 @@ class RelationType(Enum):
     
     # 条件关系
     CONDITIONAL = "conditional"  # 条件关系
+    CONDITIONAL_IF = "conditional_if" # 如果...那么...
     CONDITIONAL_NECESSARY = "conditional_necessary"  # 必要条件
     CONDITIONAL_SUFFICIENT = "conditional_sufficient"  # 充分条件
     

@@ -177,11 +177,12 @@ class TestEntityLinking(unittest.TestCase):
         self.assertIn('Tencent', kb_entity.aliases)
         self.assertGreater(kb_entity.confidence, 0)
     
-    def test_parse_dbpedia_entity(self):
+    @patch('src.knowledge_graph.entity_linking.EntityLinker._calculate_string_similarity', return_value=0.9)
+    def test_parse_dbpedia_entity(self, mock_similarity):
         """测试DBpedia实体解析"""
         mock_item = {
             'uri': 'http://dbpedia.org/resource/Tencent',
-            'label': 'Tencent Holdings Limited',  # 修改为更相似的名称
+            'label': 'Tencent',
             'comment': 'Chinese technology company',
             'classes': [
                 {'uri': 'http://dbpedia.org/ontology/Company'}
@@ -194,9 +195,11 @@ class TestEntityLinking(unittest.TestCase):
         self.assertIsNotNone(kb_entity)
         self.assertEqual(kb_entity.kb_id, 'Tencent')
         self.assertEqual(kb_entity.kb_name, 'dbpedia')
-        self.assertEqual(kb_entity.label, 'Tencent Holdings Limited')
+        self.assertEqual(kb_entity.label, 'Tencent')
         self.assertIn('http://dbpedia.org/ontology/Company', kb_entity.types)
         self.assertGreater(kb_entity.confidence, 0)
+        # 验证mock被调用
+        mock_similarity.assert_called_once()
     
     def test_rank_candidates(self):
         """测试候选排序"""

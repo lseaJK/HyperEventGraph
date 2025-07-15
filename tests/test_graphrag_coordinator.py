@@ -129,9 +129,13 @@ class TestGraphRAGCoordinator:
     @pytest.mark.asyncio
     async def test_retrieval_query(self, coordinator):
         """测试检索查询"""
-        # 模拟检索结果
-        mock_events = [Mock(spec=Event), Mock(spec=Event)]
-        coordinator.hybrid_retriever.search = Mock(return_value=mock_events)
+        # 模拟检索结果，使其符合预期的结构
+        mock_search_result = Mock()
+        mock_search_result.fused_results = [
+            {'event': Mock(spec=Event)},
+            {'event': Mock(spec=Event)}
+        ]
+        coordinator.hybrid_retriever.search = Mock(return_value=mock_search_result)
         
         query = GraphRAGQuery(
             query_id="retrieval_001",
@@ -181,7 +185,7 @@ class TestGraphRAGCoordinator:
         target_events = [Mock(spec=Event), Mock(spec=Event)]
         query = GraphRAGQuery(
             query_id="pattern_001",
-            query_text="测试模式发现",
+            query_text="��试模式发现",
             query_type="pattern_discovery",
             target_events=target_events,
             parameters={"min_support": 0.1}
@@ -198,11 +202,12 @@ class TestGraphRAGCoordinator:
     async def test_comprehensive_query(self, coordinator):
         """测试综合查询"""
         # 模拟各组件结果
-        mock_events = [Mock(spec=Event)]
+        mock_search_result = Mock()
+        mock_search_result.fused_results = [{'event': Mock(spec=Event)}]
         mock_enhanced = [Mock(spec=EnhancedEvent, total_confidence=0.8)]
         mock_patterns = [Mock(spec=EventPattern, confidence=0.7)]
         
-        coordinator.hybrid_retriever.search = Mock(return_value=mock_events)
+        coordinator.hybrid_retriever.search = Mock(return_value=mock_search_result)
         coordinator.attribute_enhancer.batch_enhance_events = Mock(return_value=mock_enhanced)
         coordinator.attribute_enhancer.get_attribute_statistics = Mock(return_value={})
         coordinator.pattern_discoverer.discover_patterns = Mock(return_value=mock_patterns)
@@ -329,8 +334,11 @@ class TestGraphRAGCoordinator:
     async def test_batch_process_queries(self, coordinator):
         """测试批量处理查询"""
         # 模拟成功和失败的查询
+        mock_success_result = Mock()
+        mock_success_result.fused_results = [{'event': Mock(spec=Event)}]
+        
         coordinator.hybrid_retriever.search = Mock(side_effect=[
-            [Mock(spec=Event)],  # 第一个查询成功
+            mock_success_result,  # 第一个查询成功
             Exception("第二个查询失败")  # 第二个查询失败
         ])
         

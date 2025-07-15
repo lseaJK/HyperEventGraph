@@ -246,27 +246,31 @@ class EventLogicAnalyzer:
             
             # 映射关系类型
             relation_type_str = data.get('relation_type', '未知')
-            relation_type = self.relation_type_mapping.get(relation_type_str, RelationType.COOCCURRENCE)
+            relation_type = self.relation_type_mapping.get(relation_type_str, RelationType.UNKNOWN)
             
             # 如果是无关系，返回None
-            if relation_type == RelationType.COOCCURRENCE and data.get('confidence', 0) < 0.3:
+            if relation_type == RelationType.UNKNOWN and data.get('confidence', 0) < 0.3:
                 return None
             
+            # 提取描述和证据，放入顶层字段或properties
+            description = data.get('description', '')
+            evidence = data.get('evidence', '')
+
             return EventRelation(
                 relation_type=relation_type,
                 source_event_id=source_id,
                 target_event_id=target_id,
                 confidence=data.get('confidence', 0.0),
                 strength=data.get('strength', 0.0),
-                properties={
-                    'description': data.get('description', ''),
-                    'evidence': data.get('evidence', '')
+                description=description, # 直接赋值
+                properties={ # 其他额外信息可以放入properties
+                    'evidence': evidence
                 },
                 source='llm_analysis'
             )
             
         except (json.JSONDecodeError, KeyError, TypeError) as e:
-            logger.error(f"解析LLM响应失败: {e}")
+            logger.error(f"解析LLM响应失败: {e}, 响应: {response[:200]}")
             return None
     
     def _rule_based_relation_analysis(self, event1: Event, event2: Event) -> Optional[EventRelation]:
