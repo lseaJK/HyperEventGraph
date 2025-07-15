@@ -36,6 +36,7 @@ class RelationType(Enum):
     # 因果关系
     CAUSAL = "causal"  # 因果关系
     CAUSAL_CAUSE = "causal_cause"  # 导致（兼容旧版）
+    CAUSAL_ENABLE = "causal_enable" # 使能
     CAUSAL_DIRECT = "causal_direct"  # 直接因果
     CAUSAL_INDIRECT = "causal_indirect"  # 间接因果
     

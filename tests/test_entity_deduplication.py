@@ -141,7 +141,7 @@ class TestEntityDeduplication(unittest.TestCase):
     def test_normalize_name(self):
         """测试名称标准化"""
         test_cases = [
-            ('腾讯控股有限公司', '腾讯控股有限公司'),
+            ('腾讯控股有限公司', '腾讯控股'), # 验证后缀移除
             ('  腾讯控股  ', '腾讯控股'),
             ('腾讯-控股!', '腾讯控股'),
             ('TENCENT Holdings', 'tencent holdings')
