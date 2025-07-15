@@ -9,7 +9,7 @@ from collections import defaultdict, deque
 from datetime import datetime
 
 from src.models.event_data_model import Event
-from .data_models import (
+from src.event_logic.data_models import (
     EventRelation, RelationType, ValidationResult, ValidatedRelation
 )
 

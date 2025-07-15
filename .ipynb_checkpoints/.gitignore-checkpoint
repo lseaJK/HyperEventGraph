@@ -1,0 +1,39 @@
+# 忽略所有 __pycache__ 目录
+*/__pycache__/
+__pycache__/
+
+# 忽略 tests/ 下的 __pycache__ 和 .pyc 文件
+tests/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 其他常见的Python忽略项
+*.egg-info/
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg
+MANIFEST
+
+# 环境相关
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/

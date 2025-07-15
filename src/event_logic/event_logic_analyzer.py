@@ -9,8 +9,8 @@ from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
 
-from ..models.event_data_model import Event, EventRelation, RelationType
-from .data_models import (
+from src.models.event_data_model import Event, EventRelation, RelationType
+from src.event_logic.data_models import (
     RelationAnalysisRequest, RelationAnalysisResult, ValidationResult, EventAnalysisResult
 )
 
