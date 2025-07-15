@@ -25,7 +25,7 @@ def load_real_data(data_path: str) -> list:
         print(f"❌ 加载数据失败: {e}")
         return []
 
-def test_event_extraction(texts: list):
+def run_event_extraction(texts: list):
     """测试事件抽取功能"""
     print("\n🔄 测试事件抽取功能...")
     
@@ -68,7 +68,7 @@ def test_event_extraction(texts: list):
         traceback.print_exc()
         return []
 
-def test_relation_analysis(events: list):
+def run_relation_analysis(events: list):
     """测试关系分析功能"""
     print("\n🔄 测试事理关系分析...")
     
@@ -98,7 +98,7 @@ def test_relation_analysis(events: list):
         traceback.print_exc()
         return []
 
-def test_output_export(events: list, relations: list):
+def run_output_export(events: list, relations: list):
     """测试输出导出功能"""
     print("\n🔄 测试输出导出...")
     
@@ -148,7 +148,7 @@ def test_output_export(events: list, relations: list):
         traceback.print_exc()
         return False
 
-def test_data_models():
+def run_data_models_check():
     """测试数据模型"""
     print("\n🔄 测试数据模型...")
     
@@ -207,7 +207,7 @@ def main():
     print("=" * 50)
     
     # 1. 测试数据模型
-    test_events, test_relations = test_data_models()
+    test_events, test_relations = run_data_models_check()
     
     # 2. 加载真实数据
     data_path = "IC_data/filtered_data_demo.json"
@@ -221,19 +221,19 @@ def main():
         return
     
     # 3. 测试事件抽取
-    events = test_event_extraction(texts)
+    events = run_event_extraction(texts)
     if not events:
         print("❌ 事件抽取失败，使用测试数据")
         events = test_events
     
     # 4. 测试关系分析
-    relations = test_relation_analysis(events)
+    relations = run_relation_analysis(events)
     if not relations:
         print("❌ 关系分析失败，使用测试数据")
         relations = test_relations
     
     # 5. 测试输出导出
-    success = test_output_export(events, relations)
+    success = run_output_export(events, relations)
     
     # 6. 总结
     print("\n" + "=" * 50)

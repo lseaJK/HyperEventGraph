@@ -50,8 +50,7 @@ def test_real_news_analysis():
         print(f"  关系类型: {relation['relation_type']}")
         
         # 创建EventRelation对象
-        from data_models import EventRelation, RelationType
-        from local_models import Event
+        from src.models.event_data_model import Event, EventRelation, RelationType
         
         # 将字典转换为Event对象
         from datetime import datetime

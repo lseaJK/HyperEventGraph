@@ -95,7 +95,7 @@ def create_test_events() -> List[Event]:
     return events
 
 
-def test_event_logic_analyzer():
+def run_event_logic_analyzer_test():
     """测试事理关系分析器"""
     print("=== 测试事理关系分析器 ===")
     
@@ -143,7 +143,7 @@ def test_event_logic_analyzer():
     return relations, events
 
 
-def test_relationship_validator(relations, events):
+def run_relationship_validator_test(relations, events):
     """测试关系验证器
     
     Args:
@@ -211,7 +211,7 @@ def test_relationship_validator(relations, events):
     return validated_relations
 
 
-def test_batch_analysis():
+def run_batch_analysis_test():
     """测试批量分析功能"""
     print("\n=== 测试批量分析 ===")
     
@@ -244,13 +244,13 @@ def main():
     
     try:
         # 测试事理关系分析器
-        relations, events = test_event_logic_analyzer()
+        relations, events = run_event_logic_analyzer_test()
         
         # 测试关系验证器
-        validated_relations = test_relationship_validator(relations, events)
+        validated_relations = run_relationship_validator_test(relations, events)
         
         # 测试批量分析
-        batch_results = test_batch_analysis()
+        batch_results = run_batch_analysis_test()
         
         print("\n=" * 50)
         print("所有测试完成！")
