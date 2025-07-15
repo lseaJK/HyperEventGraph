@@ -143,7 +143,7 @@ class TestIntegration:
                     id="rel_001",
                     source_event_id="extracted_001",
                     target_event_id="extracted_002",
-                    relation_type=RelationType.CAUSAL_CAUSE,
+                    relation_type=RelationType.CAUSAL_DIRECT,
                     confidence=0.85,
                     properties={"description": "事件1导致了事件2"}
                 )
@@ -293,7 +293,7 @@ class TestIntegration:
                     id="pattern_001",
                     pattern_type="因果链",
                     event_sequence=["event_001", "event_002"],
-                    relation_types=[RelationType.CAUSAL_CAUSE],
+                    relation_types=[RelationType.CAUSAL_DIRECT],
                     frequency=5,
                     confidence=0.8,
                     conditions={"description": "产品发布导致股价上涨的模式"}

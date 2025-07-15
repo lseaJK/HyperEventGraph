@@ -35,8 +35,6 @@ class RelationType(Enum):
     """事理关系类型枚举"""
     # 因果关系
     CAUSAL = "causal"  # 因果关系
-    CAUSAL_CAUSE = "causal_cause"  # 导致（兼容旧版）
-    CAUSAL_ENABLE = "causal_enable" # 使能
     CAUSAL_DIRECT = "causal_direct"  # 直接因果
     CAUSAL_INDIRECT = "causal_indirect"  # 间接因果
     
@@ -47,7 +45,6 @@ class RelationType(Enum):
     
     # 条件关系
     CONDITIONAL = "conditional"  # 条件关系
-    CONDITIONAL_IF = "conditional_if" # 如果...那么...
     CONDITIONAL_NECESSARY = "conditional_necessary"  # 必要条件
     CONDITIONAL_SUFFICIENT = "conditional_sufficient"  # 充分条件
     

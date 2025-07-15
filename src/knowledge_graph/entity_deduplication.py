@@ -70,8 +70,7 @@ class DeduplicationConfig:
     
     # 公司名称标准化
     company_suffixes: List[str] = field(default_factory=lambda: [
-        '有限公司', '股份有限公司', '集团有限公司', '科技有限公司',
-        '投资有限公司', '控股有限公司', '实业有限公司', '贸易有限公司',
+        '股份有限公司', '有限公司',
         'Ltd', 'Co.', 'Inc', 'Corp', 'LLC', 'Group', 'Holdings'
     ])
     
@@ -301,10 +300,15 @@ class EntityDeduplicator:
         if self.config.ignore_case:
             normalized = normalized.lower()
 
-        # 移除公司后缀
-        for suffix in self.config.company_suffixes:
-            pattern = r'\s*' + re.escape(suffix.lower() if self.config.ignore_case else suffix) + '$'
-            normalized = re.sub(pattern, '', normalized)
+        # 移除公司后缀 (按长度降序排序以处理包含关系)
+        sorted_suffixes = sorted(self.config.company_suffixes, key=len, reverse=True)
+        for suffix in sorted_suffixes:
+            # 使用 re.escape 确保特殊字符被正确处理
+            pattern_suffix = suffix.lower() if self.config.ignore_case else suffix
+            if normalized.endswith(pattern_suffix):
+                # 使用字符串操作移除后缀
+                normalized = normalized[:-len(pattern_suffix)].strip()
+                break  # 只移除最长的一个匹配后缀
 
         # 标准化空白字符
         if self.config.normalize_whitespace:

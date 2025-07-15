@@ -80,7 +80,7 @@ class TestKnowledgeRetrieverEnhanced(unittest.TestCase):
                 id="rel_1",
                 source_event_id="event_1",
                 target_event_id="event_2",
-                relation_type=RelationType.CAUSAL_CAUSE,
+                relation_type=RelationType.CAUSAL_DIRECT,
                 confidence=0.8
             )
         ]

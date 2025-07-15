@@ -37,12 +37,17 @@ class ContextBuilder:
         
         # 关系类型的中文描述
         self.relation_descriptions = {
-            RelationType.CAUSAL_CAUSE: "导致",
+            RelationType.CAUSAL: "因果关系",
+            RelationType.CAUSAL_DIRECT: "直接导致",
+            RelationType.CAUSAL_INDIRECT: "间接导致",
             RelationType.TEMPORAL_BEFORE: "发生在...之前",
-            RelationType.CONDITIONAL_IF: "条件关系",
-            RelationType.CAUSAL_ENABLE: "使能",
-            RelationType.CAUSAL_EFFECT: "效果",
-            RelationType.COOCCURRENCE: "相关"
+            RelationType.TEMPORAL_AFTER: "发生在...之后",
+            RelationType.TEMPORAL_SIMULTANEOUS: "同时发生",
+            RelationType.CONDITIONAL: "条件关系",
+            RelationType.CONDITIONAL_NECESSARY: "是...的必要条件",
+            RelationType.CONDITIONAL_SUFFICIENT: "是...的充分条件",
+            RelationType.CONTRAST: "对比关系",
+            RelationType.CORRELATION: "相关"
         }
     
     def build_context(self, retrieval_result: RetrievalResult, query_intent: QueryIntent) -> ContextData:
@@ -114,7 +119,7 @@ class ContextBuilder:
         # 添加关系信息
         causal_relations = [
             rel for rel in retrieval_result.relations 
-            if rel.relation_type in [RelationType.CAUSAL_CAUSE, RelationType.CAUSAL_ENABLE]
+            if rel.relation_type in [RelationType.CAUSAL, RelationType.CAUSAL_DIRECT, RelationType.CAUSAL_INDIRECT]
         ]
         
         if causal_relations:

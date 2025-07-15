@@ -481,7 +481,7 @@ class KnowledgeRetriever:
         # 获取因果关系
         relations = [
             rel for rel in self._get_relations_for_events(events)
-            if rel.relation_type in [RelationType.CAUSAL_CAUSE, RelationType.CAUSAL_ENABLE]
+            if rel.relation_type in [RelationType.CAUSAL, RelationType.CAUSAL_DIRECT, RelationType.CAUSAL_INDIRECT]
         ]
         
         events = self._deduplicate_events(events)

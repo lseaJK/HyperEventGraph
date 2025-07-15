@@ -11,8 +11,8 @@ from typing import List
 # 添加当前目录到路径以支持绝对导入
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# 使用本地数据模型
-from local_models import Event, EventType, Participant
+# 使用src中的数据模型
+from src.models.event_data_model import Event, EventType, Entity
 from event_logic_analyzer import EventLogicAnalyzer
 from relationship_validator import RelationshipValidator
 from data_models import RelationType, RelationAnalysisRequest
@@ -34,8 +34,8 @@ def create_test_events() -> List[Event]:
             summary="A轮融资",
             timestamp=base_time,
             participants=[
-                Participant(name="公司A", role="融资方"),
-                Participant(name="投资机构B", role="投资方")
+                Entity(name="公司A", entity_type="融资方"),
+                Entity(name="投资机构B", entity_type="投资方")
             ],
             location="北京",
             confidence=0.9
@@ -47,8 +47,8 @@ def create_test_events() -> List[Event]:
             summary="战略合作",
             timestamp=base_time + timedelta(days=30),
             participants=[
-                Participant(name="公司A", role="合作方"),
-                Participant(name="公司C", role="合作方")
+                Entity(name="公司A", entity_type="合作方"),
+                Entity(name="公司C", entity_type="合作方")
             ],
             location="上海",
             confidence=0.8
@@ -60,8 +60,8 @@ def create_test_events() -> List[Event]:
             summary="人事变动",
             timestamp=base_time + timedelta(days=15),
             participants=[
-                Participant(name="公司A", role="雇主"),
-                Participant(name="张三", role="新任技术总监")
+                Entity(name="公司A", entity_type="雇主"),
+                Entity(name="张三", entity_type="新任技术总监")
             ],
             location="北京",
             confidence=0.95
@@ -73,7 +73,7 @@ def create_test_events() -> List[Event]:
             summary="产品发布",
             timestamp=base_time + timedelta(days=60),
             participants=[
-                Participant(name="公司A", role="发布方")
+                Entity(name="公司A", entity_type="发布方")
             ],
             location="深圳",
             confidence=0.85
@@ -85,7 +85,7 @@ def create_test_events() -> List[Event]:
             summary="市场扩张",
             timestamp=base_time + timedelta(days=90),
             participants=[
-                Participant(name="公司A", role="扩张方")
+                Entity(name="公司A", entity_type="扩张方")
             ],
             location="广州",
             confidence=0.7
