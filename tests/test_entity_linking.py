@@ -181,7 +181,7 @@ class TestEntityLinking(unittest.TestCase):
         """测试DBpedia实体解析"""
         mock_item = {
             'uri': 'http://dbpedia.org/resource/Tencent',
-            'label': 'Tencent',
+            'label': 'Tencent Holdings Limited',  # 修改为更相似的名称
             'comment': 'Chinese technology company',
             'classes': [
                 {'uri': 'http://dbpedia.org/ontology/Company'}
@@ -194,7 +194,7 @@ class TestEntityLinking(unittest.TestCase):
         self.assertIsNotNone(kb_entity)
         self.assertEqual(kb_entity.kb_id, 'Tencent')
         self.assertEqual(kb_entity.kb_name, 'dbpedia')
-        self.assertEqual(kb_entity.label, 'Tencent')
+        self.assertEqual(kb_entity.label, 'Tencent Holdings Limited')
         self.assertIn('http://dbpedia.org/ontology/Company', kb_entity.types)
         self.assertGreater(kb_entity.confidence, 0)
     

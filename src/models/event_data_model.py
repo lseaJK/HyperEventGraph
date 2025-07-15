@@ -35,6 +35,7 @@ class RelationType(Enum):
     """事理关系类型枚举"""
     # 因果关系
     CAUSAL = "causal"  # 因果关系
+    CAUSAL_CAUSE = "causal_cause"  # 导致（兼容旧版）
     CAUSAL_DIRECT = "causal_direct"  # 直接因果
     CAUSAL_INDIRECT = "causal_indirect"  # 间接因果
     
@@ -135,6 +136,7 @@ class EventRelation:
     target_event_id: str = ""
     
     # 关系属性
+    description: str = ""    # 关系描述
     confidence: float = 1.0
     strength: float = 1.0  # 关系强度
     properties: Dict[str, Any] = field(default_factory=dict)
@@ -150,6 +152,7 @@ class EventRelation:
             'relation_type': self.relation_type.value,
             'source_event_id': self.source_event_id,
             'target_event_id': self.target_event_id,
+            'description': self.description,
             'confidence': self.confidence,
             'strength': self.strength,
             'properties': self.properties,
@@ -163,6 +166,7 @@ class EventPattern:
     """事理模式数据模型（抽象层）"""
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     pattern_name: str = ""
+    description: str = ""  # 模式描述
     pattern_type: str = ""  # 模式类型：sequential, causal, conditional等
     domain: str = ""  # 模式领域
     
@@ -188,6 +192,7 @@ class EventPattern:
         return {
             'id': self.id,
             'pattern_name': self.pattern_name,
+            'description': self.description,
             'pattern_type': self.pattern_type,
             'domain': self.domain,
             'event_types': [et.value for et in self.event_types],

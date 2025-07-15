@@ -173,6 +173,17 @@ class EntityDeduplicator:
         Returns:
             相似度结果
         """
+        # 确保实体类型相同
+        if entity1.entity_type != entity2.entity_type:
+            return EntitySimilarity(
+                entity1_id=getattr(entity1, 'id', 'unknown'),
+                entity2_id=getattr(entity2, 'id', 'unknown'),
+                similarity_score=0.0,
+                match_type="none",
+                confidence=0.0,
+                reasons=["实体类型不匹配"]
+            )
+
         reasons = []
         max_score = 0.0
         best_match_type = "none"

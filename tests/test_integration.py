@@ -174,33 +174,6 @@ class TestIntegration:
             
             mock.return_value = retriever
             yield retriever
-            
-    @pytest.fixture
-    def mock_llm_client(self):
-        """模拟LLM客户端"""
-        with patch('src.llm_integration.llm_event_extractor.LLMEventExtractor') as mock:
-            client = Mock()
-            
-            # 模拟LLM响应
-            client.generate_response.return_value = json.dumps({
-                "relation_type": "因果",
-                "confidence": 0.8,
-                "description": "模拟的因果关系"
-            })
-            
-            client.analyze_events.return_value = {
-                "relations": [
-                    {
-                        "source": "event_001",
-                        "target": "event_002",
-                        "type": "CAUSAL_CAUSE",
-                        "confidence": 0.8
-                    }
-                ]
-            }
-            
-            mock.return_value = client
-            yield client
 
     @pytest.mark.skip(reason="Skipping until dependent components are stable")
     def test_end_to_end_pipeline(self, mock_config_manager, mock_dual_layer_architecture, 
@@ -262,19 +235,29 @@ class TestIntegration:
                 mock_neo4j_instance.batch_store_events.assert_called_once()
                 # EventLayerManager不直接与ChromaDB交互，因此移除对mock_chroma_instance的断言
                 
-    def test_relation_analysis_integration(self, mock_config_manager, sample_events, mock_llm_client):
+    def test_relation_analysis_integration(self, mock_config_manager, sample_events):
         """测试关系分析集成"""
-        with patch('src.llm_integration.llm_event_extractor.LLMEventExtractor', return_value=mock_llm_client):
-            # 创建事理逻辑分析器
-            analyzer = EventLogicAnalyzer(llm_client=mock_llm_client)
-            
-            # 分析事件关系
-            relations = analyzer.analyze_event_relations(sample_events)
-            
-            # 验证关系分析结果
-            assert len(relations) > 0
-            assert all(isinstance(rel.relation_type, RelationType) for rel in relations)
-            assert all(hasattr(rel, 'confidence') for rel in relations)
+        # 创建一个模拟的LLM客户端
+        mock_llm_client = Mock()
+        mock_llm_client.generate_response.return_value = json.dumps({
+            "relation_type": "因果",
+            "confidence": 0.8,
+            "strength": 0.7,
+            "description": "模拟的因果关系",
+            "evidence": "模拟的证据"
+        })
+
+        # 创建事理逻辑分析器
+        analyzer = EventLogicAnalyzer(llm_client=mock_llm_client)
+        
+        # 分析事件关系
+        relations = analyzer.analyze_event_relations(sample_events)
+        
+        # 验证关系分析结果
+        assert len(relations) > 0
+        assert all(isinstance(rel, EventRelation) for rel in relations)
+        assert all(isinstance(rel.relation_type, RelationType) for rel in relations)
+        assert all(hasattr(rel, 'confidence') for rel in relations)
             
     def test_pattern_discovery_integration(self, mock_config_manager, sample_events, temp_dir):
         """测试模式发现集成"""
