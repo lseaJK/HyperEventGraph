@@ -15,21 +15,7 @@ from datetime import datetime
 from neo4j import GraphDatabase
 from neo4j.exceptions import ServiceUnavailable, TransientError
 
-# 导入数据模型
-try:
-    from ..models.event_data_model import Event, Entity, EventRelation, EventPattern, EventType, RelationType
-except ImportError:
-    # 如果导入失败，尝试绝对导入
-    try:
-        from src.models.event_data_model import Event, Entity, EventRelation, EventPattern, EventType, RelationType
-    except ImportError:
-        # 最后尝试直接导入
-        import sys
-        import os
-        # 添加项目根目录到路径
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-        sys.path.insert(0, project_root)
-        from src.models.event_data_model import Event, Entity, EventRelation, EventPattern, EventType, RelationType
+from src.models.event_data_model import Event, Entity, EventRelation, EventPattern, EventType, RelationType
 
 logger = logging.getLogger(__name__)
 

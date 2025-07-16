@@ -78,6 +78,7 @@ class PathConfig:
         self.logs_dir = self._get_path('LOGS_DIR', 'logs')
         self.app_log_path = self._get_path('APP_LOG_PATH', self.logs_dir / 'app.log')
         self.error_log_path = self._get_path('ERROR_LOG_PATH', self.logs_dir / 'error.log')
+        self.unknown_events_log_path = self._get_path('UNKNOWN_EVENTS_LOG_PATH', self.logs_dir / 'unknown_events.jsonl')
         
         # 临时文件路径
         self.temp_dir = self._get_path('TEMP_DIR', 'temp')
@@ -243,6 +244,11 @@ def get_rag_work_dir() -> Path:
 def get_prompt_templates_dir() -> Path:
     """获取 Prompt 模板目录"""
     return path_config.prompt_templates_dir
+
+
+def get_unknown_events_log_path() -> Path:
+    """获取未知事件日志文件路径"""
+    return path_config.unknown_events_log_path
 
 
 if __name__ == '__main__':

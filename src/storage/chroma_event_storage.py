@@ -15,16 +15,7 @@ from chromadb.types import Collection
 import ollama
 
 # 导入数据模型
-try:
-    from ..models.event_data_model import Event, EventPattern, EventRelation
-except (ImportError, ValueError):
-    # Fallback for standalone execution or different project structures
-    import sys
-    import os
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    if project_root not in sys.path:
-        sys.path.insert(0, project_root)
-    from src.models.event_data_model import Event, EventPattern, EventRelation
+from src.models.event_data_model import Event, EventPattern, EventRelation
 
 logger = logging.getLogger(__name__)
 

@@ -1,8 +1,6 @@
 import os
 import json
 import asyncio
-import sys
-from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 import logging
@@ -10,14 +8,9 @@ from .prompt_templates import PromptTemplateGenerator
 # from schemas import EventSchema  # EventSchema不存在，已注释
 from .json_parser import EnhancedJSONParser, StructuredOutputValidator, parse_llm_json_response
 
-# 添加项目根目录到Python路径
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
-
 # 导入项目现有的LLM模块
-sys.path.insert(0, str(project_root / "HyperGraphRAG_DS"))
-from hypergraphrag.llm import deepseek_v3_complete
-from hypergraphrag.utils import logger as hg_logger
+from src.hypergraphrag.llm import deepseek_v3_complete
+from src.hypergraphrag.utils import logger as hg_logger
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
