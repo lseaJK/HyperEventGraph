@@ -92,7 +92,6 @@ if __name__ == '__main__':
     sample_event_type = "company_merger_and_acquisition"
     sample_domain = "financial_domain"
 
-    print(f"
     
     extracted_events = toolkit.extract_events_from_text(
         text=sample_text,

@@ -15,7 +15,7 @@ import xml.etree.ElementTree as ET
 import numpy as np
 import tiktoken
 
-from hypergraphrag.prompt import PROMPTS
+from src.hypergraphrag.prompt import PROMPTS
 
 
 class UnlimitedSemaphore:

@@ -1,6 +1,6 @@
 import autogen
 from typing import Dict, Any
-from .toolkits.extraction_toolkit import EventExtractionToolkit
+from src.agents.toolkits.extraction_toolkit import EventExtractionToolkit
 
 class ExtractionAgent(autogen.AssistantAgent):
     """
