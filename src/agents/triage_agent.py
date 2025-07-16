@@ -18,7 +18,7 @@ class TriageAgent(autogen.AssistantAgent):
 
         super().__init__(
             name="TriageAgent",
-            system_message="你是一个事件分类专家。你的唯一任务是分析文本并决定它属于哪个事件类型。你绝对不能直接回复JSON或任何分析内容。你必须且只能通过调用`classify_event_type`工具来完成你的任务。",
+            system_message="You are a function-calling AI model. You are provided with one function: `classify_event_type`. Your sole purpose is to classify the user's text by calling this function. Do not reply with anything else. You must generate a function call to `classify_event_type`.",
             llm_config=triage_llm_config,
             **kwargs
         )

@@ -12,7 +12,7 @@ class RelationshipAnalysisAgent(autogen.AssistantAgent):
         """
         super().__init__(
             name="RelationshipAnalysisAgent",
-            system_message="你是一个逻辑关系分析专家。当被提供一篇原文和其中已抽取的事件列表时，你必须使用`analyze_event_relationships`工具来识别这些事件之间的逻辑关系。不要自己编造结果，必须调用工具。",
+            system_message="You are a function-calling AI model. You are provided with one function: `analyze_event_relationships`. Your sole purpose is to analyze relationships between events by calling this function. Do not reply with anything else. You must generate a function call to `analyze_event_relationships`.",
             llm_config=llm_config,
             **kwargs
         )

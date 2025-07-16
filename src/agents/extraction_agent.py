@@ -12,8 +12,8 @@ class ExtractionAgent(autogen.AssistantAgent):
         """
         super().__init__(
             name="ExtractionAgent",
-            # 这个系统消息是通用的，具体的上下文将在运行时通过 update_system_message 动态注入。
-            system_message="你是一个事件抽取专家。你必须使用`extract_events_from_text`工具来分析文本并抽取结构化信息。",
+            # system_message="你是一个事件分类专家。你的唯一任务是分析文本并决定它属于哪个事件类型。你绝对不能直接回复JSON或任何分析内容。你必须且只能通过调用`classify_event_type`工具来完成你的任务。", 
+            system_message="You are a function-calling AI model. You are provided with one function: `extract_events_from_text`. Your sole purpose is to extract events from the user's text by calling this function. Do not reply with anything else. You must generate a function call to `extract_events_from_text`.",
             llm_config=llm_config,
             **kwargs
         )
