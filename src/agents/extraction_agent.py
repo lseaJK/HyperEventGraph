@@ -13,7 +13,7 @@ class ExtractionAgent(autogen.AssistantAgent):
         super().__init__(
             name="ExtractionAgent",
             # 这个系统消息是通用的，具体的上下文将在运行时通过 update_system_message 动态注入。
-            system_message="你是一个事件抽取专家。你必须使用`extract_events_from_text`工具来分析文本并抽取结构化信息。",
+            system_message="你是一个事件抽取专家。你必须使用`extract_events_from_text`工具来分析文本并抽取结构化信息。在调用工具后，请回复'抽取完成'。",
             llm_config=llm_config,
             **kwargs
         )
