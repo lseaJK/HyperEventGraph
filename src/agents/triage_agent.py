@@ -18,7 +18,7 @@ class TriageAgent(autogen.AssistantAgent):
 
         super().__init__(
             name="TriageAgent",
-            system_message="你是一个事件分类专家。你的任务是判断用户提供的文本属于哪个已知的事件类型。如果都不属于，就判断为未知。你必须使用`classify_event_type`工具来完成任务。不要自己编造结果，必须调用工具。",
+            system_message="你是一个事件分类专家。你的唯一任务是分析文本并决定它属于哪个事件类型。你绝对不能直接回复JSON或任何分析内容。你必须且只能通过调用`classify_event_type`工具来完成你的任务。",
             llm_config=triage_llm_config,
             **kwargs
         )
