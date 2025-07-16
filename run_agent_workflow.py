@@ -11,16 +11,16 @@ from src.agents.extraction_agent import ExtractionAgent
 from src.agents.relationship_analysis_agent import RelationshipAnalysisAgent
 from src.agents.storage_agent import StorageAgent
 
-# ------------------ LLM 配置 ------------------
-api_key = os.getenv("DEEPSEEK_API_KEY")
+# ------------------ LLM 配置 (更新为SiliconFlow Kimi) ------------------
+api_key = os.getenv("SILICON_API_KEY")
 if not api_key:
-    raise ValueError("DEEPSEEK_API_KEY is not set in environment variables.")
+    raise ValueError("SILICON_API_KEY is not set in environment variables.")
 
 config_list = [
     {
-        "model": "deepseek-reasoner",
+        "model": "moonshotai/Kimi-K2-Instruct",
         "api_key": api_key,
-        "base_url": "https://api.deepseek.com/v1"
+        "base_url": "https://api.siliconflow.cn/v1"
     }
 ]
 
@@ -58,18 +58,16 @@ agents = [user_proxy, triage_agent, extraction_agent, relationship_agent, storag
 
 def get_last_json_output(messages: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """健壮地从消息历史中获取最新的JSON输出，无论是直接内容还是工具响应。"""
-    # 优先检查最新的工具响应
     for msg in reversed(messages):
+        # 优先从工具响应中获取
         if msg.get("role") == "tool":
             try:
                 return json.loads(msg.get("content", "{}"))
             except json.JSONDecodeError:
                 continue
-    # 如果没有工具响应，检查最新的Agent回复内容
-    for msg in reversed(messages):
-        if msg.get("role") == "assistant":
+        # 其次从Agent的直接回复中获取
+        if msg.get("role") == "assistant" and msg.get("content"):
             try:
-                # 清理可能的代码块标记
                 content = msg.get("content", "{}").strip()
                 if content.startswith("```json"):
                     content = content[7:-3].strip()
@@ -86,10 +84,9 @@ def custom_speaker_selection_func(last_speaker: autogen.Agent, groupchat: autoge
         workflow_context["original_text"] = messages[-1]['content']
         return triage_agent
 
-    # 获取上一步的JSON输出
     last_output = get_last_json_output(messages)
     if not last_output:
-        return user_proxy # 如果没有有效的JSON输出，则终止
+        return user_proxy
 
     if last_speaker.name == "TriageAgent":
         if last_output.get("status") == "known":
@@ -114,7 +111,6 @@ def custom_speaker_selection_func(last_speaker: autogen.Agent, groupchat: autoge
             workflow_context["extracted_relationships"] = relations
             return storage_agent
             
-    # 任何其他情况，或流程的最后一步，都将控制权交还给UserProxyAgent以结束
     return user_proxy
 
 group_chat = autogen.GroupChat(
@@ -124,14 +120,13 @@ manager = autogen.GroupChatManager(groupchat=group_chat, llm_config=llm_config)
 
 # ------------------ 启动工作流 ------------------
 if __name__ == "__main__":
-    news_text = "2024年7月15日，科技巨头A公司正式宣布，将以惊人的500亿美元全现金方式收购新兴AI芯片设计公司B公司。此次收购旨在强化A公司在人工智能领域的硬件布局。同时，A公司的CEO表示，收购完成后，将立即启动一项耗资10亿美元的整合计划，以确保B公司的技术能够快速融入A公司的产品线。"
+    news_text = "2024年7月15日，科技巨头A公司正式宣布，将以惊人的500亿美元全现金方式收购新兴AI芯片设计公司B公司。此次收购旨在强化A公司在人工智能领域的硬件布局。同时，A公司的CEO表示，收购完成后，将立即启动一项耗资10亿美元的整合计划，以确保B公司的技术能够快速融入A公司的产品线."
     
     user_proxy.initiate_chat(
         manager,
         message=news_text
     )
 
-    # 在流程结束后，根据最终的上下文决定最终状态
     if workflow_context.get("extracted_events"):
         print("\nWorkflow finished successfully. Final context:")
         final_status_message = "TASK_COMPLETE"
