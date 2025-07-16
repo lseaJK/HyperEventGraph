@@ -67,6 +67,64 @@ class ExtractionAgent(autogen.AssistantAgent):
 1.  **函数签名**: `def extract_events_from_text(self, text: str, event_type: str) -> list[dict]:`
 2.  **获取Schema和Prompt**: 从`event_schemas.json`中加载指定`event_type`的完整Schema和对应的Prompt模板。
 3.  **构建Prompt**: 将`text`和`JSON Schema`填入获取到的Prompt模板。
+4.  **调用强大的LLM**: 通过`self.llm_client`执行查询。
+5.  **解析并验证响应**: 使用`jsonschema`对LLM返回的JSON列表进行严格验证。
+6.  **实体标准化 (新增)**: 对抽取出的结果中所有实体相关的字段（如`"acquirer"`, `"target_company"`等），调用**中央实体知识库 `entity_kb.normalize()`** 方法进行标准化。
+7.  **返回结果**: 返回经过标准化处理的、通过验证的事件字典列表。
+8.  **错误处理**: 捕获异常并返回带有错误信息的结果，或空列表。
+
+---
+
+## 5. 数据结构定义
+
+(与V1.0相同，定义了工具的输入和输出)
+
+### 5.1 工具输入
+
+- `text: str`: 原始文本。
+- `event_type: str`: 明确的事件类型，如 "企业收购"。
+
+### 5.2 工具输出
+
+- **成功**:
+  ```json
+  [
+    {
+      "id": "evt_uuid_1",
+      "event_type": "企业收购",
+      ...
+    }
+  ]
+  ```
+- **失败或未抽取到**: `[]` (空列表)
+
+---
+
+## 6. 与现有代码的映射关系
+
+`ExtractionAgent`的重构核心是将**现有逻辑封装为Agent可调用的工具**。
+
+- **`EventExtractionToolkit`**: 我们将创建一个新的类`EventExtractionToolkit`，它会整合`src/event_extraction`目录下的所有功能。
+    - `deepseek_extractor.py` 和 `semiconductor_extractor.py` 的逻辑被封装进`toolkit.extract_events_from_text`方法。
+    - `prompt_templates.py`, `schemas.py`, `validation.py`, `json_parser.py`的功能被这个toolkit在内部调用。
+    - **该Toolkit将导入并使用共享的 `EntityKnowledgeBase` 模块来执行实体标准化。**
+- **`ExtractionAgent`**: Agent本身变得很“薄”，它只负责理解任务（通过LLM对话）和调用正确的工具。
+
+---
+
+## 7. 依赖项
+
+- **`autogen-agentchat`**: AutoGen核心框架。
+- **PowerfulLLMClient**: 功能强大的LLM客户端。
+- **Config**: 全局配置模块。
+- **JSON Validator**: `jsonschema`库。
+- **`EntityKnowledgeBase`**: **新增**，用于实体标准化的核心���享模块。
+
+这个函数封装了之前`.run()`方法的核心逻辑。
+
+1.  **函数签名**: `def extract_events_from_text(self, text: str, event_type: str) -> list[dict]:`
+2.  **获取Schema和Prompt**: 从`event_schemas.json`中加载指定`event_type`的完整Schema和对应的Prompt模板。
+3.  **构建Prompt**: 将`text`和`JSON Schema`填入获取到的Prompt模板。
 4.  **调用���大的LLM**: 通过`self.llm_client`执行查询。
 5.  **解析并验证响应**: 使用`jsonschema`对LLM返回的JSON列表进行严格验证。
 6.  **返回结果**: 返回通过验证的事件字典列表。

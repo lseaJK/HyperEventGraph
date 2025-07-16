@@ -65,12 +65,13 @@ class RelationshipAnalysisAgent(autogen.AssistantAgent):
 
 1.  **函数签名**: `def analyze_event_relationships(self, original_text: str, extracted_events: list[dict]) -> list[dict]:`
 2.  **前置检查**: 如果事件数量少于2，直接返回空列表。
-3.  **上下文增强 (可选)**: 调用`self.graph_enhancer`（在toolkit内部）获取历史上下文。
-4.  **构建Prompt**: 将原文、事件列表和增强后的上下文填入Prompt模板。
-5.  **调用LLM**: 执行LLM查询以推理关系。
-6.  **解析响应**: 解析LLM返回的关系列表JSON。
-7.  **关系验证 (可选)**: 调用`self.graph_enhancer`对候选关系进行验证和打分。
-8.  **返回结果**: 返回最终的关系字典列表。
+3.  **实体一致性保障 (重要)**: 理论上，传入的`extracted_events`应该已经由`ExtractionAgent`完成了实体标准化。此Agent可选择性地再次验证事件中的实体是否已标准化，以保证关系分析的准确性。
+4.  **上下文增强 (可选)**: 调用`self.graph_enhancer`（在toolkit内部）获取历史上下文。
+5.  **构建Prompt**: 将原文、事件列表和增强后的上下文填入Prompt模板。
+6.  **调用LLM**: 执行LLM查询以推理关系。
+7.  **解析响应**: 解析LLM返回的关系列表JSON。
+8.  **关系验证 (可选)**: 调用`self.graph_enhancer`对候选关系进行验证和打分。
+9.  **返回结果**: 返回最终的关系字典列表。
 
 ---
 
@@ -81,7 +82,7 @@ class RelationshipAnalysisAgent(autogen.AssistantAgent):
 ### 5.1 工具输入
 
 - `original_text: str`: 完整的原始文本。
-- `extracted_events: list[dict]`: 事件列表，每个事件必须有唯一的`id`字段。
+- `extracted_events: list[dict]`: 事件列表，每个事件必须有唯一的`id`字段，且实体应��被标准化。
 
 ### 5.2 工具输出
 
@@ -107,6 +108,7 @@ class RelationshipAnalysisAgent(autogen.AssistantAgent):
 - **`EventLogicToolkit`**:
     - `analyze_event_relationships` 方法将整合 `event_logic_analyzer.py` 的核心逻辑。
     - 该方法内部会调用一个`GraphRAGEnhancer`实例（可以作为toolkit的成员变量），该实例封装了`graphrag_coordinator.py`, `hybrid_retriever.py`, 和 `relationship_validator.py`的功能。
+    - **该Toolkit可以访问共享的 `EntityKnowledgeBase` 模块，用于潜在的实体一致性检查。**
 - **`RelationshipAnalysisAgent`**: Agent本身保持精简，专注于理解任务并通过LLM对话决定何时调用`analyze_event_relationships`工具。
 
 ---
@@ -117,3 +119,4 @@ class RelationshipAnalysisAgent(autogen.AssistantAgent):
 - **PowerfulLLMClient**: 功能强大的LLM客户端。
 - **Config**: 全局配置模块。
 - **GraphRAGEnhancer (可选)**: 用于上下文增强和关系验证的模块。
+- **`EntityKnowledgeBase`**: **新增**，用于确保实体一致性。
