@@ -30,56 +30,20 @@ llm_config = {
     "temperature": 0.0,
 }
 
-# ------------------ 自定义 Speaker 选择逻辑 ------------------
-def custom_speaker_selection_func(
-    last_speaker: autogen.Agent, groupchat: autogen.GroupChat
-) -> Union[autogen.Agent, str, None]:
-    """
-    自定义函数，用于决定下一个发言的Agent。
-    """
-    messages = groupchat.messages
-    
-    # 初始状态，UserProxyAgent发言后，轮到TriageAgent
-    if last_speaker.name == "UserProxyAgent":
-        return groupchat.agent_by_name("TriageAgent")
-
-    # TriageAgent发言后，根据其工具调用的结果决定下一步
-    if last_speaker.name == "TriageAgent":
-        last_message = messages[-1]
-        if last_message.get("role") == "function" and last_message.get("name") == "classify_event_type":
-            try:
-                classification_result = json.loads(last_message.get("content"))
-                if classification_result.get("status") == "known":
-                    return groupchat.agent_by_name("ExtractionAgent")
-                else:
-                    # 如果是未知事件，将控制权交还给UserProxyAgent以结束流程
-                    return groupchat.agent_by_name("UserProxyAgent")
-            except (json.JSONDecodeError, AttributeError):
-                # 解析失败，也交还给UserProxyAgent结束
-                return groupchat.agent_by_name("UserProxyAgent")
-
-    # ExtractionAgent发言后，轮到RelationshipAnalysisAgent
-    if last_speaker.name == "ExtractionAgent":
-        return groupchat.agent_by_name("RelationshipAnalysisAgent")
-
-    # RelationshipAnalysisAgent发言后，轮到StorageAgent
-    if last_speaker.name == "RelationshipAnalysisAgent":
-        return groupchat.agent_by_name("StorageAgent")
-        
-    # StorageAgent发言后，将控制权交还给UserProxyAgent以结束流程
-    if last_speaker.name == "StorageAgent":
-        return groupchat.agent_by_name("UserProxyAgent")
-
-    # 默认情况下，交还给UserProxyAgent
-    return groupchat.agent_by_name("UserProxyAgent")
-
+# ------------------ 工作流上下文 ------------------
+workflow_context = {
+    "original_text": None,
+    "domain": None,
+    "event_type": None,
+    "extracted_events": [],
+    "extracted_relationships": []
+}
 
 # ------------------ Agent 初始化 ------------------
 user_proxy = autogen.UserProxyAgent(
     name="UserProxyAgent",
     human_input_mode="NEVER",
-    max_consecutive_auto_reply=10,
-    # 当UserProxyAgent收到包含"TASK_COMPLETE"或"TASK_FAILED"的消息时，对话终止
+    max_consecutive_auto_reply=0, # UserProxyAgent不自动回复
     is_termination_msg=lambda x: "TASK_COMPLETE" in x.get("content", "") or "TASK_FAILED" in x.get("content", ""),
     code_execution_config=False,
 )
@@ -92,49 +56,69 @@ storage_agent = StorageAgent()
 # ------------------ GroupChat 设置 ------------------
 agents = [user_proxy, triage_agent, extraction_agent, relationship_agent, storage_agent]
 
-group_chat = autogen.GroupChat(
-    agents=agents,
-    messages=[],
-    max_round=12,
-    speaker_selection_method=custom_speaker_selection_func,
-    # 让GroupChat在Manager的控制下运行，而不是自己回复
-    send_introductions=True,
-)
+def custom_speaker_selection_func(last_speaker: autogen.Agent, groupchat: autogen.GroupChat) -> autogen.Agent:
+    """自定义函数，用于决定下一个发言的Agent。"""
+    messages = groupchat.messages
+    
+    if last_speaker.name == "UserProxyAgent":
+        workflow_context["original_text"] = messages[-1]['content']
+        return triage_agent
 
-manager = autogen.GroupChatManager(
-    groupchat=group_chat,
-    llm_config=llm_config
+    if last_speaker.name == "TriageAgent":
+        try:
+            result = json.loads(messages[-1]["content"])
+            if result.get("status") == "known":
+                workflow_context.update(result)
+                return extraction_agent
+        except (json.JSONDecodeError, KeyError):
+            pass # 如果解析失败或格式不对，则默认结束
+        return user_proxy # 结束
+
+    if last_speaker.name == "ExtractionAgent":
+        try:
+            events = json.loads(messages[-1]["content"])
+            workflow_context["extracted_events"] = events
+            if events: # 只有在抽取出事件时才继续
+                return relationship_agent
+        except (json.JSONDecodeError, KeyError):
+            pass
+        return user_proxy # 结束
+
+    if last_speaker.name == "RelationshipAnalysisAgent":
+        try:
+            relations = json.loads(messages[-1]["content"])
+            workflow_context["extracted_relationships"] = relations
+            return storage_agent
+        except (json.JSONDecodeError, KeyError):
+            pass
+        return user_proxy # 结束
+
+    # 任何其他情况，都结束流程
+    return user_proxy
+
+group_chat = autogen.GroupChat(
+    agents=agents, messages=[], max_round=15, speaker_selection_method=custom_speaker_selection_func
 )
+manager = autogen.GroupChatManager(groupchat=group_chat, llm_config=llm_config)
 
 # ------------------ 启动工作流 ------------------
 if __name__ == "__main__":
     news_text = "2024年7月15日，科技巨头A公司正式宣布，将以惊人的500亿美元全现金方式收购新兴AI芯片设计公司B公司。此次收购旨在强化A公司在人工智能领域的硬件布局。同时，A公司的CEO表示，收购完成后，将立即启动一项耗资10亿美元的整合计划，以确保B公司的技术能够快速融入A公司的产品线。"
-
-    # 更新初始消息，明确指示任务完成后的标志
-    initial_message = f"""
-请处理以下新闻文本: 
----
-{news_text}
----
-任务完成后，请回复 "TASK_COMPLETE"。
-"""
-
+    
+    # 使用initiate_chat启动流程
     user_proxy.initiate_chat(
         manager,
-        message=initial_message
+        message=news_text
     )
 
-    print("\n\n--------- CHAT HISTORY ---------")
-    for msg in group_chat.messages:
-        # 打印更详细的日志
-        print(f"----- Speaker: {msg.get('name', 'N/A')} -----")
-        print(f"Role: {msg.get('role', 'N/A')}")
-        content = msg.get('content')
-        if content:
-            print(f"Content: \n{content}")
-        tool_calls = msg.get('tool_calls')
-        if tool_calls:
-            print(f"Tool Calls: {json.dumps(tool_calls, indent=2)}")
-        print("-" * (20 + len(msg.get('name', 'N/A'))))
+    # 在流程结束后，根据最终的上下文决定最终状态
+    if workflow_context.get("extracted_events"):
+        print("\nWorkflow finished successfully. Final context:")
+    else:
+        print("\nWorkflow finished, but no events were extracted or the process failed. Final context:")
 
-    print("\nWorkflow finished.")
+    print(json.dumps(workflow_context, indent=2, ensure_ascii=False))
+    
+    # 模拟最终的TASK_COMPLETE消息
+    final_status_message = "TASK_COMPLETE" if workflow_context.get("extracted_events") else "TASK_FAILED"
+    print(f"\nFinal Status: {final_status_message}")

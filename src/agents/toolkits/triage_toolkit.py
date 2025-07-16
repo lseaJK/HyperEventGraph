@@ -83,51 +83,57 @@ class TriageToolkit:
 
         Returns:
             一个包含分类结果的字典，例如:
-            {"status": "known", "event_type": "financial_domain/company_merger_and_acquisition"}
+            {"status": "known", "domain": "financial_domain", "event_type": "company_merger_and_acquisition"}
             或
             {"status": "unknown"}
         """
         try:
             prompt = self._build_classification_prompt(text)
             
-            # 使用asyncio.run来同步执行异步的API调用
             llm_response_str = asyncio.run(
                 self.extractor._call_deepseek_api(prompt)
             )
 
-            # 解析LLM的响应
             try:
-                # 移除可能的代码块标记
                 if llm_response_str.strip().startswith("```json"):
                     llm_response_str = llm_response_str.strip()[7:-3].strip()
                 result = json.loads(llm_response_str)
             except json.JSONDecodeError:
-                # 如果解析失败，可以尝试用更宽松的方式或认为是unknown
                 print(f"Warning: Failed to parse LLM response for classification: {llm_response_str}")
                 self._log_unknown_event(text)
                 return {"status": "unknown", "reason": "Failed to parse LLM classification response."}
 
+            # 1. 优先检查标准格式
             if result.get("decision") == "known" and "type" in result:
-                # 分类为已知事件
                 event_type_full = result["type"]
-                # 简单的分割来获取domain和event_type
                 parts = event_type_full.split('/')
                 if len(parts) == 2:
                     domain, event_type = parts
                     return {"status": "known", "domain": domain, "event_type": event_type}
                 else:
-                    # 格式不正确，当作未知处理
                     self._log_unknown_event(text)
                     return {"status": "unknown", "reason": f"Invalid event type format from LLM: {event_type_full}"}
+            
+            # 2. 兼容性检查：处理 {"event_type": "..."} 这样的非标准格式
+            elif "event_type" in result and isinstance(result["event_type"], str):
+                llm_event_type = result["event_type"].lower().replace(" ", "")
+                for domain, events in self.schemas.items():
+                    for event_type_key in events:
+                        if event_type_key.lower() in llm_event_type or llm_event_type in event_type_key.lower():
+                            print(f"Info: Inferred known event from LLM's alternative format. Matched '{result['event_type']}' to '{domain}/{event_type_key}'")
+                            return {"status": "known", "domain": domain, "event_type": event_type_key}
+                
+                # 如果在所有已知类型中都找不到匹配项
+                self._log_unknown_event(text)
+                return {"status": "unknown", "reason": f"LLM returned an unrecognized event_type: {result['event_type']}"}
 
+            # 3. 如果以上都不匹配，则为未知
             else:
-                # 分类为未知事件
                 self._log_unknown_event(text)
                 return {"status": "unknown"}
 
         except Exception as e:
             print(f"An error occurred during event classification: {e}")
-            # 出现任何异常都归为未知，并记录
             self._log_unknown_event(text)
             return {"status": "unknown", "reason": str(e)}
 

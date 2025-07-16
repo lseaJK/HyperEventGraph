@@ -1,6 +1,6 @@
 import autogen
 from typing import Dict, Any
-from src.agents.toolkits.extraction_toolkit import EventExtractionToolkit
+from .toolkits.extraction_toolkit import EventExtractionToolkit
 
 class ExtractionAgent(autogen.AssistantAgent):
     """
@@ -12,7 +12,8 @@ class ExtractionAgent(autogen.AssistantAgent):
         """
         super().__init__(
             name="ExtractionAgent",
-            system_message="你是一个事件抽取专家。当被提供文本、事件类型和领域时，你必须使用`extract_events_from_text`��具来抽取结构化信息。不要自己编造结果，必须调用工具。",
+            # 这个系统消息是通用的，具体的上下文将在运行时通过 update_system_message 动态注入。
+            system_message="你是一个事件抽取专家。你必须使用`extract_events_from_text`工具来分析文本并抽取结构化信息。",
             llm_config=llm_config,
             **kwargs
         )
