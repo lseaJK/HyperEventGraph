@@ -53,7 +53,6 @@ workflow_context = {
     "extracted_events": [], "extracted_relationships": []
 }
 
-# 加载事件定义
 try:
     with open("src/event_extraction/event_schemas.json", 'r', encoding='utf-8') as f:
         event_schemas = json.load(f)
@@ -61,11 +60,11 @@ except (FileNotFoundError, json.JSONDecodeError) as e:
     print(f"[Workflow Error] Could not load event_schemas.json: {e}")
     event_schemas = {}
 
-# ------------------ Agent 初始化 (使用不同配置) ------------------
+# ------------------ Agent 初始化 ------------------
 user_proxy = autogen.UserProxyAgent(
     name="UserProxyAgent",
     human_input_mode="NEVER",
-    max_consecutive_auto_reply=8,
+    max_consecutive_auto_reply=10,
     is_termination_msg=lambda x: x.get("content", "") and "TASK_COMPLETE" in x.get("content", ""),
     code_execution_config=False,
 )
@@ -79,7 +78,6 @@ storage_agent = StorageAgent()
 agents = [user_proxy, triage_agent, extraction_agent, relationship_agent, storage_agent]
 
 def find_schema_by_title(title: str) -> Optional[Dict]:
-    """根据事件标题在加载的schemas中查找对应的schema。"""
     for domain in event_schemas:
         if isinstance(event_schemas[domain], dict):
             for event_key, event_data in event_schemas[domain].items():
@@ -88,23 +86,12 @@ def find_schema_by_title(title: str) -> Optional[Dict]:
     return None
 
 def custom_speaker_selection_func(last_speaker: autogen.Agent, groupchat: autogen.GroupChat) -> Union[autogen.Agent, str, None]:
-    """
-    Definitive speaker selection function.
-    It robustly parses the JSON from the *very last* message and directs the workflow.
-    """
     messages = groupchat.messages
     
     if last_speaker.name == "UserProxyAgent":
-        # 初始调用，直接将原始文本传递给TriageAgent
-        groupchat.messages.append({
-            "role": "user",
-            "name": "TriageAgent",
-            "content": workflow_context["original_text"]
-        })
         return triage_agent
 
     if last_speaker.name == "StorageAgent":
-        print("\n[Workflow] StorageAgent finished. Terminating successfully.")
         groupchat.messages.append({"role": "user", "name": "system", "content": "TASK_COMPLETE"})
         return user_proxy
 
@@ -145,11 +132,7 @@ Please extract event information from the following text based on the provided J
 --- TEXT TO ANALYZE ---
 {workflow_context['original_text']}
 """
-            groupchat.messages.append({
-                "role": "user",
-                "name": "ExtractionAgent",
-                "content": extraction_prompt
-            })
+            groupchat.messages.append({"role": "user", "name": "ExtractionAgent", "content": extraction_prompt})
             return extraction_agent
         else:
             print("\n[Workflow] TriageAgent classified event as 'Unknown' or output was invalid. Terminating.")
@@ -167,11 +150,7 @@ Please analyze the relationships between the following events:
 --- EVENTS ---
 {json.dumps(parsed_json, indent=2, ensure_ascii=False)}
 """
-            groupchat.messages.append({
-                "role": "user",
-                "name": "RelationshipAnalysisAgent",
-                "content": relationship_prompt
-            })
+            groupchat.messages.append({"role": "user", "name": "RelationshipAnalysisAgent", "content": relationship_prompt})
             return relationship_agent
         else:
             print(f"\n[Workflow Error] ExtractionAgent output is not a list or dict. Output: {parsed_json}")
@@ -193,12 +172,20 @@ manager = autogen.GroupChatManager(groupchat=group_chat, llm_config=llm_config_k
 
 # ------------------ 启动工作流 ------------------
 if __name__ == "__main__":
-    news_text = "2024年7月15日，科技巨头A公司正式宣布，将以惊人的500亿美元全现金方式收购新兴AI芯片设计公司B公司。此次收购旨在强化A公司在人工智能领域的硬件布局。同��，A公司的CEO表示，收购完成后，将立即启动一项耗资10亿美元的整合计划，以确保B公司的技术能够快速融入A公司的产品线."
+    news_text = "2024年7月15日，科技巨头A公司正式宣布，将以惊人的500亿美元全现金方式收购新兴AI芯片设计公司B公司。此次收购旨在强化A公司在人工智能领域的硬件布局。同时，A公司的CEO表示，收购完成后，将立即启动一项耗资10亿美元的整合计划，以确保B公司的技术能够快速融入A公司的产品线."
     
+    # Populate the context BEFORE starting the chat
     workflow_context["original_text"] = news_text
 
-    # The initial message is now injected by the speaker selection function
-    user_proxy.initiate_chat(manager, message="Start workflow")
+    # The initial message MUST contain all the information for the first agent
+    initial_message = f"""
+Please analyze the following text and classify its event type.
+
+--- TEXT TO ANALYZE ---
+{news_text}
+"""
+    
+    user_proxy.initiate_chat(manager, message=initial_message)
 
     if workflow_context.get("extracted_relationships"):
         print("\nWorkflow finished successfully. Final context:")
