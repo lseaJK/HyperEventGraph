@@ -141,7 +141,7 @@ manager = autogen.GroupChatManager(groupchat=group_chat, llm_config=llm_config_k
 
 # ------------------ 
 if __name__ == "__main__":
-    news_text = "2024715A500B.A.CEO10B."
+    news_text = "2024年7月15日，科技巨头A公司正式宣布，将以惊人的500亿美元全现金方式收购新兴AI芯片设计公司B公司。此次收购旨在强化A公司在人工智能领域的硬件布局。同时，A公司的CEO表示，收购完成后，将立即启动一项耗资10亿美元的整合计划，以确保B公司的技术能够快速融入A公司的产品线."
     
     workflow_context["original_text"] = news_text
 

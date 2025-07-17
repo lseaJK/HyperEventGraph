@@ -1,9 +1,60 @@
 {
   "master": {
-    "tasks": [],
+    "tasks": [
+      {
+        "id": 1,
+        "title": "第一阶段：环境与骨架搭建",
+        "description": "根据需求文档V2.1，完成第一阶段的环境与骨架搭建。这包括更新依赖、确认设计文档、并创建所有必要的Agent和Admin模块的文件骨架。这个阶段为后续的Agent能力开发和工作流编排奠定基础。",
+        "details": "",
+        "testStrategy": "",
+        "status": "done",
+        "dependencies": [],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": 2,
+        "title": "第二阶段：Agent能力工具化",
+        "description": "根据需求文档V2.1，完成第二阶段的Agent能力工具化。核心任务是将项目中现有的事件抽取、关系分析、分类和存储逻辑，封装成独立的Python函数，并作为“工具”注册给对应的Agent（ExtractionAgent, RelationshipAnalysisAgent, TriageAgent, StorageAgent）。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          1
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": 3,
+        "title": "第三阶段：工作流编排与测试",
+        "description": "根据需求文档V2.1，完成第三阶段的工作流编排与测试。主要工作是在一个主流程脚本中，使用AutoGen的GroupChatManager来初始化所有Agent，并定义它们之间的协作流程。同时，需要编写并运行集成测试，确保整个工作流在不同场景下都能稳定、正确地运行。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          2
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": 4,
+        "title": "第四阶段：后台学习系统实现",
+        "description": "根据需求文档V2.1，完成第四阶段的后台学习系统实现。这包括实现SchemaLearnerAgent的核心能力（如聚类、归纳），定义一个用于后台学习的独立GroupChat，并创建一个简单的管理模块（AdminModule）来启动学习流程和处理人工审核。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          3
+        ],
+        "priority": "medium",
+        "subtasks": []
+      }
+    ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-16T12:53:46.081Z",
+      "updated": "2025-07-17T14:00:54.140Z",
       "description": "Tasks for master context"
     }
   }
