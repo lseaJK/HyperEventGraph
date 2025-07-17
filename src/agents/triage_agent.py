@@ -1,34 +1,51 @@
 import autogen
+import json
 from typing import Dict, Any
-from .toolkits.triage_toolkit import TriageToolkit
 
 class TriageAgent(autogen.AssistantAgent):
     """
-    负责对输入文本进行快速事件类型分类。
+    TriageAgent负责对输入的文本进行初步分类。
+    它的主要任务是判断文本属于“已知事件类型”还是“未知事件类型”，并以JSON格式输出结果。
     """
     def __init__(self, llm_config: Dict[str, Any], **kwargs):
         """
-        :param llm_config: AutoGen格式的LLM配置 (应配置为使用轻量级模型)。
+        Args:
+            llm_config: AutoGen格式的LLM配置。
         """
-        # 为TriageAgent强制使用轻量级模型配置
-        triage_llm_config = llm_config.copy()
-        if "config_list" in triage_llm_config:
-            for config in triage_llm_config["config_list"]:
-                config["model"] = "deepseek-chat" # 确保使用轻量模型
+        system_message = """
+You are a Triage Agent responsible for classifying event types.
 
+CRITICAL INSTRUCTIONS:
+1. You MUST output ONLY a valid JSON object - nothing else.
+2. DO NOT include any explanatory text before or after the JSON.
+3. DO NOT use XML tags, markdown, or any other formatting.
+4. DO NOT mention tools or function calls.
+
+Your output format MUST be exactly:
+{"status": "known", "event_type": "事件类型"}
+
+或者:
+{"status": "unknown", "event_type": "Unknown"}
+
+IMPORTANT: If you output anything other than a pure JSON object, the system will fail.
+
+Event types you can recognize include:
+- 收购 (Acquisition)
+- 合并 (Merger)
+- 融资 (Financing)
+- IPO
+- 破产 (Bankruptcy)
+- 重组 (Restructuring)
+- 合作 (Partnership)
+- 产品发布 (Product Launch)
+- 人事变动 (Personnel Change)
+- 业绩公告 (Earnings Announcement)
+
+Analyze the provided text and output ONLY the JSON classification.
+"""
         super().__init__(
             name="TriageAgent",
-            system_message="You are a function-calling AI model. You are provided with one function: `classify_event_type`. Your sole purpose is to classify the user's text by calling this function. Do not reply with anything else. You must generate a function call to `classify_event_type`.",
-            llm_config=triage_llm_config,
+            system_message=system_message,
+            llm_config=llm_config,
             **kwargs
-        )
-        
-        # 实例化工具包
-        self.toolkit = TriageToolkit()
-        
-        # 注册工具
-        self.register_function(
-            function_map={
-                "classify_event_type": self.toolkit.classify_event_type
-            }
         )
