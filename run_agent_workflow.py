@@ -2,6 +2,7 @@
 
 import os
 import json
+import re
 import autogen
 from typing import List, Dict, Any, Optional, Union
 
@@ -19,7 +20,9 @@ if not kimi_api_key:
 
 config_list_kimi = [
     {
-        "model": "moonshotai/Kimi-K2-Instruct",
+#         "model": "moonshotai/Kimi-K2-Instruct",
+        "model": "deepseek-ai/DeepSeek-V3",
+        "price": [0.002, 0.008],
         "api_key": kimi_api_key,
         "base_url": "https://api.siliconflow.cn/v1"
     }
@@ -35,7 +38,9 @@ if not deepseek_api_key:
 
 config_list_deepseek = [
     {
-        "model": "deepseek-reasoner",
+#         "model": "deepseek-reasoner",
+        "model": "deepseek-chat",
+        "price": [0.002, 0.008],
         "api_key": deepseek_api_key,
         "base_url": "https://api.deepseek.com/v1"
     }
@@ -75,115 +80,36 @@ storage_agent = StorageAgent()
 # ------------------ GroupChat 设置 ------------------
 agents = [user_proxy, triage_agent, extraction_agent, relationship_agent, storage_agent]
 
-import re
-
 def get_last_json_output(messages: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """增强版JSON解析器，能处理各种格式的输出。"""
-    
-    def extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
-        """从文本中提取JSON对象，支持多种格式。"""
-        if not text:
-            return None
-            
-        # 尝试直接解析
-        try:
-            return json.loads(text.strip())
-        except json.JSONDecodeError:
-            pass
-        
-        # 尝试从XML标
-        xml_pattern = r'<[^>]+>(.*?)</[^>]+>'
-        xml_matches = re.findall(xml_pattern, text, re.DOTALL)
-        for match in xml_matches:
-            try:
-                return json.loads(match.strip())
-            except json.JSONDecodeError:
-                pass
-        
-        # 尝试从markdown代码块中提取
-        if "```json" in text:
-            start = text.find("```json") + 7
-            end = text.find("```", start)
-            if end != -1:
-                try:
-                    return json.loads(text[start:end].strip())
-                except json.JSONDecodeError:
-                    pass
-        
-        # 尝试找到JSON对象的边界
-        json_pattern = r'\{[^{}]*\}'
-        json_matches = re.findall(json_pattern, text)
-        for match in json_matches:
-            try:
-                return json.loads(match)
-            except json.JSONDecodeError:
-                pass
-        
-        # 尝试更复杂的嵌套JSON
-        try:
-            start_idx = text.find('{')
-            if start_idx != -1:
-                bracket_count = 0
-                for i in range(start_idx, len(text)):
-                    if text[i] == '{':
-                        bracket_count += 1
-                    elif text[i] == '}':
-                        bracket_count -= 1
-                        if bracket_count == 0:
-                            try:
-                                return json.loads(text[start_idx:i+1])
-                            except json.JSONDecodeError:
-                                break
-        except Exception:
-            pass
-        
-        return None
-    
-    # 从消息历史中查找JSON输出
+    """
+    从GroupChat的消息历史中，获取由Agent（而非UserProxy）发出的最新JSON输出。
+    在GroupChat中，Agent的发言角色被记为'user'。
+    """
     for msg in reversed(messages):
-        content = msg.get("content", "")
-        if not content:
-            continue
-            
-        # 优先处理工具调用返回的JSON
-        if msg.get("role") == "tool":
-            try:
-                return json.loads(content)
-            except json.JSONDecodeError:
-                pass # 继续检查其他格式
-
-        # 检查助手回复
-        if msg.get("role") == "assistant":
-            json_obj = extract_json_from_text(content)
-            if json_obj:
-                return json_obj
-    
+        # 在GroupChat中，Agent的发言角色是'user'，我们通过name来区分
+        if msg.get("role") == "user" and msg.get("name") != "UserProxyAgent":
+            if content := msg.get("content", "").strip():
+                # 尝试从文本中找到并解析JSON
+                json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                if json_match:
+                    try:
+                        return json.loads(json_match.group())
+                    except json.JSONDecodeError:
+                        continue # 如果找到的不是有效的JSON，则继续搜索
     return None
 
-def custom_speaker_selection_func(last_speaker: autogen.Agent, groupchat: autogen.GroupChat) -> Union[autogen.Agent, str]:
+def custom_speaker_selection_func(last_speaker: autogen.Agent, groupchat: autogen.GroupChat) -> Union[autogen.Agent, str, None]:
     """
     自定义函数，用于决定下一个发言的Agent。
-    包含错误恢复机制，防止工作流卡在循环中。
+    包含严格的输出验证和正确的终止路径。
     """
     messages = groupchat.messages
     
-    # 错误恢复：检测到 TriageAgent 和 UserProxyAgent 之间的死循环
-    if len(messages) >= 4:
-        recent_speakers = [msg.get("name") for msg in messages[-4:]]
-        # 检查是否形成 "TriageAgent -> UserProxyAgent -> TriageAgent -> UserProxyAgent" 的模式
-        if (recent_speakers[-1] == "UserProxyAgent" and recent_speakers[-2] == "TriageAgent" and
-            recent_speakers[-3] == "UserProxyAgent" and recent_speakers[-4] == "TriageAgent"):
-            print("\n[Workflow Recovery] Detected a loop between TriageAgent and UserProxyAgent.")
-            print("[Workflow Recovery] Forcing failure and terminating the process.")
-            # 发送终止信号
-            return "auto"
-
     if last_speaker.name == "UserProxyAgent":
         return triage_agent
 
     last_output = get_last_json_output(messages)
     
-    # 如果解析失败，则返回给UserProxyAgent，它可能会重试或最终失败
     if not last_output:
         print(f"\n[Workflow Warning] Could not parse JSON output from {last_speaker.name}. Returning to UserProxyAgent.")
         return user_proxy
@@ -192,32 +118,48 @@ def custom_speaker_selection_func(last_speaker: autogen.Agent, groupchat: autoge
         if last_output.get("status") == "known":
             print(f"\n[Workflow] TriageAgent classified event as: {last_output.get('event_type')}")
             workflow_context.update(last_output)
+            # 传递原始文本给下一个agent
+            groupchat.messages.append({
+                "role": "user",
+                "name": "ExtractionAgent",
+                "content": f"Please extract events from the following text:\n\n{workflow_context['original_text']}"
+            })
             return extraction_agent
         else:
             print("\n[Workflow] TriageAgent classified event as 'Unknown'. Terminating.")
-            return "auto" # 终止流程
+            return None # 终止流程
 
     elif last_speaker.name == "ExtractionAgent":
-        events = last_output
-        if events:
-            print(f"\n[Workflow] ExtractionAgent extracted {len(events)} event(s).")
-            workflow_context["extracted_events"] = events
+        # 验证输出是否为列表
+        if isinstance(last_output, list):
+            print(f"\n[Workflow] ExtractionAgent extracted {len(last_output)} event(s).")
+            workflow_context["extracted_events"] = last_output
+            # 传递抽取的事件给下一个agent
+            groupchat.messages.append({
+                "role": "user",
+                "name": "RelationshipAnalysisAgent",
+                "content": f"Please analyze relationships in the following events:\n\n{json.dumps(last_output, ensure_ascii=False)}"
+            })
             return relationship_agent
         else:
-            print("\n[Workflow Warning] ExtractionAgent did not return any events.")
-            return user_proxy
+            print(f"\n[Workflow Error] ExtractionAgent output is not a list. Output: {last_output}")
+            return None # 格式错误，终止
 
     elif last_speaker.name == "RelationshipAnalysisAgent":
-        relations = last_output
-        if relations is not None:
-            print(f"\n[Workflow] RelationshipAnalysisAgent found {len(relations)} relationship(s).")
-            workflow_context["extracted_relationships"] = relations
+        # 验证输出是否为列表
+        if isinstance(last_output, list):
+            print(f"\n[Workflow] RelationshipAnalysisAgent found {len(last_output)} relationship(s).")
+            workflow_context["extracted_relationships"] = last_output
             return storage_agent
         else:
-            print("\n[Workflow Warning] RelationshipAnalysisAgent did not return any relationships.")
-            return user_proxy
+            print(f"\n[Workflow Error] RelationshipAnalysisAgent output is not a list. Output: {last_output}")
+            return None # 格式错误，终止
             
-    # 默认情况下，如果没有任何匹配的规则，则返回UserProxyAgent
+    elif last_speaker.name == "StorageAgent":
+        # 这是工作流的最后一步，成功终止
+        print("\n[Workflow] StorageAgent finished. Terminating successfully.")
+        return None
+
     return user_proxy
 
 group_chat = autogen.GroupChat(agents=agents, messages=[], max_round=20, speaker_selection_method=custom_speaker_selection_func)

@@ -10,20 +10,21 @@ class ExtractionAgent(autogen.AssistantAgent):
         """
         :param llm_config: AutoGen格式的LLM配置。
         """
+        system_message = """
+You are a meticulous event extraction expert.
+Your task is to analyze the user's text and extract all relevant events based on the provided context.
+
+CRITICAL INSTRUCTIONS:
+1.  You MUST output ONLY a valid JSON object representing a list of extracted events.
+2.  DO NOT include any explanatory text, markdown, or any other formatting.
+3.  The output must be a JSON list `[]`, even if no events are found.
+4.  Each event in the list must be a JSON object with keys like "id", "summary", "event_type", etc.
+
+Analyze the provided text and output ONLY the JSON list of events.
+"""
         super().__init__(
             name="ExtractionAgent",
-            # system_message="你是一个事件分类专家。你的唯一任务是分析文本并决定它属于哪个事件类型。你绝对不能直接回复JSON或任何分析内容。你必须且只能通过调用`classify_event_type`工具来完成你的任务。", 
-            system_message="You are a function-calling AI model. You are provided with one function: `extract_events_from_text`. Your sole purpose is to extract events from the user's text by calling this function. Do not reply with anything else. You must generate a function call to `extract_events_from_text`.",
+            system_message=system_message,
             llm_config=llm_config,
             **kwargs
-        )
-        
-        # 实例化工具包
-        self.toolkit = EventExtractionToolkit()
-        
-        # 注册工具
-        self.register_function(
-            function_map={
-                "extract_events_from_text": self.toolkit.extract_events_from_text
-            }
         )
