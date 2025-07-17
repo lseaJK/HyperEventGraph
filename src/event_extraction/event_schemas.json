@@ -1,4 +1,17 @@
 {
+    "known_event_titles": [
+        "公司并购事件",
+        "投融资事件",
+        "高管变动事件",
+        "法律诉讼事件",
+        "产能扩张事件",
+        "技术突破事件",
+        "供应链动态事件",
+        "合作合资事件",
+        "知识产权事件",
+        "领域事件",
+        "领域事件关系"
+    ],
     "financial_domain": {
         "company_merger_and_acquisition": {
             "$schema": "http://json-schema.org/draft-07/schema#",

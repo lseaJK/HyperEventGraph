@@ -1,6 +1,7 @@
 import autogen
 import json
 from typing import Dict, Any
+import os
 
 class TriageAgent(autogen.AssistantAgent):
     """
@@ -12,7 +13,26 @@ class TriageAgent(autogen.AssistantAgent):
         Args:
             llm_config: AutoGen格式的LLM配置。
         """
-        system_message = """
+        # --- 动态加载已知事件类型 ---
+        try:
+            # 获取当前文件所在的目录
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            # 构建schema文件的绝对路径
+            schema_path = os.path.join(current_dir, '..', 'event_extraction', 'event_schemas.json')
+            
+            with open(schema_path, 'r', encoding='utf-8') as f:
+                schemas = json.load(f)
+            known_event_types = schemas.get("known_event_titles", [])
+            
+            # 将事件类型列表格式化为易于阅读的字符串
+            event_types_str = "\n- ".join(known_event_types)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            print(f"[TriageAgent Error] Could not load event schemas: {e}")
+            # 提供一个备用列表以防文件加载失败
+            event_types_str = "- 公司并购事件\n- 投融资事件\n- 高管变动事件"
+
+        # --- 构建动态系统提示 ---
+        system_message = f"""
 You are a Triage Agent responsible for classifying event types.
 
 CRITICAL INSTRUCTIONS:
@@ -22,24 +42,15 @@ CRITICAL INSTRUCTIONS:
 4. DO NOT mention tools or function calls.
 
 Your output format MUST be exactly:
-{"status": "known", "event_type": "事件类型"}
+{{"status": "known", "event_type": "事件类型"}}
 
 或者:
-{"status": "unknown", "event_type": "Unknown"}
+{{"status": "unknown", "event_type": "Unknown"}}
 
 IMPORTANT: If you output anything other than a pure JSON object, the system will fail.
 
 Event types you can recognize include:
-- 收购 (Acquisition)
-- 合并 (Merger)
-- 融资 (Financing)
-- IPO
-- 破产 (Bankruptcy)
-- 重组 (Restructuring)
-- 合作 (Partnership)
-- 产品发布 (Product Launch)
-- 人事变动 (Personnel Change)
-- 业绩公告 (Earnings Announcement)
+- {event_types_str}
 
 Analyze the provided text and output ONLY the JSON classification.
 """

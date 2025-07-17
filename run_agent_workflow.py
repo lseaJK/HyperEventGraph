@@ -6,14 +6,14 @@ import re
 import autogen
 from typing import List, Dict, Any, Optional, Union
 
-# 
+# 导入我们创建的Agent
 from src.agents.triage_agent import TriageAgent
 from src.agents.extraction_agent import ExtractionAgent
 from src.agents.relationship_analysis_agent import RelationshipAnalysisAgent
 from src.agents.storage_agent import StorageAgent
 
-# ------------------ LLM 
-# 1: Kimi
+# ------------------ LLM 配置 ------------------
+# 配置1: Kimi模型，用于决策和工具调用
 kimi_api_key = os.getenv("SILICON_API_KEY")
 if not kimi_api_key:
     raise ValueError("SILICON_API_KEY is not set in environment variables.")
@@ -30,7 +30,7 @@ llm_config_kimi = {
     "config_list": config_list_kimi, "cache_seed": 42, "temperature": 0.0
 }
 
-# 2: DeepSeek
+# 配置2: DeepSeek模型，用于内容生成和抽取
 deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
 if not deepseek_api_key:
     raise ValueError("DEEPSEEK_API_KEY is not set in environment variables.")
@@ -47,18 +47,25 @@ llm_config_deepseek = {
     "config_list": config_list_deepseek, "cache_seed": 43, "temperature": 0.0
 }
 
-# ------------------ 
+# ------------------ 工作流上下文与Schema加载 ------------------
 workflow_context = {
     "original_text": None, "domain": None, "event_type": None,
     "extracted_events": [], "extracted_relationships": []
 }
 
-# ------------------ Agent  (
+# 加载事件定义
+try:
+    with open("src/event_extraction/event_schemas.json", 'r', encoding='utf-8') as f:
+        event_schemas = json.load(f)
+except (FileNotFoundError, json.JSONDecodeError) as e:
+    print(f"[Workflow Error] Could not load event_schemas.json: {e}")
+    event_schemas = {}
+
+# ------------------ Agent 初始化 (使用不同配置) ------------------
 user_proxy = autogen.UserProxyAgent(
     name="UserProxyAgent",
     human_input_mode="NEVER",
     max_consecutive_auto_reply=8,
-    # The termination message is now sent by the speaker selection function
     is_termination_msg=lambda x: x.get("content", "") and "TASK_COMPLETE" in x.get("content", ""),
     code_execution_config=False,
 )
@@ -68,8 +75,17 @@ extraction_agent = ExtractionAgent(llm_config=llm_config_deepseek)
 relationship_agent = RelationshipAnalysisAgent(llm_config=llm_config_deepseek)
 storage_agent = StorageAgent()
 
-# ------------------ GroupChat 
+# ------------------ GroupChat 设置 ------------------
 agents = [user_proxy, triage_agent, extraction_agent, relationship_agent, storage_agent]
+
+def find_schema_by_title(title: str) -> Optional[Dict]:
+    """根据事件标题在加载的schemas中查找对应的schema。"""
+    for domain in event_schemas:
+        if isinstance(event_schemas[domain], dict):
+            for event_key, event_data in event_schemas[domain].items():
+                if isinstance(event_data, dict) and event_data.get("title") == title:
+                    return event_data
+    return None
 
 def custom_speaker_selection_func(last_speaker: autogen.Agent, groupchat: autogen.GroupChat) -> Union[autogen.Agent, str, None]:
     """
@@ -79,16 +95,19 @@ def custom_speaker_selection_func(last_speaker: autogen.Agent, groupchat: autoge
     messages = groupchat.messages
     
     if last_speaker.name == "UserProxyAgent":
+        # 初始调用，直接将原始文本传递给TriageAgent
+        groupchat.messages.append({
+            "role": "user",
+            "name": "TriageAgent",
+            "content": workflow_context["original_text"]
+        })
         return triage_agent
 
-    # Special handling for StorageAgent, which doesn't produce JSON
     if last_speaker.name == "StorageAgent":
         print("\n[Workflow] StorageAgent finished. Terminating successfully.")
-        # Send the termination message to the UserProxyAgent
         groupchat.messages.append({"role": "user", "name": "system", "content": "TASK_COMPLETE"})
         return user_proxy
 
-    # --- Definitive Fix: Parse ONLY the last message ---
     last_message = messages[-1]
     content = last_message.get("content", "").strip()
     
@@ -106,23 +125,56 @@ def custom_speaker_selection_func(last_speaker: autogen.Agent, groupchat: autoge
         print(f"\n[Workflow Warning] No valid JSON output from {last_speaker.name}. Terminating.")
         return None
 
-    # --- Workflow Logic ---
     if last_speaker.name == "TriageAgent":
         if isinstance(parsed_json, dict) and parsed_json.get("status") == "known":
-            print(f"\n[Workflow] TriageAgent classified event as: {parsed_json.get('event_type')}")
+            event_title = parsed_json.get('event_type')
+            print(f"\n[Workflow] TriageAgent classified event as: {event_title}")
             workflow_context.update(parsed_json)
+            
+            schema_to_use = find_schema_by_title(event_title)
+            if not schema_to_use:
+                print(f"\n[Workflow Error] Could not find schema for title: {event_title}. Terminating.")
+                return None
+            
+            extraction_prompt = f"""
+Please extract event information from the following text based on the provided JSON Schema.
+
+--- JSON SCHEMA ---
+{json.dumps(schema_to_use, indent=2, ensure_ascii=False)}
+
+--- TEXT TO ANALYZE ---
+{workflow_context['original_text']}
+"""
+            groupchat.messages.append({
+                "role": "user",
+                "name": "ExtractionAgent",
+                "content": extraction_prompt
+            })
             return extraction_agent
         else:
             print("\n[Workflow] TriageAgent classified event as 'Unknown' or output was invalid. Terminating.")
             return None
 
     elif last_speaker.name == "ExtractionAgent":
-        if isinstance(parsed_json, list):
-            print(f"\n[Workflow] ExtractionAgent extracted {len(parsed_json)} event(s).")
+        if isinstance(parsed_json, (list, dict)):
+            count = len(parsed_json) if isinstance(parsed_json, list) else 1
+            print(f"\n[Workflow] ExtractionAgent extracted {count} event(s).")
             workflow_context["extracted_events"] = parsed_json
+            
+            relationship_prompt = f"""
+Please analyze the relationships between the following events:
+
+--- EVENTS ---
+{json.dumps(parsed_json, indent=2, ensure_ascii=False)}
+"""
+            groupchat.messages.append({
+                "role": "user",
+                "name": "RelationshipAnalysisAgent",
+                "content": relationship_prompt
+            })
             return relationship_agent
         else:
-            print(f"\n[Workflow Error] ExtractionAgent output is not a list. Output: {parsed_json}")
+            print(f"\n[Workflow Error] ExtractionAgent output is not a list or dict. Output: {parsed_json}")
             return None
 
     elif last_speaker.name == "RelationshipAnalysisAgent":
@@ -139,25 +191,15 @@ def custom_speaker_selection_func(last_speaker: autogen.Agent, groupchat: autoge
 group_chat = autogen.GroupChat(agents=agents, messages=[], max_round=12, speaker_selection_method=custom_speaker_selection_func)
 manager = autogen.GroupChatManager(groupchat=group_chat, llm_config=llm_config_kimi)
 
-# ------------------ 
+# ------------------ 启动工作流 ------------------
 if __name__ == "__main__":
-    news_text = "2024年7月15日，科技巨头A公司正式宣布，将以惊人的500亿美元全现金方式收购新兴AI芯片设计公司B公司。此次收购旨在强化A公司在人工智能领域的硬件布局。同时，A公司的CEO表示，收购完成后，将立即启动一项耗资10亿美元的整合计划，以确保B公司的技术能够快速融入A公司的产品线."
+    news_text = "2024年7月15日，科技巨头A公司正式宣布，将以惊人的500亿美元全现金方式收购新兴AI芯片设计公司B公司。此次收购旨在强化A公司在人工智能领域的硬件布局。同��，A公司的CEO表示，收购完成后，将立即启动一项耗资10亿美元的整合计划，以确保B公司的技术能够快速融入A公司的产品线."
     
     workflow_context["original_text"] = news_text
 
-    initial_message = f"""
-Analyze the following text and classify its event type.
+    # The initial message is now injected by the speaker selection function
+    user_proxy.initiate_chat(manager, message="Start workflow")
 
---- TEXT START ---
-{news_text}
---- TEXT END ---
-
-Output only the JSON classification result.
-"""
-    
-    user_proxy.initiate_chat(manager, message=initial_message)
-
-    # Robust check for success based on workflow context
     if workflow_context.get("extracted_relationships"):
         print("\nWorkflow finished successfully. Final context:")
         final_status_message = "TASK_COMPLETE"
