@@ -159,14 +159,32 @@ class EventExtractionValidator:
         Returns:
             事件模式或None
         """
+        def find_schema_by_title(schemas_dict, title):
+            if not isinstance(schemas_dict, dict):
+                return None
+            for schema_key, schema_object in schemas_dict.items():
+                if isinstance(schema_object, dict) and schema_object.get("title") == title:
+                    return schema_object
+            return None
+
         # 1. 如果指定了domain，优先从该domain查找
         if domain:
-            schema = self.schemas.get(domain, {}).get(event_type)
+            domain_schemas = self.schemas.get(domain, {})
+            # Try direct key lookup first
+            schema = domain_schemas.get(event_type)
+            if schema:
+                return schema
+            # If not found, try searching by title within the domain
+            schema = find_schema_by_title(domain_schemas, event_type)
             if schema:
                 return schema
 
         # 2. 如果domain为None或在指定domain中未找到，尝试从 general_domain 查找
-        schema = self.schemas.get("general_domain", {}).get(event_type)
+        general_domain_schemas = self.schemas.get("general_domain", {})
+        schema = general_domain_schemas.get(event_type)
+        if schema:
+            return schema
+        schema = find_schema_by_title(general_domain_schemas, event_type)
         if schema:
             return schema
 
@@ -174,7 +192,12 @@ class EventExtractionValidator:
         # 排除 known_event_titles 这个顶层key
         for domain_key, domain_schemas in self.schemas.items():
             if isinstance(domain_schemas, dict):
+                # Try direct key lookup
                 schema = domain_schemas.get(event_type)
+                if schema:
+                    return schema
+                # Try searching by title
+                schema = find_schema_by_title(domain_schemas, event_type)
                 if schema:
                     return schema
                     

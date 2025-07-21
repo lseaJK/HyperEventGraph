@@ -198,7 +198,7 @@ def custom_speaker_selection_func(last_speaker: autogen.Agent, groupchat: autoge
     groupchat.messages.append({"role": "user", "name": "system", "content": "TASK_COMPLETE"})
     return user_proxy
 
-group_chat = autogen.GroupChat(agents=agents, messages=[], max_round=12, speaker_selection_method=custom_speaker_selection_func)
+group_chat = autogen.GroupChat(agents=agents, messages=[], max_round=3, speaker_selection_method=custom_speaker_selection_func)
 manager = autogen.GroupChatManager(groupchat=group_chat, llm_config=llm_config_kimi)
 
 # ------------------ 启动工作流 ------------------

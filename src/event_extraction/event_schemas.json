@@ -478,7 +478,8 @@
                     "type": "array",
                     "items": {
                         "$ref": "#"
-                    }
+                    },
+                    "default": []
                 },
                 "description": {
                     "description": "对事件的自然语言描述",

@@ -44,6 +44,10 @@ class EventExtractionToolkit:
             if not raw_extraction_result or raw_extraction_result.get("metadata", {}).get("extraction_status") != "success":
                 return []
 
+            # 在验证前手动注入event_type
+            if "event_data" in raw_extraction_result and "event_type" not in raw_extraction_result["event_data"]:
+                raw_extraction_result["event_data"]["event_type"] = event_type
+
             # 
             validation_result = self.validator.validate_extraction_result(
                 result=raw_extraction_result,
