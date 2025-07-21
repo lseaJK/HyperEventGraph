@@ -58,6 +58,34 @@ workflow_context = {
     "extracted_events": [], "extracted_relationships": []
 }
 
+# ------------------ Schema Loading and Mapping ------------------
+try:
+    schema_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src', 'event_extraction', 'event_schemas.json')
+    with open(schema_path, 'r', encoding='utf-8') as f:
+        schemas = json.load(f)
+    
+    title_to_key_map = {}
+    for domain, domain_schemas in schemas.items():
+        if isinstance(domain_schemas, dict):
+            for key, schema in domain_schemas.items():
+                if 'title' in schema:
+                    title_to_key_map[schema['title']] = key
+except (FileNotFoundError, json.JSONDecodeError) as e:
+    print(f"[Workflow Error] Could not load or parse event schemas: {e}")
+    # Fallback map
+    title_to_key_map = {
+        "公司并购事件": "company_merger_and_acquisition",
+        "投融资事件": "investment_and_financing",
+        "高管变动事件": "executive_change",
+        "法律诉讼事件": "legal_proceeding",
+        "产能扩张事件": "capacity_expansion",
+        "技术突破事件": "technological_breakthrough",
+        "供应链动态事件": "supply_chain_dynamics",
+        "合作合资事件": "collaboration_joint_venture",
+        "知识产权事件": "intellectual_property",
+        "收购事件": "acquisition"
+    }
+
 # ------------------ Agent 初始化 ------------------
 # 实例化所有工具
 event_extraction_toolkit = EventExtractionToolkit()
@@ -113,12 +141,18 @@ def custom_speaker_selection_func(last_speaker: autogen.Agent, groupchat: autoge
             domain = parsed_json.get('domain')
             print(f"\n[Workflow] TriageAgent classified event as: {event_title} in domain: {domain}")
             workflow_context.update(parsed_json)
+
+            event_key = title_to_key_map.get(event_title)
+            if not event_key:
+                print(f"\n[Workflow Error] Could not find event key for title: '{event_title}'. Terminating.")
+                groupchat.messages.append({"role": "user", "name": "system", "content": "TASK_COMPLETE"})
+                return user_proxy
             
             # --- 1. 事件抽取 ---
             print("\n[Workflow] Calling Extraction Toolkit...")
             extracted_events = event_extraction_toolkit.extract_events_from_text(
                 text=workflow_context['original_text'],
-                event_type=event_title,
+                event_type=event_key,
                 domain=domain
             )
             
@@ -157,6 +191,7 @@ def custom_speaker_selection_func(last_speaker: autogen.Agent, groupchat: autoge
             print("\n[Workflow] TriageAgent classified event as 'Unknown' or output was invalid. Terminating.")
             groupchat.messages.append({"role": "user", "name": "system", "content": "TASK_COMPLETE"})
             return user_proxy
+
             
     # 如果出现意外的Agent（例如ExtractionAgent被直接调用），则终止
     print(f"\n[Workflow Warning] Unexpected agent '{last_speaker.name}' in speaker selection. Terminating.")

@@ -185,6 +185,47 @@
             "required": ["event_type", "plaintiff", "defendant", "cause_of_action", "filing_date", "source"]
         }
     },
+    "general_domain": {
+        "acquisition": {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "收购事件",
+            "description": "描述一家公司收购另一家公司的事件",
+            "type": "object",
+            "properties": {
+                "event_type": {
+                    "description": "事件类型，固定为‘收购’",
+                    "type": "string",
+                    "enum": ["收购"]
+                },
+                "acquirer": {
+                    "description": "收购方公司",
+                    "type": "string"
+                },
+                "acquired": {
+                    "description": "被收购方公司",
+                    "type": "string"
+                },
+                "deal_amount": {
+                    "description": "交易金额（单位：万元，默认人民币。如为其他货币请在数值后注明：USD美元、EUR欧元、JPY日元、KRW韩元、GBP英镑、HKD港币、TWD新台币）",
+                    "type": "number"
+                },
+                "status": {
+                    "description": "并购状态，如进行中、已完成",
+                    "type": "string"
+                },
+                "announcement_date": {
+                    "description": "公告日期",
+                    "type": "string",
+                    "format": "date"
+                },
+                "source": {
+                    "description": "信息来源",
+                    "type": "string"
+                }
+            },
+            "required": ["event_type", "acquirer", "acquired", "announcement_date", "source"]
+        }
+    },
     "circuit_domain": {
         "capacity_expansion": {
             "$schema": "http://json-schema.org/draft-07/schema#",

@@ -117,7 +117,7 @@ class EventExtractionValidator:
             }
         }
     
-    def validate_schema(self, event_data: Dict[str, Any], domain: str, event_type: str) -> Tuple[bool, List[str]]:
+    def validate_schema(self, event_data: Dict[str, Any], domain: Optional[str], event_type: str) -> Tuple[bool, List[str]]:
         """
         验证事件数据是否符合模式
         
@@ -134,7 +134,8 @@ class EventExtractionValidator:
         # 获取对应的模式
         schema = self._get_event_schema(domain, event_type)
         if not schema:
-            errors.append(f"未找到 {domain}.{event_type} 的事件模式")
+            domain_str = domain if domain else "any domain"
+            errors.append(f"未找到 {domain_str}.{event_type} 的事件模式")
             return False, errors
         
         try:
@@ -147,7 +148,7 @@ class EventExtractionValidator:
             errors.append(f"验证过程出错: {str(e)}")
             return False, errors
     
-    def _get_event_schema(self, domain: str, event_type: str) -> Optional[Dict[str, Any]]:
+    def _get_event_schema(self, domain: Optional[str], event_type: str) -> Optional[Dict[str, Any]]:
         """
         获取事件模式
         
@@ -158,9 +159,29 @@ class EventExtractionValidator:
         Returns:
             事件模式或None
         """
-        return self.schemas.get(domain, {}).get(event_type)
+        # 1. 如果指定了domain，优先从该domain查找
+        if domain:
+            schema = self.schemas.get(domain, {}).get(event_type)
+            if schema:
+                return schema
+
+        # 2. 如果domain为None或在指定domain中未找到，尝试从 general_domain 查找
+        schema = self.schemas.get("general_domain", {}).get(event_type)
+        if schema:
+            return schema
+
+        # 3. 如果仍未找到，则遍历所有domain查找匹配的event_type
+        # 排除 known_event_titles 这个顶层key
+        for domain_key, domain_schemas in self.schemas.items():
+            if isinstance(domain_schemas, dict):
+                schema = domain_schemas.get(event_type)
+                if schema:
+                    return schema
+                    
+        # 4. 最终未找到
+        return None
     
-    def validate_field_quality(self, event_data: Dict[str, Any], domain: str, event_type: str) -> Dict[str, float]:
+    def validate_field_quality(self, event_data: Dict[str, Any], domain: Optional[str], event_type: str) -> Dict[str, float]:
         """
         验证字段质量
         
@@ -218,7 +239,7 @@ class EventExtractionValidator:
         
         return quality_metrics
     
-    def _validate_field_format(self, field_name: str, field_value: Any, domain: str) -> float:
+    def _validate_field_format(self, field_name: str, field_value: Any, domain: Optional[str]) -> float:
         """
         验证字段格式
         
@@ -267,7 +288,7 @@ class EventExtractionValidator:
         
         return 0.5
     
-    def _validate_field_accuracy(self, field_name: str, field_value: Any, domain: str, event_type: str) -> float:
+    def _validate_field_accuracy(self, field_name: str, field_value: Any, domain: Optional[str], event_type: str) -> float:
         """
         验证字段准确性
         
@@ -360,7 +381,7 @@ class EventExtractionValidator:
         
         return 0.7
     
-    def _validate_consistency(self, event_data: Dict[str, Any], domain: str, event_type: str) -> float:
+    def _validate_consistency(self, event_data: Dict[str, Any], domain: Optional[str], event_type: str) -> float:
         """
         验证数据一致性
         
@@ -403,9 +424,9 @@ class EventExtractionValidator:
         
         return consistency_score
     
-    def validate_extraction_result(self, result: Dict[str, Any], domain: str, event_type: str) -> ValidationResult:
+    def validate_extraction_result(self, result: Dict[str, Any], domain: Optional[str], event_type: str) -> ValidationResult:
         """
-        验证完整的抽取结果
+        验证完整��抽取结果
         
         Args:
             result: 抽取结果
@@ -441,7 +462,7 @@ class EventExtractionValidator:
         # 置信度检查
         confidence_score = metadata.get("confidence_score", 0.0)
         if not isinstance(confidence_score, (int, float)) or not (0 <= confidence_score <= 1):
-            warnings.append("置信度分数无效或超出范围[0,1]")
+            warnings.append("置信度分数无���或超出范围[0,1]")
             confidence_score = 0.5
         
         # 生成建议
@@ -471,7 +492,7 @@ class EventExtractionValidator:
             suggestions=suggestions
         )
     
-    def batch_validate(self, results: List[Dict[str, Any]], domain: str, event_type: str) -> List[ValidationResult]:
+    def batch_validate(self, results: List[Dict[str, Any]], domain: Optional[str], event_type: str) -> List[ValidationResult]:
         """
         批量验证抽取结果
         

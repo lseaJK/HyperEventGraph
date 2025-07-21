@@ -13,7 +13,7 @@ class TriageAgent(autogen.AssistantAgent):
         Args:
             llm_config: AutoGen格式的LLM配置。
         """
-        # --- 动态加载已知事件类型 ---
+        # --- 动态加载已知事件类型和领域 ---
         try:
             # 获取当前文件所在的目录
             current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -22,18 +22,24 @@ class TriageAgent(autogen.AssistantAgent):
             
             with open(schema_path, 'r', encoding='utf-8') as f:
                 schemas = json.load(f)
-            known_event_types = schemas.get("known_event_titles", [])
             
-            # 将事件类型列表格式化为易于阅读的字符串
+            # 提取事件类型
+            known_event_types = schemas.get("known_event_titles", [])
             event_types_str = "\n- ".join(known_event_types)
+
+            # 提取领域
+            known_domains = [key for key in schemas.keys() if key.endswith('_domain')]
+            domains_str = "\n- ".join(known_domains)
+
         except (FileNotFoundError, json.JSONDecodeError) as e:
             print(f"[TriageAgent Error] Could not load event schemas: {e}")
             # 提供一个备用列表以防文件加载失败
             event_types_str = "- 公司并购事件\n- 投融资事件\n- 高管变动事件"
+            domains_str = "- financial_domain\n- circuit_domain\n- general_domain"
 
         # --- 构建动态系统提示 ---
         system_message = f"""
-You are a Triage Agent responsible for classifying event types.
+You are a Triage Agent responsible for classifying event types and their domains.
 
 CRITICAL INSTRUCTIONS:
 1. You MUST output ONLY a valid JSON object - nothing else.
@@ -42,17 +48,20 @@ CRITICAL INSTRUCTIONS:
 4. DO NOT mention tools or function calls.
 
 Your output format MUST be exactly:
-{{"status": "known", "event_type": "事件类型"}}
+{{"status": "known", "domain": "事件领域", "event_type": "事件类型"}}
 
 或者:
-{{"status": "unknown", "event_type": "Unknown"}}
+{{"status": "unknown", "event_type": "Unknown", "domain": "unknown"}}
 
 IMPORTANT: If you output anything other than a pure JSON object, the system will fail.
 
-Event types you can recognize include:
+Here are the domains you can recognize:
+- {domains_str}
+
+Here are the event types you can recognize:
 - {event_types_str}
 
-Analyze the provided text and output ONLY the JSON classification.
+Analyze the provided text, determine the most appropriate domain and event type, and then output ONLY the JSON classification.
 """
         super().__init__(
             name="TriageAgent",

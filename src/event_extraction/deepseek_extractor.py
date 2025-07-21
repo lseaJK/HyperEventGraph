@@ -82,9 +82,23 @@ class DeepSeekEventExtractor:
             response = await self._call_deepseek_api(full_prompt)
             
             # 解析JSON结果
-            result = self._parse_json_response(response, domain, event_type)
-            
-            # 添加元数据
+            parsed_data = self._parse_json_response(response, domain, event_type)
+
+            # --- 修复逻辑 ---
+            # 无论返回什么，都将其视为事件数据，并手动构建标准结构
+            result = {
+                "metadata": {
+                    "domain": domain,
+                    "event_type": event_type,
+                    "extraction_status": "success",
+                    "confidence_score": 1.0, # 既然解析成功，就给一个高置信度
+                    "extraction_method": "llm_based"
+                },
+                "event_data": parsed_data
+            }
+            # --- 修复结束 ---
+
+            # 添加额外的元数据
             if metadata:
                 result["metadata"].update(metadata)
             

@@ -18,7 +18,7 @@
         "description": "根据需求文档V2.1，完成第二阶段的Agent能力工具化。核心任务是将项目中现有的事件抽取、关系分析、分类和存储逻辑，封装成独立的Python函数，并作为“工具”注册给对应的Agent（ExtractionAgent, RelationshipAnalysisAgent, TriageAgent, StorageAgent）。",
         "details": "",
         "testStrategy": "",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           1
         ],
@@ -54,7 +54,7 @@
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-17T14:00:54.140Z",
+      "updated": "2025-07-21T12:50:49.025Z",
       "description": "Tasks for master context"
     }
   }
