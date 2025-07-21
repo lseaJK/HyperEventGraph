@@ -31,7 +31,7 @@
         "description": "根据需求文档V2.1，完成第三阶段的工作流编排与测试。主要工作是在一个主流程脚本中，使用AutoGen的GroupChatManager来初始化所有Agent，并定义它们之间的协作流程。同时，需要编写并运行集成测试，确保整个工作流在不同场景下都能稳定、正确地运行。",
         "details": "",
         "testStrategy": "",
-        "status": "pending",
+        "status": "in-progress",
         "dependencies": [
           2
         ],
@@ -54,7 +54,7 @@
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-21T12:50:49.025Z",
+      "updated": "2025-07-21T14:33:16.925Z",
       "description": "Tasks for master context"
     }
   }
