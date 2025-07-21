@@ -31,7 +31,7 @@
         "description": "根据需求文档V2.1，完成第三阶段的工作流编排与测试。主要工作是在一个主流程脚本中，使用AutoGen的GroupChatManager来初始化所有Agent，并定义它们之间的协作流程。同时，需要编写并运行集成测试，确保整个工作流在不同场景下都能稳定、正确地运行。",
         "details": "",
         "testStrategy": "",
-        "status": "in-progress",
+        "status": "done",
         "dependencies": [
           2
         ],
@@ -44,17 +44,28 @@
         "description": "根据需求文档V2.1，完成第四阶段的后台学习系统实现。这包括实现SchemaLearnerAgent的核心能力（如聚类、归纳），定义一个用于后台学习的独立GroupChat，并创建一个简单的管理模块（AdminModule）来启动学习流程和处理人工审核。",
         "details": "",
         "testStrategy": "",
-        "status": "pending",
+        "status": "in-progress",
         "dependencies": [
           3
         ],
         "priority": "medium",
         "subtasks": []
+      },
+      {
+        "id": 5,
+        "title": "第五阶段：重构事件抽取和验证模块",
+        "description": "重构事件抽取和验证模块，以提高准确性和可维护性。这可能包括重新设计Schema、改进抽取逻辑或增强验证步骤。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [],
+        "priority": "high",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-21T14:33:16.925Z",
+      "updated": "2025-07-21T14:49:06.033Z",
       "description": "Tasks for master context"
     }
   }
