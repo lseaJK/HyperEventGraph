@@ -11,6 +11,11 @@ from src.agents.triage_agent import TriageAgent
 from src.agents.extraction_agent import ExtractionAgent
 from src.agents.relationship_analysis_agent import RelationshipAnalysisAgent
 from src.agents.storage_agent import StorageAgent
+# 导入我们创建的工具
+from src.agents.toolkits.extraction_toolkit import EventExtractionToolkit
+from src.agents.toolkits.relationship_toolkit import RelationshipAnalysisToolkit
+from src.agents.toolkits.storage_toolkit import StorageToolkit
+from src.agents.toolkits.triage_toolkit import TriageToolkit
 
 # ------------------ LLM 配置 ------------------
 # 配置1: Kimi模型，用于决策和工具调用
@@ -20,7 +25,7 @@ if not kimi_api_key:
 
 config_list_kimi = [
     {
-        "model": "deepseek-ai/DeepSeek-V3",
+        "model": "moonshotai/Kimi-K2-Instruct", # "deepseek-ai/DeepSeek-V3",
         "price": [0.002, 0.008],
         "api_key": kimi_api_key,
         "base_url": "https://api.siliconflow.cn/v1"
@@ -47,20 +52,19 @@ llm_config_deepseek = {
     "config_list": config_list_deepseek, "cache_seed": 43, "temperature": 0.0
 }
 
-# ------------------ 工作流上下文与Schema加载 ------------------
+# ------------------ 工作流上下文 ------------------
 workflow_context = {
     "original_text": None, "domain": None, "event_type": None,
     "extracted_events": [], "extracted_relationships": []
 }
 
-try:
-    with open("src/event_extraction/event_schemas.json", 'r', encoding='utf-8') as f:
-        event_schemas = json.load(f)
-except (FileNotFoundError, json.JSONDecodeError) as e:
-    print(f"[Workflow Error] Could not load event_schemas.json: {e}")
-    event_schemas = {}
-
 # ------------------ Agent 初始化 ------------------
+# 实例化所有工具
+event_extraction_toolkit = EventExtractionToolkit()
+relationship_analysis_toolkit = RelationshipAnalysisToolkit()
+storage_toolkit = StorageToolkit()
+triage_toolkit = TriageToolkit()
+
 user_proxy = autogen.UserProxyAgent(
     name="UserProxyAgent",
     human_input_mode="NEVER",
@@ -77,94 +81,86 @@ storage_agent = StorageAgent()
 # ------------------ GroupChat 设置 ------------------
 agents = [user_proxy, triage_agent, extraction_agent, relationship_agent, storage_agent]
 
-def find_schema_by_title(title: str) -> Optional[Dict]:
-    for domain in event_schemas:
-        if isinstance(event_schemas[domain], dict):
-            for event_key, event_data in event_schemas[domain].items():
-                if isinstance(event_data, dict) and event_data.get("title") == title:
-                    return event_data
-    return None
-
 def custom_speaker_selection_func(last_speaker: autogen.Agent, groupchat: autogen.GroupChat) -> Union[autogen.Agent, str, None]:
     messages = groupchat.messages
     
+    # 初始状态，由UserProxyAgent触发，交给TriageAgent
     if last_speaker.name == "UserProxyAgent":
         return triage_agent
 
+    # 最终状态，由StorageAgent或任何终止路径触发
     if last_speaker.name == "StorageAgent":
         groupchat.messages.append({"role": "user", "name": "system", "content": "TASK_COMPLETE"})
         return user_proxy
 
-    last_message = messages[-1]
-    content = last_message.get("content", "").strip()
-    
-    parsed_json = None
-    if content:
-        json_match = re.search(r'(\[.*\]|\{.*\})', content, re.DOTALL)
-        if json_match:
-            try:
-                parsed_json = json.loads(json_match.group())
-            except json.JSONDecodeError:
-                print(f"\n[Workflow Error] Failed to parse JSON from {last_speaker.name}: {content}")
-                return None
-
-    if not parsed_json:
-        print(f"\n[Workflow Warning] No valid JSON output from {last_speaker.name}. Terminating.")
-        return None
-
+    # TriageAgent是所有逻辑的入口点
     if last_speaker.name == "TriageAgent":
+        content = messages[-1].get("content", "").strip()
+        parsed_json = None
+        if content:
+            json_match = re.search(r'(\[.*\]|\{.*\})', content, re.DOTALL)
+            if json_match:
+                try:
+                    parsed_json = json.loads(json_match.group())
+                except json.JSONDecodeError:
+                    print(f"\n[Workflow Error] Failed to parse JSON from {last_speaker.name}: {content}")
+                    # 无法解析，终止流程
+                    groupchat.messages.append({"role": "user", "name": "system", "content": "TASK_COMPLETE"})
+                    return user_proxy
+
         if isinstance(parsed_json, dict) and parsed_json.get("status") == "known":
             event_title = parsed_json.get('event_type')
-            print(f"\n[Workflow] TriageAgent classified event as: {event_title}")
+            domain = parsed_json.get('domain')
+            print(f"\n[Workflow] TriageAgent classified event as: {event_title} in domain: {domain}")
             workflow_context.update(parsed_json)
             
-            schema_to_use = find_schema_by_title(event_title)
-            if not schema_to_use:
-                print(f"\n[Workflow Error] Could not find schema for title: {event_title}. Terminating.")
-                return None
+            # --- 1. 事件抽取 ---
+            print("\n[Workflow] Calling Extraction Toolkit...")
+            extracted_events = event_extraction_toolkit.extract_events_from_text(
+                text=workflow_context['original_text'],
+                event_type=event_title,
+                domain=domain
+            )
             
-            extraction_prompt = f"""
-Please extract event information from the following text based on the provided JSON Schema.
+            if not extracted_events:
+                print(f"\n[Workflow Warning] Extraction toolkit found no events. Terminating.")
+                groupchat.messages.append({"role": "user", "name": "system", "content": "TASK_COMPLETE"})
+                return user_proxy
 
---- JSON SCHEMA ---
-{json.dumps(schema_to_use, indent=2, ensure_ascii=False)}
+            workflow_context["extracted_events"] = extracted_events
+            print(f"[Workflow] Extracted {len(extracted_events)} event(s).")
 
---- TEXT TO ANALYZE ---
-{workflow_context['original_text']}
-"""
-            groupchat.messages.append({"role": "user", "name": "ExtractionAgent", "content": extraction_prompt})
-            return extraction_agent
+            # --- 2. 关系分析 ---
+            print("\n[Workflow] Calling Relationship Analysis Toolkit...")
+            found_relations = relationship_analysis_toolkit.analyze_event_relationships(
+                original_text=workflow_context['original_text'],
+                extracted_events=workflow_context['extracted_events']
+            )
+
+            workflow_context["extracted_relationships"] = found_relations
+            print(f"[Workflow] Found {len(found_relations)} relationship(s).")
+            
+            # --- 3. 存储 ---
+            print("\n[Workflow] Calling Storage Toolkit...")
+            storage_result = storage_toolkit.save_events_and_relationships(
+                events=workflow_context['extracted_events'],
+                relationships=workflow_context['extracted_relationships']
+            )
+            workflow_context['storage_summary'] = storage_result
+            print(f"[Workflow] Storage result: {storage_result.get('status')}")
+
+            # --- 4. 结束 ---
+            print("\n[Workflow] Process complete.")
+            groupchat.messages.append({"role": "user", "name": "system", "content": "TASK_COMPLETE"})
+            return user_proxy
         else:
             print("\n[Workflow] TriageAgent classified event as 'Unknown' or output was invalid. Terminating.")
-            return None
-
-    elif last_speaker.name == "ExtractionAgent":
-        if isinstance(parsed_json, (list, dict)):
-            count = len(parsed_json) if isinstance(parsed_json, list) else 1
-            print(f"\n[Workflow] ExtractionAgent extracted {count} event(s).")
-            workflow_context["extracted_events"] = parsed_json
+            groupchat.messages.append({"role": "user", "name": "system", "content": "TASK_COMPLETE"})
+            return user_proxy
             
-            relationship_prompt = f"""
-Please analyze the relationships between the following events:
-
---- EVENTS ---
-{json.dumps(parsed_json, indent=2, ensure_ascii=False)}
-"""
-            groupchat.messages.append({"role": "user", "name": "RelationshipAnalysisAgent", "content": relationship_prompt})
-            return relationship_agent
-        else:
-            print(f"\n[Workflow Error] ExtractionAgent output is not a list or dict. Output: {parsed_json}")
-            return None
-
-    elif last_speaker.name == "RelationshipAnalysisAgent":
-        if isinstance(parsed_json, list):
-            print(f"\n[Workflow] RelationshipAnalysisAgent found {len(parsed_json)} relationship(s).")
-            workflow_context["extracted_relationships"] = parsed_json
-            return storage_agent
-        else:
-            print(f"\n[Workflow Error] RelationshipAnalysisAgent output is not a list. Output: {parsed_json}")
-            return None
-            
+    # 如果出现意外的Agent（例如ExtractionAgent被直接调用），则终止
+    print(f"\n[Workflow Warning] Unexpected agent '{last_speaker.name}' in speaker selection. Terminating.")
+    groupchat.messages.append({"role": "user", "name": "system", "content": "TASK_COMPLETE"})
     return user_proxy
 
 group_chat = autogen.GroupChat(agents=agents, messages=[], max_round=12, speaker_selection_method=custom_speaker_selection_func)
