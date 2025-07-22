@@ -1,0 +1,11 @@
+# Task ID: 2
+# Title: 第二阶段：Agent能力工具化
+# Status: done
+# Dependencies: 1
+# Priority: medium
+# Description: 根据需求文档V2.1，完成第二阶段的Agent能力工具化。核心任务是将项目中现有的事件抽取、关系分析、分类和存储逻辑，封装成独立的Python函数，并作为“工具”注册给对应的Agent（ExtractionAgent, RelationshipAnalysisAgent, TriageAgent, StorageAgent）。
+# Details:
+
+
+# Test Strategy:
+

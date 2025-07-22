@@ -1,0 +1,11 @@
+# Task ID: 1
+# Title: 第一阶段：环境与骨架搭建
+# Status: done
+# Dependencies: None
+# Priority: medium
+# Description: 根据需求文档V2.1，完成第一阶段的环境与骨架搭建。这包括更新依赖、确认设计文档、并创建所有必要的Agent和Admin模块的文件骨架。这个阶段为后续的Agent能力开发和工作流编排奠定基础。
+# Details:
+
+
+# Test Strategy:
+

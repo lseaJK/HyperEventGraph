@@ -1,0 +1,11 @@
+# Task ID: 3
+# Title: 第三阶段：工作流编排与测试
+# Status: done
+# Dependencies: 2
+# Priority: medium
+# Description: 根据需求文档V2.1，完成第三阶段的工作流编排与测试。主要工作是在一个主流程脚本中，使用AutoGen的GroupChatManager来初始化所有Agent，并定义它们之间的协作流程。同时，需要编写并运行集成测试，确保整个工作流在不同场景下都能稳定、正确地运行。
+# Details:
+
+
+# Test Strategy:
+
