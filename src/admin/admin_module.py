@@ -5,6 +5,8 @@ import json
 import autogen
 from typing import List, Dict, Any
 
+from ..agents.schema_learner_agent import SchemaLearnerAgent
+
 class AdminModule:
     """
     管理模块，用于配置和启动基于AutoGen的学习工作流。
@@ -27,16 +29,16 @@ class AdminModule:
 
     def _setup_agents(self):
         """初始化工作流所需的Agent。"""
-        # 引入SchemaLearnerAgent
-        from src.agents.schema_learner_agent import SchemaLearnerAgent
-        
         self.learner_agent = SchemaLearnerAgent(llm_config=self.llm_config)
         
         self.human_reviewer = autogen.UserProxyAgent(
-            name="HumanReviewer",
+            name="人类审核员",
             human_input_mode="ALWAYS",
-            code_execution_config={"work_dir": "admin_work_dir"},
-            is_termination_msg=lambda x: "APPROVED" in x.get("content", "").upper() or "REJECTED" in x.get("content", "").upper(),
+            code_execution_config=False,
+            is_termination_msg=lambda x: "APPROVED" in x.get("content", "").upper() 
+                                      or "REJECTED" in x.get("content", "").upper()
+                                      or "批准" in x.get("content", "")
+                                      or "拒绝" in x.get("content", ""),
         )
 
     def _setup_groupchat(self):
@@ -75,18 +77,18 @@ class AdminModule:
         print("--- Starting Schema Learning Workflow via AdminModule ---")
         
         initial_message = f"""
-Hello SchemaLearnerAgent.
-I have a batch of {len(events)} unclassified events that need to be analyzed.
-Your task is to group them using your `cluster_events` tool and then, for each resulting cluster, propose a new schema by calling the `induce_schema` tool.
+你好，SchemaLearnerAgent。
+我有一批包含 {len(events)} 个未分类的事件需要分析。
+你的任务是使用 `cluster_events` 工具对它们进行分组，然后为每个生成的集群调用 `induce_schema` 工具来提出一个新的 schema。
 
-After generating a schema for a cluster, you must present it to the HumanReviewer for approval. Wait for their feedback before proceeding to the next cluster.
+在为一个集群生成 schema 后，你必须将其提交给 人类审核员 进行批准。在继续处理下一个集群之前，请等待他们的反馈。
 
-Here are the event texts:
+以下是事件文本：
 ---
 {json.dumps(events, indent=2, ensure_ascii=False)}
 ---
 
-Please begin the process.
+请开始执行流程。
 """
         self.human_reviewer.initiate_chat(
             self.manager,
@@ -100,7 +102,7 @@ def load_events_from_file(file_path: str, limit: int = 5) -> List[str]:
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             all_events_data = json.load(f)
-            return [item['text'] for item in all_events_data[:limit]]
+            return all_events_data
     except FileNotFoundError:
         print(f"Error: The file {file_path} was not found.")
         return []
@@ -125,7 +127,8 @@ if __name__ == '__main__':
 
     # 2. 从文件加载数据
     # 注意：此脚本位于src/admin/下，因此需要使用".."来返回上级目录
-    events_file = os.path.join("..", "..", "IC_data", "filtered_data_demo.json")
+#     events_file = os.path.join("..", "..", "IC_data", "filtered_data_demo.json")
+    events_file = os.path.join("IC_data", "filtered_data_demo.json")
     unknown_events = load_events_from_file(events_file)
 
     # 3. 启动学习会话

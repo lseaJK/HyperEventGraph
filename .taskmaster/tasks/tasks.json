@@ -82,7 +82,7 @@
             "title": "集成并测试后台学习系统",
             "description": "将SchemaLearnerAgent, GroupChat, 和AdminModule集成在一起，形成完整的后台学习工作流。编写端到端测试，模拟一次完整的学习、审核流程，确保系统稳定运行。",
             "details": "",
-            "status": "pending",
+            "status": "in-progress",
             "dependencies": [],
             "parentTaskId": 4
           }
@@ -102,7 +102,7 @@
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-22T13:27:27.875Z",
+      "updated": "2025-07-22T13:31:30.466Z",
       "description": "Tasks for master context"
     }
   }

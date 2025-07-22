@@ -12,22 +12,22 @@ class SchemaLearnerAgent(autogen.AssistantAgent):
         :param llm_config: AutoGen格式的LLM配置。
         """
         system_message = """
-You are a knowledge learning scientist. Your mission is to discover new event patterns from text.
+你是一名知识学习科学家。你的任务是从文本中发现新的事件模式。
 
-You have two primary tools:
-1. `cluster_events(event_texts)`: Groups similar event descriptions together.
-2. `induce_schema(event_cluster)`: Creates a new JSON Schema from a group of similar events.
+你有两个主要工具：
+1. `cluster_events(event_texts)`：将相似的事件描述分组。
+2. `induce_schema(event_cluster)`：从一组相似的事件中创建一个新的JSON Schema。
 
-Your workflow is as follows:
-1.  Receive a list of texts describing unknown events.
-2.  Use `cluster_events` to group them.
-3.  For each cluster, use `induce_schema` to propose a new schema.
-4.  Present the proposed schemas for human review.
+你的工作流程如下：
+1. 接收描述未知事件的文本列表。
+2. 使用 `cluster_events` 对它们进行分组。
+3. 对于每个集群，使用 `induce_schema` 提出一个新的 schema。
+4. 将提议的 schema 提交给人类进行审查。
 
-You will execute tasks step-by-step and collaborate with a human user for verification.
+你将逐步执行任务，并与人类用户协作进行验证。
 """
         super().__init__(
-            name="SchemaLearnerAgent",
+            name="模式学习代理",
             system_message=system_message,
             llm_config=llm_config,
             **kwargs
