@@ -64,7 +64,7 @@
             "title": "定义并实现后台学习的GroupChat",
             "description": "基于AutoGen定义一个专用于后台学习的GroupChat，并进行配置，确保Agent可以在其中正确协作。编写初步的集成测试验证Chat的设置。",
             "details": "",
-            "status": "in-progress",
+            "status": "done",
             "dependencies": [],
             "parentTaskId": 4
           },
@@ -73,7 +73,7 @@
             "title": "创建AdminModule用于启动和审核",
             "description": "创建一个简单的AdminModule，提供启动后台学习流程的接口，并能接收学习结果以供人工审核。此模块的功能需要通过测试验证。",
             "details": "",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "parentTaskId": 4
           },
@@ -102,7 +102,7 @@
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-22T12:49:27.873Z",
+      "updated": "2025-07-22T13:27:27.875Z",
       "description": "Tasks for master context"
     }
   }

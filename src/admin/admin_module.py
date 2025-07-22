@@ -1,119 +1,135 @@
 # src/admin/admin_module.py
 
+import os
 import json
+import autogen
 from typing import List, Dict, Any
 
 class AdminModule:
     """
-    一个简单的管理模块，用于启动后台学习流程并处理人工审核。
+    管理模块，用于配置和启动基于AutoGen的学习工作流。
+    它负责准备环境和数据，然后将控制权交给AutoGen的GroupChatManager。
     """
 
-    def __init__(self, schema_learner_agent, unknown_events_storage=None):
+    def __init__(self, llm_config: Dict[str, Any]):
         """
         初始化Admin模块。
 
         Args:
-            schema_learner_agent: 一个配置好的SchemaLearnerAgent实例。
-            unknown_events_storage: 一个用于存储和检索未知事件的简单存储系统。
-                                      在实际应用中，这可能是一个数据库。
+            llm_config: AutoGen格式的LLM配置。
         """
-        self.schema_learner = schema_learner_agent
-        # 在这个简化版本中，我们使用一个列表来模拟未知事件的存储
-        self.unknown_events_storage = unknown_events_storage or []
+        self.llm_config = llm_config
+        self.learner_agent = None
+        self.human_reviewer = None
+        self.manager = None
+        self._setup_agents()
+        self._setup_groupchat()
 
-    def add_unknown_event(self, event_text: str):
-        """
-        将一个无法分类的事件文本添加到待处理列表中。
-        """
-        self.unknown_events_storage.append(event_text)
-        print(f"Added unknown event. Total pending: {len(self.unknown_events_storage)}")
-
-    def run_learning_cycle(self) -> List[Dict[str, Any]]:
-        """
-        启动一个完整的学习周期：聚类 -> 归纳 -> 审核。
-        """
-        if not self.unknown_events_storage:
-            print("No unknown events to process.")
-            return []
-
-        print(f"Starting learning cycle with {len(self.unknown_events_storage)} events.")
+    def _setup_agents(self):
+        """初始化工作流所需的Agent。"""
+        # 引入SchemaLearnerAgent
+        from src.agents.schema_learner_agent import SchemaLearnerAgent
         
-        # 1. 使用Agent进行聚类
-        # 在实际的AutoGen中，这将通过与Agent的对话来完成。
-        # 这里我们直接调用其内部工具进行模拟。
-        clusters = self.schema_learner.toolkit.cluster_events(self.unknown_events_storage)
+        self.learner_agent = SchemaLearnerAgent(llm_config=self.llm_config)
         
-        proposed_schemas = []
-        for cluster_id, events in clusters.items():
-            if not events:
-                continue
-            
-            print(f"\n--- Processing Cluster {cluster_id} ({len(events)} events) ---")
-            
-            # 2. 为每个簇归纳Schema
-            induced_schema = self.schema_learner.toolkit.induce_schema(events)
-            
-            # 3. 人工审核
-            is_approved = self._human_review(induced_schema, events)
-            
-            if is_approved:
-                proposed_schemas.append(induced_schema)
-                print(f"Schema for cluster {cluster_id} approved.")
+        self.human_reviewer = autogen.UserProxyAgent(
+            name="HumanReviewer",
+            human_input_mode="ALWAYS",
+            code_execution_config={"work_dir": "admin_work_dir"},
+            is_termination_msg=lambda x: "APPROVED" in x.get("content", "").upper() or "REJECTED" in x.get("content", "").upper(),
+        )
+
+    def _setup_groupchat(self):
+        """配置GroupChat和Manager。"""
+        def select_next_speaker(last_speaker: autogen.Agent, agents: List[autogen.Agent]):
+            if last_speaker is self.learner_agent:
+                return self.human_reviewer
+            elif last_speaker is self.human_reviewer:
+                return self.learner_agent
             else:
-                print(f"Schema for cluster {cluster_id} rejected.")
+                return self.learner_agent
 
-        if proposed_schemas:
-            print(f"\nLearning cycle complete. {len(proposed_schemas)} new schemas were approved.")
-            # 在实际应用中，这里会触发将新Schema保存到event_schemas.json的逻辑
-            
-        # 清空已处理的事件
-        self.unknown_events_storage.clear()
-        
-        return proposed_schemas
+        learning_groupchat = autogen.GroupChat(
+            agents=[self.learner_agent, self.human_reviewer],
+            messages=[],
+            max_round=12,
+            speaker_selection_method=select_next_speaker
+        )
 
-    def _human_review(self, schema: Dict[str, Any], examples: List[str]) -> bool:
+        self.manager = autogen.GroupChatManager(
+            groupchat=learning_groupchat,
+            llm_config=self.llm_config
+        )
+
+    def start_learning_session(self, events: List[str]):
         """
-        一个简单的命令行界面，用于人工审核提议的Schema。
+        使用准备好的数据启动一个完整的AutoGen学习会话。
+
+        Args:
+            events: 从外部加载的未知事件文本列表。
         """
-        print("\n--- HUMAN REVIEW REQUIRED ---")
-        print("Proposed Schema:")
-        print(json.dumps(schema, indent=2, ensure_ascii=False))
-        print("\nBased on these examples:")
-        for ex in examples[:3]: # 最多显示3个例子
-            print(f"- {ex}")
+        if not self.manager or not self.human_reviewer:
+            print("Error: AdminModule is not properly initialized.")
+            return
+
+        print("--- Starting Schema Learning Workflow via AdminModule ---")
         
-        while True:
-            response = input("Approve this schema? (yes/no): ").lower().strip()
-            if response in ["yes", "y"]:
-                return True
-            if response in ["no", "n"]:
-                return False
-            print("Invalid input. Please enter 'yes' or 'no'.")
+        initial_message = f"""
+Hello SchemaLearnerAgent.
+I have a batch of {len(events)} unclassified events that need to be analyzed.
+Your task is to group them using your `cluster_events` tool and then, for each resulting cluster, propose a new schema by calling the `induce_schema` tool.
+
+After generating a schema for a cluster, you must present it to the HumanReviewer for approval. Wait for their feedback before proceeding to the next cluster.
+
+Here are the event texts:
+---
+{json.dumps(events, indent=2, ensure_ascii=False)}
+---
+
+Please begin the process.
+"""
+        self.human_reviewer.initiate_chat(
+            self.manager,
+            message=initial_message
+        )
+
+        print("\n--- Schema Learning Workflow Finished ---")
+
+def load_events_from_file(file_path: str, limit: int = 5) -> List[str]:
+    """从JSON文件中加载事件文本。"""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            all_events_data = json.load(f)
+            return [item['text'] for item in all_events_data[:limit]]
+    except FileNotFoundError:
+        print(f"Error: The file {file_path} was not found.")
+        return []
+    except json.JSONDecodeError:
+        print(f"Error: Could not decode JSON from the file {file_path}.")
+        return []
 
 if __name__ == '__main__':
-    # 这是一个示例，展示如何使用AdminModule
-    # 在实际应用中，Agent和LLM的配置会从外部传入
-    from src.agents.schema_learner_agent import SchemaLearnerAgent
+    # --- LLM Configuration ---
+    deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
+    if not deepseek_api_key:
+        raise ValueError("DEEPSEEK_API_KEY is not set in environment variables.")
 
-    # 模拟一个LLM配置
-    mock_llm_config = {"config_list": [{"model": "mock"}]}
-    
-    # 初始化Agent
-    learner_agent = SchemaLearnerAgent(llm_config=mock_llm_config)
+    config_list_deepseek = [
+        {"model": "deepseek-chat", "api_key": deepseek_api_key, "base_url": "https://api.deepseek.com/v1"}
+    ]
+    llm_config = {"config_list": config_list_deepseek, "cache_seed": 44, "temperature": 0.0}
 
-    # 初始化Admin模块
-    admin_console = AdminModule(schema_learner_agent=learner_agent)
+    # --- Workflow Execution ---
+    # 1. 初始化Admin模块，它会自动设置好Agents和GroupChat
+    admin_console = AdminModule(llm_config=llm_config)
 
-    # 添加一些模拟的未知事件
-    admin_console.add_unknown_event("Global Tech Inc. announced a strategic partnership with Future AI LLC.")
-    admin_console.add_unknown_event("Innovate Corp and Visionary Systems form a joint venture.")
-    admin_console.add_unknown_event("Samsung's quarterly report shows a 15% profit increase.")
-    admin_console.add_unknown_event("Intel's financial statements indicate a revenue downturn.")
-    
-    # 运行学习周期
-    # 注意：这将需要一个可用的LLM来归纳Schema，并需要人工输入来审核
-    # 要在没有真实LLM和人工输入的情况下运行，需要对`induce_schema`和`_human_review`进行mock
-    
-    # 这里我们只演示流程，实际运行会卡在输入和LLM调用上
-    print("\nTo run a full cycle, ensure you have a running LLM and are ready to provide input.")
-    # admin_console.run_learning_cycle()
+    # 2. 从文件加载数据
+    # 注意：此脚本位于src/admin/下，因此需要使用".."来返回上级目录
+    events_file = os.path.join("..", "..", "IC_data", "filtered_data_demo.json")
+    unknown_events = load_events_from_file(events_file)
+
+    # 3. 启动学习会话
+    if unknown_events:
+        admin_console.start_learning_session(unknown_events)
+    else:
+        print("No events loaded, skipping learning session.")
