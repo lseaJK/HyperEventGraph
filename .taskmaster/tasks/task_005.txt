@@ -9,3 +9,47 @@
 
 # Test Strategy:
 
+
+# Subtasks:
+## 1. 建立统一的Pydantic Schema作为唯一真实来源 [pending]
+### Dependencies: None
+### Description: 让 schemas.py 成为事件定义的唯一真实来源 (Single Source of Truth)。基于 event_schemas.json 的结构，在 schemas.py 中创建或完善所有事件的 Pydantic 模型。添加一个工具函数，可以从 Pydantic 模型动态生成 JSON Schema。
+### Details:
+
+
+## 2. 定义抽取器抽象基类(BaseEventExtractor) [pending]
+### Dependencies: None
+### Description: 解耦服务和具体的抽取器实现。创建一个 base_extractor.py 文件，在其中定义一个抽象基类 BaseEventExtractor，并规定所有抽取器都必须实现的核心方法（如 extract）。
+### Details:
+
+
+## 3. 使验证器适配Pydantic并集成deepseek-chat [pending]
+### Dependencies: None
+### Description: 简化验证流程。改造 EventExtractionValidator，使其直接使用 schemas.py 中的 Pydantic 模型进行验证，而不是读取外部 JSON 文件。在需要时集成 deepseek-chat 进行名称匹配。
+### Details:
+
+
+## 4. 重构 EventExtractionService 以实现依赖注入 [pending]
+### Dependencies: None
+### Description: 实现依赖注入，降低耦合。修改 EventExtractionService 的构造函数，使其不再自己创建实例，而是接收一个 BaseEventExtractor 类型的对象作为参数。
+### Details:
+
+
+## 5. 适配 DeepSeekEventExtractor 以符合新接口 [pending]
+### Dependencies: None
+### Description: 使现有实现符合新标准。让 DeepSeekEventExtractor 继承自新的 BaseEventExtractor，并确保其返回的数据是 schemas.py 中定义的 Pydantic 模型实例。在需要时利用 deepseek-chat 进行实体标准化。
+### Details:
+
+
+## 6. 清理冗余文件和代码 [pending]
+### Dependencies: None
+### Description: 移除废弃内容。在所有重构完成后，安全地删除 event_schemas.json 和旧的 extractor.py。
+### Details:
+
+
+## 7. 更新单元测试以匹配新架构 [pending]
+### Dependencies: None
+### Description: 确保新架构的稳定性。更新所有受影响的单元测试，以匹配新的类构造方式和数据返回类型。
+### Details:
+
+

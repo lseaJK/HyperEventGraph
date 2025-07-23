@@ -46,11 +46,11 @@ def test_speaker_selection_logic_in_admin_module(admin_module):
     groupchat = admin_module.manager.groupchat
     
     # 1. After learner -> should be reviewer
-    next_speaker = groupchat.select_speaker(last_speaker=admin_module.learner_agent, agents=groupchat.agents)
+    next_speaker = groupchat.select_speaker(last_speaker=admin_module.learner_agent, selector=admin_module.manager)
     assert next_speaker is admin_module.human_reviewer, "After learner, it should be reviewer's turn."
     
     # 2. After reviewer -> should be learner
-    next_speaker = groupchat.select_speaker(last_speaker=admin_module.human_reviewer, agents=groupchat.agents)
+    next_speaker = groupchat.select_speaker(last_speaker=admin_module.human_reviewer, selector=admin_module.manager)
     assert next_speaker is admin_module.learner_agent, "After reviewer, it should be learner's turn."
 
 @patch('autogen.UserProxyAgent.initiate_chat')
@@ -66,9 +66,9 @@ def test_start_learning_session_initiates_chat_correctly(mock_initiate_chat, adm
     # Get the call arguments
     args, kwargs = mock_initiate_chat.call_args
     
-    # Verify the manager is passed correctly
-    assert 'manager' in kwargs
-    assert kwargs['manager'] is admin_module.manager, "The chat should be initiated with the correct manager."
+    # Verify the manager is passed correctly as a positional argument
+    assert len(args) > 0, "Manager should be passed as a positional argument."
+    assert args[0] is admin_module.manager, "The chat should be initiated with the correct manager."
 
     # Verify the message content
     assert 'message' in kwargs

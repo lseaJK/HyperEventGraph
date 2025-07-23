@@ -1,15 +1,14 @@
-import asyncio
-import json
-import logging
-from typing import Dict, Any, List, Optional, Union
-from datetime import datetime
-from pathlib import Path
+# src/event_extraction/event_extraction_service.py
 
-# 导入自定义模块
-from deepseek_extractor import DeepSeekEventExtractor
-from deepseek_config import DeepSeekConfig, get_config
-from validation import EventExtractionValidator, ValidationResult
-from prompt_templates import PromptTemplateGenerator
+import asyncio
+from typing import Dict, Any, List, Optional, Type
+from datetime import datetime
+
+from .schemas import BaseEvent, get_event_model
+from .validation import EventExtractionValidator, ValidationResult
+from .base_extractor import BaseEventExtractor
+
+import logging
 
 # 配置日志
 logging.basicConfig(
@@ -21,39 +20,36 @@ logger = logging.getLogger(__name__)
 class EventExtractionService:
     """
     事件抽取服务主类
-    集成DeepSeek模型、验证器和模板生成器
+    - 采用依赖注入，与具体抽取器实现解耦
+    - 协调抽取、验证和日志记录流程
     """
     
     def __init__(self, 
-                 config_name: str = "default",
-                 custom_config: Optional[Dict[str, Any]] = None,
-                 enable_validation: bool = True,
+                 extractor: BaseEventExtractor,
+                 validator: Optional[EventExtractionValidator] = None,
                  enable_logging: bool = True):
         """
         初始化事件抽取服务
         
         Args:
-            config_name: 配置名称
-            custom_config: 自定义配置
-            enable_validation: 是否启用验证
-            enable_logging: 是否启用日志
+            extractor (BaseEventExtractor): 一个实现了BaseEventExtractor接口的抽取器实例。
+            validator (Optional[EventExtractionValidator]): 验证器实例。如果为None，则不进行验证。
+            enable_logging (bool): 是否启用日志记录。
         """
-        self.enable_validation = enable_validation
+        if not isinstance(extractor, BaseEventExtractor):
+            raise TypeError("extractor 必须是 BaseEventExtractor 的一个实例。")
+            
+        self.extractor = extractor
+        self.validator = validator or EventExtractionValidator()
         self.enable_logging = enable_logging
         
-        # 初始化配置
-        if custom_config:
-            self.config = DeepSeekConfig.from_dict(custom_config)
-        else:
-            self.config = get_config(config_name)
+        self.stats = self._init_stats()
         
-        # 初始化组件
-        self.extractor = None
-        self.validator = None
-        self.template_generator = None
-        
-        # 统计信息
-        self.stats = {
+        logger.info(f"事件抽取服务初始化完成，使用抽取器: {extractor.__class__.__name__}")
+
+    def _init_stats(self) -> Dict[str, Any]:
+        """初始化统计信息"""
+        return {
             "total_extractions": 0,
             "successful_extractions": 0,
             "failed_extractions": 0,
@@ -61,452 +57,161 @@ class EventExtractionService:
             "validation_failed": 0,
             "start_time": datetime.now()
         }
-        
-        logger.info(f"事件抽取服务初始化完成，配置: {config_name}")
-    
-    async def initialize(self):
+
+    async def extract_event(
+        self,
+        text: str,
+        event_type: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Optional[Dict[str, Any]]:
         """
-        异步初始化所有组件
-        """
-        try:
-            # 初始化DeepSeek抽取器
-            self.extractor = DeepSeekEventExtractor(config=self.config)
-            logger.info("DeepSeek事件抽取器初始化成功")
-            
-            # 初始化验证器
-            if self.enable_validation:
-                self.validator = EventExtractionValidator()
-                logger.info("事件验证器初始化成功")
-            
-            # 初始化模板生成器
-            self.template_generator = PromptTemplateGenerator()
-            logger.info("Prompt模板生成器初始化成功")
-            
-            # 验证配置
-            self.config.validate_config()
-            logger.info("配置验证通过")
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"服务初始化失败: {str(e)}")
-            raise
-    
-    async def extract_single_event(self,
-                                 text: str,
-                                 domain: str,
-                                 event_type: str,
-                                 metadata: Optional[Dict[str, Any]] = None,
-                                 validate_result: bool = None) -> Dict[str, Any]:
-        """
-        抽取单个事件
-        
+        从文本中抽取单个指定类型的事件。
+
         Args:
-            text: 输入文本
-            domain: 领域
-            event_type: 事件类型
-            metadata: 元数据
-            validate_result: 是否验证结果（None时使用服务默认设置）
-            
+            text (str): 输入文本。
+            event_type (str): 目标事件类型的名称 (例如, "company_merger_and_acquisition")。
+            metadata (Optional[Dict[str, Any]]): 附加元数据。
+
         Returns:
-            抽取结果字典
+            一个包含抽取结果和验证信息的字典，如果失败则返回None。
         """
-        if not self.extractor:
-            raise RuntimeError("服务未初始化，请先调用initialize()")
-        
         start_time = datetime.now()
         self.stats["total_extractions"] += 1
-        
+
+        event_model = get_event_model(event_type)
+        if not event_model:
+            logger.error(f"未找到事件类型 '{event_type}' 对应的模型。")
+            self.stats["failed_extractions"] += 1
+            return None
+
         try:
-            # 执行抽取
-            result = await self.extractor.extract_single_event(
-                text=text,
-                domain=domain,
-                event_type=event_type,
-                metadata=metadata or {}
-            )
+            # 1. 抽取
+            extracted_event = await self.extractor.extract(text, event_model, metadata)
             
-            # 添加服务级别的元数据
-            result["metadata"].update({
-                "service_version": "1.0.0",
-                "extraction_time": datetime.now().isoformat(),
-                "processing_duration": (datetime.now() - start_time).total_seconds()
-            })
-            
-            # 验证结果
-            should_validate = validate_result if validate_result is not None else self.enable_validation
-            if should_validate and self.validator:
-                validation_result = self.validator.validate_extraction_result(result, domain, event_type)
-                result["validation"] = {
-                    "is_valid": validation_result.is_valid,
-                    "quality_metrics": validation_result.quality_metrics,
-                    "errors": validation_result.errors,
-                    "warnings": validation_result.warnings,
-                    "suggestions": validation_result.suggestions
-                }
-                
-                if validation_result.is_valid:
-                    self.stats["validation_passed"] += 1
-                else:
-                    self.stats["validation_failed"] += 1
-            
-            # 更新统计
-            if result["metadata"].get("extraction_status") == "success":
-                self.stats["successful_extractions"] += 1
-            else:
+            if not extracted_event:
+                logger.warning(f"抽取器未能从文本中抽取到 '{event_type}' 事件。")
                 self.stats["failed_extractions"] += 1
+                return None
+
+            # 2. 验证
+            validation_result = self.validator.validate_event(extracted_event, event_type)
             
+            if validation_result.is_valid:
+                self.stats["validation_passed"] += 1
+            else:
+                self.stats["validation_failed"] += 1
+                if self.enable_logging:
+                    logger.warning(f"事件验证失败: {validation_result.errors}")
+
+            # 3. 组装结果
+            result_payload = {
+                "event_data": extracted_event.dict(),
+                "validation": validation_result.__dict__,
+                "metadata": {
+                    "extraction_status": "success" if validation_result.is_valid else "validation_failed",
+                    "processing_duration_seconds": (datetime.now() - start_time).total_seconds(),
+                    **(metadata or {})
+                }
+            }
+            
+            self.stats["successful_extractions"] += 1
             if self.enable_logging:
-                logger.info(f"单事件抽取完成: {domain}.{event_type}, 状态: {result['metadata'].get('extraction_status')}")
+                logger.info(f"成功处理事件 '{event_type}'。验证状态: {'通过' if validation_result.is_valid else '失败'}")
             
-            return result
-            
+            return result_payload
+
         except Exception as e:
             self.stats["failed_extractions"] += 1
-            logger.error(f"单事件抽取失败: {str(e)}")
-            
-            return {
-                "event_data": None,
-                "metadata": {
-                    "extraction_status": "error",
-                    "error_message": str(e),
-                    "confidence_score": 0.0,
-                    "domain": domain,
-                    "event_type": event_type,
-                    "service_version": "1.0.0",
-                    "extraction_time": datetime.now().isoformat(),
-                    "processing_duration": (datetime.now() - start_time).total_seconds()
-                }
-            }
-    
-    async def extract_multiple_events(self,
-                                    text: str,
-                                    target_domains: Optional[List[str]] = None,
-                                    metadata: Optional[Dict[str, Any]] = None,
-                                    validate_results: bool = None) -> List[Dict[str, Any]]:
-        """
-        抽取多个事件
-        
-        Args:
-            text: 输入文本
-            target_domains: 目标领域列表
-            metadata: 元数据
-            validate_results: 是否验证结果
-            
-        Returns:
-            抽取结果列表
-        """
-        if not self.extractor:
-            raise RuntimeError("服务未初始化，请先调用initialize()")
-        
-        start_time = datetime.now()
-        
-        try:
-            # 执行多事件抽取
-            results = await self.extractor.extract_multi_events(
-                text=text,
-                target_domains=target_domains,
-                metadata=metadata or {}
-            )
-            
-            # 批量验证
-            should_validate = validate_results if validate_results is not None else self.enable_validation
-            if should_validate and self.validator and results:
-                for result in results:
-                    domain = result["metadata"].get("domain")
-                    event_type = result["metadata"].get("event_type")
-                    
-                    if domain and event_type:
-                        validation_result = self.validator.validate_extraction_result(result, domain, event_type)
-                        result["validation"] = {
-                            "is_valid": validation_result.is_valid,
-                            "quality_metrics": validation_result.quality_metrics,
-                            "errors": validation_result.errors,
-                            "warnings": validation_result.warnings,
-                            "suggestions": validation_result.suggestions
-                        }
-            
-            # 更新统计
-            self.stats["total_extractions"] += len(results)
-            for result in results:
-                if result["metadata"].get("extraction_status") == "success":
-                    self.stats["successful_extractions"] += 1
-                else:
-                    self.stats["failed_extractions"] += 1
-            
-            if self.enable_logging:
-                logger.info(f"多事件抽取完成: 抽取到 {len(results)} 个事件")
-            
-            return results
-            
-        except Exception as e:
-            logger.error(f"多事件抽取失败: {str(e)}")
-            return []
-    
-    async def batch_extract(self,
-                          texts: List[str],
-                          domain: str,
-                          event_type: str,
-                          batch_size: Optional[int] = None,
-                          metadata_list: Optional[List[Dict[str, Any]]] = None,
-                          validate_results: bool = None) -> List[Dict[str, Any]]:
-        """
-        批量抽取事件
-        
-        Args:
-            texts: 文本列表
-            domain: 领域
-            event_type: 事件类型
-            batch_size: 批量大小
-            metadata_list: 元数据列表
-            validate_results: 是否验证结果
-            
-        Returns:
-            抽取结果列表
-        """
-        if not self.extractor:
-            raise RuntimeError("服务未初始化，请先调用initialize()")
-        
-        start_time = datetime.now()
-        
-        try:
-            # 执行批量抽取
-            results = await self.extractor.batch_extract(
-                texts=texts,
-                domain=domain,
-                event_type=event_type,
-                batch_size=batch_size or self.config.batch_size,
-                metadata_list=metadata_list
-            )
-            
-            # 批量验证
-            should_validate = validate_results if validate_results is not None else self.enable_validation
-            if should_validate and self.validator:
-                validation_results = self.validator.batch_validate(results, domain, event_type)
-                
-                for result, validation_result in zip(results, validation_results):
-                    result["validation"] = {
-                        "is_valid": validation_result.is_valid,
-                        "quality_metrics": validation_result.quality_metrics,
-                        "errors": validation_result.errors,
-                        "warnings": validation_result.warnings,
-                        "suggestions": validation_result.suggestions
-                    }
-            
-            # 更新统计
-            self.stats["total_extractions"] += len(results)
-            for result in results:
-                if result["metadata"].get("extraction_status") == "success":
-                    self.stats["successful_extractions"] += 1
-                else:
-                    self.stats["failed_extractions"] += 1
-            
-            if self.enable_logging:
-                logger.info(f"批量抽取完成: 处理 {len(texts)} 个文本，成功 {len(results)} 个")
-            
-            return results
-            
-        except Exception as e:
-            logger.error(f"批量抽取失败: {str(e)}")
-            return []
-    
-    def get_supported_domains(self) -> List[str]:
-        """
-        获取支持的领域列表
-        
-        Returns:
-            支持的领域列表
-        """
-        if self.extractor:
-            return self.extractor.get_supported_domains()
-        return []
-    
-    def get_supported_event_types(self, domain: str) -> List[str]:
-        """
-        获取指定领域支持的事件类型
-        
-        Args:
-            domain: 领域名称
-            
-        Returns:
-            事件类型列表
-        """
-        if self.extractor:
-            return self.extractor.get_supported_event_types(domain)
-        return []
-    
-    def get_service_stats(self) -> Dict[str, Any]:
-        """
-        获取服务统计信息
-        
-        Returns:
-            统计信息字典
-        """
-        current_time = datetime.now()
-        uptime = (current_time - self.stats["start_time"]).total_seconds()
-        
-        return {
-            "uptime_seconds": uptime,
-            "total_extractions": self.stats["total_extractions"],
-            "successful_extractions": self.stats["successful_extractions"],
-            "failed_extractions": self.stats["failed_extractions"],
-            "success_rate": (
-                self.stats["successful_extractions"] / self.stats["total_extractions"]
-                if self.stats["total_extractions"] > 0 else 0
-            ),
-            "validation_passed": self.stats["validation_passed"],
-            "validation_failed": self.stats["validation_failed"],
-            "validation_rate": (
-                self.stats["validation_passed"] / (self.stats["validation_passed"] + self.stats["validation_failed"])
-                if (self.stats["validation_passed"] + self.stats["validation_failed"]) > 0 else 0
-            ),
-            "average_extractions_per_minute": (
-                self.stats["total_extractions"] / (uptime / 60)
-                if uptime > 0 else 0
-            )
-        }
-    
-    def reset_stats(self):
-        """
-        重置统计信息
-        """
-        self.stats = {
-            "total_extractions": 0,
-            "successful_extractions": 0,
-            "failed_extractions": 0,
-            "validation_passed": 0,
-            "validation_failed": 0,
-            "start_time": datetime.now()
-        }
-        logger.info("服务统计信息已重置")
-    
-    async def health_check(self) -> Dict[str, Any]:
-        """
-        健康检查
-        
-        Returns:
-            健康状态字典
-        """
-        health_status = {
-            "status": "healthy",
-            "timestamp": datetime.now().isoformat(),
-            "components": {
-                "extractor": self.extractor is not None,
-                "validator": self.validator is not None,
-                "template_generator": self.template_generator is not None
-            },
-            "config": {
-                "model_name": self.config.model_name,
-                "validation_enabled": self.enable_validation,
-                "logging_enabled": self.enable_logging
-            }
-        }
-        
-        # 检查API连接
-        try:
-            if self.extractor:
-                # 执行一个简单的测试抽取
-                test_result = await self.extractor.extract_single_event(
-                    text="测试文本",
-                    domain="financial",
-                    event_type="company_merger_and_acquisition",
-                    metadata={"health_check": True}
-                )
-                health_status["api_connection"] = True
-        except Exception as e:
-            health_status["status"] = "unhealthy"
-            health_status["api_connection"] = False
-            health_status["error"] = str(e)
-        
-        return health_status
-    
-    async def shutdown(self):
-        """
-        关闭服务
-        """
-        logger.info("正在关闭事件抽取服务...")
-        
-        # 记录最终统计
-        final_stats = self.get_service_stats()
-        logger.info(f"服务运行统计: {final_stats}")
-        
-        # 清理资源
-        self.extractor = None
-        self.validator = None
-        self.template_generator = None
-        
-        logger.info("事件抽取服务已关闭")
+            logger.error(f"处理事件 '{event_type}' 时发生意外错误: {e}", exc_info=True)
+            return None
 
-# 便捷函数
-async def create_extraction_service(config_name: str = "default", **kwargs) -> EventExtractionService:
-    """
-    创建并初始化事件抽取服务
-    
-    Args:
-        config_name: 配置名称
-        **kwargs: 其他参数
+    async def batch_extract_events(
+        self,
+        texts: List[str],
+        event_type: str,
+        metadata_list: Optional[List[Dict[str, Any]]] = None
+    ) -> List[Optional[Dict[str, Any]]]:
+        """
+        批量抽取相同类型的事件。
+
+        Args:
+            texts (List[str]): 输入文本列表。
+            event_type (str): 目标事件类型名称。
+            metadata_list (Optional[List[Dict[str, Any]]]): 元数据列表。
+
+        Returns:
+            一个包含每个文本抽取结果的列表。
+        """
+        tasks = [self.extract_event(text, event_type, meta) for text, meta in zip(texts, metadata_list or ([None] * len(texts)))]
+        return await asyncio.gather(*tasks)
+
+    def get_service_stats(self) -> Dict[str, Any]:
+        """获取服务统计信息"""
+        uptime = (datetime.now() - self.stats["start_time"]).total_seconds()
+        total_validated = self.stats["validation_passed"] + self.stats["validation_failed"]
         
-    Returns:
-        初始化完成的EventExtractionService实例
+        stats_summary = self.stats.copy()
+        stats_summary.update({
+            "uptime_seconds": uptime,
+            "success_rate": self.stats["successful_extractions"] / self.stats["total_extractions"] if self.stats["total_extractions"] > 0 else 0,
+            "validation_pass_rate": self.stats["validation_passed"] / total_validated if total_validated > 0 else 0,
+        })
+        return stats_summary
+
+    def reset_stats(self):
+        """重置统计信息"""
+        self.stats = self._init_stats()
+        logger.info("服务统计信息已重置。")
+
+async def create_service(extractor: BaseEventExtractor, **kwargs) -> EventExtractionService:
     """
-    service = EventExtractionService(config_name=config_name, **kwargs)
-    await service.initialize()
+    便捷的工厂函数，用于创建和初始化事件抽取服务。
+    """
+    service = EventExtractionService(extractor=extractor, **kwargs)
     return service
 
-async def quick_extract(text: str, 
-                       domain: str, 
-                       event_type: str,
-                       config_name: str = "fast") -> Dict[str, Any]:
-    """
-    快速事件抽取（一次性使用）
+if __name__ == '__main__':
+    # --- 示例用法 ---
+    # 需要一个具体的抽取器实现来运行示例
     
-    Args:
-        text: 输入文本
-        domain: 领域
-        event_type: 事件类型
-        config_name: 配置名称
-        
-    Returns:
-        抽取结果
-    """
-    service = await create_extraction_service(config_name=config_name)
-    try:
-        result = await service.extract_single_event(text, domain, event_type)
-        return result
-    finally:
-        await service.shutdown()
+    class MockExtractor(BaseEventExtractor):
+        """用于演示的模拟抽取器"""
+        async def extract(self, text: str, event_model: Type[BaseEvent], metadata: Optional[Dict[str, Any]] = None) -> Optional[BaseEvent]:
+            logger.info(f"MockExtractor 正在为 {event_model.__name__} 抽取...")
+            # 模拟从文本中解析数据
+            if "腾讯" in text and event_model.__name__ == "CompanyMergerAndAcquisition":
+                sample_data = {
+                    "source": "Mock News",
+                    "publish_date": "2024-07-23",
+                    "acquirer": "腾讯控股有限公司",
+                    "acquired": "字节跳动",
+                    "announcement_date": "2024-07-22",
+                    "deal_amount": 1200000
+                }
+                return event_model(**sample_data)
+            return None
 
-if __name__ == "__main__":
-    # 示例用法
     async def main():
-        # 创建服务
-        service = await create_extraction_service("default")
+        # 1. 创建抽取器实例
+        mock_extractor = MockExtractor()
         
-        try:
-            # 健康检查
-            health = await service.health_check()
-            print(f"服务健康状态: {health['status']}")
-            
-            # 测试单事件抽取
-            test_text = """
-            2024年1月15日，腾讯控股有限公司宣布以120亿美元的价格收购字节跳动旗下的TikTok业务。
-            此次并购交易预计将在2024年第二季度完成。
-            """
-            
-            result = await service.extract_single_event(
-                text=test_text,
-                domain="financial",
-                event_type="company_merger_and_acquisition"
-            )
-            
-            print(f"抽取结果: {json.dumps(result, ensure_ascii=False, indent=2)}")
-            
-            # 获取统计信息
-            stats = service.get_service_stats()
-            print(f"服务统计: {stats}")
-            
-        finally:
-            await service.shutdown()
-    
-    # 运行示例
+        # 2. 创建服务实例 (注入抽取器)
+        service = await create_service(extractor=mock_extractor)
+        
+        # 3. 抽取事件
+        test_text = "2024年1月15日，腾讯控股有限公司宣布以120亿美元的价格收购字节跳动旗下的TikTok业务。"
+        
+        result = await service.extract_event(
+            text=test_text,
+            event_type="company_merger_and_acquisition"
+        )
+        
+        if result:
+            import json
+            print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+        
+        # 4. 打印统计信息
+        print("\n--- 服务统计 ---")
+        print(service.get_service_stats())
+
     asyncio.run(main())

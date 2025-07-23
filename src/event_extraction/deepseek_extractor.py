@@ -1,439 +1,141 @@
-import os
-import json
-import asyncio
-from typing import List, Dict, Any, Optional, Union
-from datetime import datetime
-import logging
-from .prompt_templates import PromptTemplateGenerator
-# from schemas import EventSchema  # EventSchema不存在，已注释
-from .json_parser import EnhancedJSONParser, StructuredOutputValidator, parse_llm_json_response
+# src/event_extraction/deepseek_extractor.py
 
-# 导入项目现有的LLM模块
-from src.hypergraphrag.llm import deepseek_v3_complete
-from src.hypergraphrag.utils import logger as hg_logger
+import asyncio
+import json
+from typing import Dict, Any, List, Optional, Type
+from pydantic import ValidationError
+import logging
+
+# 导入新架构的组件
+from .base_extractor import BaseEventExtractor
+from .schemas import BaseEvent
+from .deepseek_config import DeepSeekConfig, get_config
+from .prompt_templates import PromptTemplateGenerator
+from .json_parser import JsonParser
 
 # 配置日志
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class DeepSeekEventExtractor:
+class DeepSeekEventExtractor(BaseEventExtractor):
     """
-    基于DeepSeek V3模型的智能事件抽取器
-    
-    功能特点:
-    - 支持多种事件类型的抽取
-    - 集成Prompt模板系统
-    - 提供结构化JSON输出
-    - 支持批量处理
-    - 包含错误处理和重试机制
+    使用DeepSeek模型进行事件抽取的具体实现。
     """
     
-    def __init__(self, api_key: Optional[str] = None, base_url: str = "https://api.deepseek.com/v1"):
+    def __init__(self, config: Optional[DeepSeekConfig] = None):
         """
-        初始化DeepSeek事件抽取器
+        初始化DeepSeek事件抽取器。
         
         Args:
-            api_key: DeepSeek API密钥，如果为None则从环境变量获取
-            base_url: DeepSeek API基础URL
+            config (Optional[DeepSeekConfig]): DeepSeek配置。如果为None，则加载默认配置。
         """
-        self.api_key = api_key or os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY")
-        if not self.api_key:
-            raise ValueError("Missing DeepSeek API key. Please set DEEPSEEK_API_KEY or OPENAI_API_KEY environment variable.")
+        self.config = config or get_config("default")
+        self.client = self.config.get_client()
+        self.template_generator = PromptTemplateGenerator()
+        self.json_parser = JsonParser()
         
-        self.base_url = base_url
-        self.prompt_generator = PromptTemplateGenerator()
-        
-        # 初始化增强的JSON解析器和验证器
-        self.json_parser = EnhancedJSONParser()
-        self.output_validator = StructuredOutputValidator()
-        
-        # 模型配置
-        self.model_name ="deepseek-reasoner" # "deepseek-reasoner"
-        self.max_retries = 3
-        self.timeout = 60
-        
-        logger.info(f"DeepSeek事件抽取器初始化完成，使用模型: {self.model_name}")
-    
-    async def extract_single_event(self, 
-                                 text: str, 
-                                 domain: str, 
-                                 event_type: str,
-                                 metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """
-        抽取单个事件类型
-        
-        Args:
-            text: 待抽取的文本
-            domain: 领域名称 (financial/circuit)
-            event_type: 事件类型
-            metadata: 额外的元数据信息
-            
-        Returns:
-            包含抽取结果的字典
-        """
-        try:
-            # 生成Prompt
-            prompt = self.prompt_generator.generate_single_event_prompt(domain, event_type)
-            
-            # 替换文本占位符
-            full_prompt = prompt.replace("[待抽取文本]", text)
-            
-            # 调用DeepSeek API
-            response = await self._call_deepseek_api(full_prompt)
-            
-            # 解析JSON结果
-            parsed_data = self._parse_json_response(response, domain, event_type)
+        logger.info(f"DeepSeekEventExtractor 初始化完成，模型: {self.config.model_name}")
 
-            # --- 修复逻辑 ---
-            # 无论返回什么，都将其视为事件数据，并手动构建标准结构
-            result = {
-                "metadata": {
-                    "domain": domain,
-                    "event_type": event_type,
-                    "extraction_status": "success",
-                    "confidence_score": 1.0, # 既然解析成功，就给一个高置信度
-                    "extraction_method": "llm_based"
-                },
-                "event_data": parsed_data
-            }
-            # --- 修复结束 ---
+    async def extract(
+        self,
+        text: str,
+        event_model: Type[BaseEvent],
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Optional[BaseEvent]:
+        """
+        从文本中抽取单个结构化事件。
 
-            # 添加额外的元数据
-            if metadata:
-                result["metadata"].update(metadata)
-            
-            # 添加抽取时间戳
-            result["metadata"]["extraction_timestamp"] = datetime.now().isoformat()
-            result["metadata"]["model_used"] = self.model_name
-            
-            logger.info(f"成功抽取{domain}领域的{event_type}事件")
-            return result
-            
-        except Exception as e:
-            logger.error(f"单事件抽取失败: {str(e)}")
-            return self._create_error_response(str(e), domain, event_type)
-    
-    async def extract_multi_events(self, 
-                                 text: str,
-                                 target_domains: Optional[List[str]] = None,
-                                 metadata: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-        """
-        抽取多种事件类型
-        
         Args:
-            text: 待抽取的文本
-            target_domains: 目标领域列表，如果为None则抽取所有支持的领域
-            metadata: 额外的元数据信息
-            
-        Returns:
-            包含多个抽取结果的列表
-        """
-        try:
-            # 生成多事件Prompt
-            prompt = self.prompt_generator.generate_multi_event_prompt(target_domains)
-            
-            # 替换文本占位符
-            full_prompt = prompt.replace("[待抽取文本]", text)
-            
-            # 调用DeepSeek API
-            response = await self._call_deepseek_api(full_prompt)
-            
-            # 解析JSON结果
-            result = self._parse_json_response(response)
-            
-            # --- 终极加固逻辑 ---
-            events = []
-            events_list = []
+            text (str): 输入文本。
+            event_model (Type[BaseEvent]): 目标事件的Pydantic模型。
+            metadata (Optional[Dict[str, Any]]): 附加元数据。
 
-            # Case 1: 结果是包含 'events' 键的字典
-            if isinstance(result, dict) and "events" in result and isinstance(result.get("events"), list):
-                events_list = result["events"]
-            # Case 2: 结果本身就是事件列���
-            elif isinstance(result, list):
-                events_list = result
-            # 其他情况 (None, str, etc.)，events_list 保持为空，不进行处理
-
-            for event in events_list:
-                # 增加对None值和非字典项的严格检查
-                if not event or not isinstance(event, dict):
-                    logger.warning(f"在事件列表中发现无效项目，已跳过: {event}")
-                    continue
-                
-                if metadata:
-                    # 使用 .copy() 避免在循环中修改共享的元数据对象
-                    event_metadata = metadata.copy()
-                    event.setdefault("metadata", {}).update(event_metadata)
-                
-                event.setdefault("metadata", {})["extraction_timestamp"] = datetime.now().isoformat()
-                event.setdefault("metadata", {})["model_used"] = self.model_name
-                events.append(event)
-            
-            logger.info(f"成功抽取{len(events)}个事件")
-            return events
-            
-        except Exception as e:
-            logger.error(f"多事件抽取失败: {str(e)}")
-            # 在失败时返回空列表，而不是包含错误信息的列表，以简化上游处理
-            return []
-    
-    async def batch_extract(self, 
-                          texts: List[str],
-                          domain: str,
-                          event_type: str,
-                          batch_size: int = 5,
-                          metadata_list: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, Any]]:
-        """
-        批量抽取事件
-        
-        Args:
-            texts: 待抽取的文本列表
-            domain: 领域名称
-            event_type: 事件类型
-            batch_size: 批处理大小
-            metadata_list: 对应每个文本的元数据列表
-            
         Returns:
-            包含所有抽取结果的列表
+            一个Pydantic事件模型实例，如果抽取失败则返回None。
         """
-        results = []
-        
-        for i in range(0, len(texts), batch_size):
-            batch_texts = texts[i:i + batch_size]
-            batch_metadata = metadata_list[i:i + batch_size] if metadata_list else [None] * len(batch_texts)
-            
-            # 并发处理批次内的文本
-            tasks = [
-                self.extract_single_event(text, domain, event_type, metadata)
-                for text, metadata in zip(batch_texts, batch_metadata)
-            ]
-            
-            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            # 处理异常结果
-            for j, result in enumerate(batch_results):
-                if isinstance(result, Exception):
-                    error_result = self._create_error_response(str(result), domain, event_type)
-                    results.append(error_result)
-                    logger.error(f"批次{i//batch_size + 1}中第{j+1}个文本抽取失败: {str(result)}")
-                else:
-                    results.append(result)
-            
-            logger.info(f"完成批次{i//batch_size + 1}/{(len(texts) + batch_size - 1) // batch_size}")
-        
-        return results
-    
-    async def _call_deepseek_api(self, prompt: str, system_prompt: Optional[str] = None) -> str:
-        """
-        调用DeepSeek API
-        
-        Args:
-            prompt: 用户提示词
-            system_prompt: 系统提示词
-            
-        Returns:
-            API响应文本
-        """
-        # 构建完整的提示词
-        full_prompt = prompt
-        if system_prompt:
-            full_prompt = f"{system_prompt}\n\n{prompt}"
-        
-        for attempt in range(self.max_retries):
-            try:
-                # 使用项目现有的deepseek_v3_complete函数
-                response = await deepseek_v3_complete(
-                    prompt=full_prompt,
-                    model=self.model_name,  # 使用实例中配置的模型
-                    max_tokens=4000,
-                    temperature=0.1
-                )
-                
-                return response
-                
-            except Exception as e:
-                logger.warning(f"API调用失败 (尝试 {attempt + 1}/{self.max_retries}): {str(e)}")
-                if attempt == self.max_retries - 1:
-                    raise
-                await asyncio.sleep(2 ** attempt)  # 指数退避
-    
-    def _parse_json_response(self, response: str, domain: str = None, event_type: str = None) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
-        """
-        使用增强解析器解析JSON响应
-        
-        Args:
-            response: API响应文本
-            domain: 领域名称（用于获取模式）
-            event_type: 事件类型（用于获取模式）
-            
-        Returns:
-            解析后的字典或字典列表
-        """
-        # 获取期望的模式
-        expected_schema = None
-        required_fields = None
-        
-        if domain and event_type:
-            schema_info = self.prompt_generator.schemas.get(domain, {}).get(event_type, {})
-            if schema_info:
-                expected_schema = schema_info
-                required_fields = schema_info.get("required", [])
-        
-        # 使用增强解析器
-        success, data, errors = self.output_validator.validate_and_parse(
-            response, expected_schema, required_fields
+        # 1. 生成JSON Schema和Prompt
+        json_schema = event_model.schema()
+        prompt = self.template_generator.generate_prompt(
+            text=text,
+            event_schema=json_schema
         )
         
-        if success:
-            logger.info(f"JSON解析成功，置信度: {self.json_parser.parse(response).confidence_score}")
-            return data
-        else:
-            # 如果验证失败，但看起来像一个JSON列表，尝试直接解析
-            try:
-                parsed_json = json.loads(response.strip())
-                if isinstance(parsed_json, list):
-                    logger.warning("JSON验证失败，但成功解析为列表。直接返回列表。")
-                    return parsed_json
-            except json.JSONDecodeError:
-                pass # 忽略解析错误，继续抛出原始验证错误
-
-            error_msg = f"JSON解析失败: {'; '.join(errors)}"
-            logger.error(f"{error_msg}\n原始响应: {response[:200]}...")
-            raise ValueError(error_msg)
-    
-    def _create_error_response(self, error_message: str, domain: str, event_type: str) -> Dict[str, Any]:
-        """
-        创建错误响应格式
-        
-        Args:
-            error_message: 错误信息
-            domain: 领域名称
-            event_type: 事件类型
-            
-        Returns:
-            标准化的错误响应
-        """
-        return {
-            "metadata": {
-                "domain": domain,
-                "event_type": event_type,
-                "extraction_status": "failed",
-                "error_message": error_message,
-                "extraction_timestamp": datetime.now().isoformat(),
-                "model_used": self.model_name,
-                "confidence_score": 0.0,
-                "extraction_method": "llm_based"
-            },
-            "event_data": None
-        }
-    
-    def get_supported_domains(self) -> List[str]:
-        """
-        获取支持的领域列表
-        
-        Returns:
-            支持的领域名称列表
-        """
-        return list(self.prompt_generator.schemas.keys())
-    
-    def get_supported_event_types(self, domain: str) -> List[str]:
-        """
-        获取指定领域支持的事件类型列表
-        
-        Args:
-            domain: 领域名称
-            
-        Returns:
-            支持的事件类型列表
-        """
-        if domain in self.prompt_generator.schemas:
-            return list(self.prompt_generator.schemas[domain].keys())
-        return []
-    
-    async def validate_extraction_result(self, result: Dict[str, Any], domain: str, event_type: str) -> bool:
-        """
-        验证抽取结果的有效性
-        
-        Args:
-            result: 抽取结果
-            domain: 领域名称
-            event_type: 事件类型
-            
-        Returns:
-            验证是否通过
-        """
+        # 2. 调用DeepSeek API
         try:
-            # 检查基本结构
-            if not isinstance(result, dict):
-                return False
+            response = await self.client.chat.completions.create(
+                model=self.config.model_name,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=self.config.temperature,
+                max_tokens=self.config.max_tokens,
+                response_format={"type": "json_object"},
+            )
             
-            if "metadata" not in result or "event_data" not in result:
-                return False
+            content = response.choices[0].message.content
             
-            # 检查元数据
-            metadata = result["metadata"]
-            if not isinstance(metadata, dict):
-                return False
+            # 3. 解��JSON结果
+            # 使用deepseek-chat进行名称匹配和标准化可以在这里集成
+            # 假设LLM直接返回了符合schema的JSON
+            extracted_data = self.json_parser.parse(content)
             
-            required_metadata_fields = ["domain", "event_type", "extraction_status", "confidence_score"]
-            for field in required_metadata_fields:
-                if field not in metadata:
-                    return False
+            if not extracted_data:
+                logger.warning("LLM返回的JSON为空或解析失败。")
+                return None
+
+            # 4. 使用Pydantic模型进行验证和实例化
+            # 合并元数据中的通用字段
+            if metadata:
+                for key, value in metadata.items():
+                    if key in event_model.__fields__:
+                        extracted_data[key] = value
             
-            # 检查事件数据（如果抽取成功）
-            if metadata.get("extraction_status") == "success":
-                event_data = result["event_data"]
-                if not isinstance(event_data, dict):
-                    return False
-                
-                # 获取事件模式并验证必需字段
-                if domain in self.prompt_generator.schemas and event_type in self.prompt_generator.schemas[domain]:
-                    schema = self.prompt_generator.schemas[domain][event_type]
-                    required_fields = schema.get("required", [])
-                    
-                    for field in required_fields:
-                        if field not in event_data or event_data[field] is None:
-                            logger.warning(f"缺少必需字段: {field}")
-                            return False
-            
-            return True
-            
+            event_instance = event_model(**extracted_data)
+            return event_instance
+
+        except ValidationError as e:
+            logger.error(f"Pydantic验证失败: {e.errors()}")
+            # 这里可以加入重试逻辑
+            return None
         except Exception as e:
-            logger.error(f"验证抽取结果时出错: {str(e)}")
-            return False
+            logger.error(f"调用DeepSeek API或处理响应时出错: {e}", exc_info=True)
+            return None
 
-# 便捷函数
-async def extract_events_from_text(text: str, 
-                                 domain: str, 
-                                 event_type: str,
-                                 api_key: Optional[str] = None) -> Dict[str, Any]:
-    """
-    便捷函数：从文本中抽取指定类型的事件
-    
-    Args:
-        text: 待抽取的文本
-        domain: 领域名称
-        event_type: 事件类型
-        api_key: DeepSeek API密钥
-        
-    Returns:
-        抽取结果
-    """
-    extractor = DeepSeekEventExtractor(api_key=api_key)
-    return await extractor.extract_single_event(text, domain, event_type)
+    def get_supported_event_types(self) -> List[str]:
+        """
+        DeepSeek抽取器是通用的，理论上支持所有在schemas.py中定义的事件。
+        """
+        from .schemas import EVENT_SCHEMA_REGISTRY
+        return list(EVENT_SCHEMA_REGISTRY.keys())
 
-async def extract_multi_events_from_text(text: str,
-                                       target_domains: Optional[List[str]] = None,
-                                       api_key: Optional[str] = None) -> List[Dict[str, Any]]:
-    """
-    便捷函数：从文本中抽取多种类型的事件
-    
-    Args:
-        text: 待抽取的文本
-        target_domains: 目标领域列表
-        api_key: DeepSeek API密钥
+if __name__ == '__main__':
+    # --- 示例用法 ---
+    from .schemas import get_event_model
+
+    async def main():
+        # 1. 初始化抽取器
+        extractor = DeepSeekEventExtractor()
         
-    Returns:
-        抽取结果列表
-    """
-    extractor = DeepSeekEventExtractor(api_key=api_key)
-    return await extractor.extract_multi_events(text, target_domains)
+        # 2. 准备输入
+        test_text = "2024年1月15日，腾讯控股有限公司宣布以120亿美元的价格收购字节跳动旗下的TikTok业务。"
+        MergerModel = get_event_model("company_merger_and_acquisition")
+        
+        if not MergerModel:
+            print("无法找到 'company_merger_and_acquisition' 模型")
+            return
+            
+        # 3. 执行抽取
+        event = await extractor.extract(
+            text=test_text,
+            event_model=MergerModel,
+            metadata={"source": "Test Source", "publish_date": "2024-07-23"}
+        )
+        
+        # 4. 打印结果
+        if event:
+            print("--- 抽取成功 ---")
+            print(event.json(indent=2, ensure_ascii=False))
+        else:
+            print("--- 抽取失败 ---")
+
+    # 运行异步主函数
+    # 需要在配置好API Key的环境下运行
+    # asyncio.run(main())
+    print("请在配置好API Key的环境下取消注释并运行 asyncio.run(main())")
