@@ -92,7 +92,8 @@ class EventExtractionValidator:
             expected_model(**event_data.dict())
         except ValidationError as e:
             for error in e.errors():
-                errors.append(f"字段 '{'.join(error['loc'])}': {error['msg']}")
+                loc_str = '.'.join(map(str, error['loc']))
+                errors.append(f"字段 '{loc_str}': {error['msg']}")
 
         # 3. 质量和一致性验证
         quality_metrics = self._validate_field_quality(event_data)

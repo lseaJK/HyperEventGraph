@@ -3,6 +3,14 @@ import json
 from typing import Dict, Any
 import os
 
+import autogen
+import json
+from typing import Dict, Any
+import os
+
+# 从重构后的schemas模块导入事件注册表
+from src.event_extraction.schemas import EVENT_SCHEMA_REGISTRY
+
 class TriageAgent(autogen.AssistantAgent):
     """
     TriageAgent负责对输入的文本进行初步分类。
@@ -15,27 +23,19 @@ class TriageAgent(autogen.AssistantAgent):
         """
         # --- 动态加载已知事件类型和领域 ---
         try:
-            # 获取当前文件所在的目录
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            # 构建schema文件的绝对路径
-            schema_path = os.path.join(current_dir, '..', 'event_extraction', 'event_schemas.json')
-            
-            with open(schema_path, 'r', encoding='utf-8') as f:
-                schemas = json.load(f)
-            
-            # 提取事件类型
-            known_event_types = schemas.get("known_event_titles", [])
+            # 从注册表中提取事件类型名称
+            known_event_types = list(EVENT_SCHEMA_REGISTRY.keys())
             event_types_str = "\n- ".join(known_event_types)
 
-            # 提取领域
-            known_domains = [key for key in schemas.keys() if key.endswith('_domain')]
+            # 领域信息现在是隐式的，我们可以硬编码一个列表或从其他配置中获取
+            known_domains = ["financial", "circuit", "general"]
             domains_str = "\n- ".join(known_domains)
 
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            print(f"[TriageAgent Error] Could not load event schemas: {e}")
-            # 提供一个备用列表以防文件加载失败
-            event_types_str = "- 公司并购事件\n- 投融资事件\n- 高管变动事件"
-            domains_str = "- financial_domain\n- circuit_domain\n- general_domain"
+        except Exception as e:
+            print(f"[TriageAgent Error] Could not load event schemas from registry: {e}")
+            # 提供一个备用列表以防加载失败
+            event_types_str = "- company_merger_and_acquisition\n- investment_and_financing\n- executive_change"
+            domains_str = "- financial\n- circuit\n- general"
 
         # --- 构建动态系统提示 ---
         system_message = f"""

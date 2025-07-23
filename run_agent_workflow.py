@@ -59,31 +59,24 @@ workflow_context = {
 }
 
 # ------------------ Schema Loading and Mapping ------------------
+# 使用新的、统一的Schema注册表
+from src.event_extraction.schemas import EVENT_SCHEMA_REGISTRY, generate_all_json_schemas
+
 try:
-    schema_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src', 'event_extraction', 'event_schemas.json')
-    with open(schema_path, 'r', encoding='utf-8') as f:
-        schemas = json.load(f)
+    # 动态生成所有schemas
+    schemas = generate_all_json_schemas()
     
-    title_to_key_map = {}
-    for domain, domain_schemas in schemas.items():
-        if isinstance(domain_schemas, dict):
-            for key, schema in domain_schemas.items():
-                if 'title' in schema:
-                    title_to_key_map[schema['title']] = key
-except (FileNotFoundError, json.JSONDecodeError) as e:
-    print(f"[Workflow Error] Could not load or parse event schemas: {e}")
+    # 创建一个从模型标题到其注册键的映射
+    title_to_key_map = {
+        schema.get('title', key): key 
+        for key, schema in schemas.items()
+    }
+except Exception as e:
+    print(f"[Workflow Error] Could not load schemas from registry: {e}")
     # Fallback map
     title_to_key_map = {
         "公司并购事件": "company_merger_and_acquisition",
         "投融资事件": "investment_and_financing",
-        "高管变动事件": "executive_change",
-        "法律诉讼事件": "legal_proceeding",
-        "产能扩张事件": "capacity_expansion",
-        "技术突破事件": "technological_breakthrough",
-        "供应链动态事件": "supply_chain_dynamics",
-        "合作合资事件": "collaboration_joint_venture",
-        "知识产权事件": "intellectual_property",
-        "收购事件": "acquisition"
     }
 
 # ------------------ Agent 初始化 ------------------
