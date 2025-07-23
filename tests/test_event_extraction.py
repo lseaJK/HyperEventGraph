@@ -113,35 +113,38 @@ class TestEventExtractionService(unittest.TestCase):
 
     def test_extract_event_validation_fails(self):
         """测试当事件验证失败时，服务如何处理"""
-        # 准备一个数据不完整的事件实例
+        # 1. 准备一个 *有效* 的事件实例，这是模拟抽取器成功抽取的产物
         MergerModel = get_event_model("company_merger_and_acquisition")
-        # 缺少必填的 'acquired' 字段
-        invalid_event_instance = MergerModel(
+        valid_event_instance = MergerModel(
             source="Mock Source",
             publish_date="2024-01-01",
             acquirer="Company A",
+            acquired="Company B", # 包含所有必填字段
             announcement_date="2024-01-01"
         )
-        
-        # 模拟验证器的返回
-        mock_validator = MagicMock(spec=EventExtractionValidator)
-        mock_validator.validate_event.return_value = MagicMock(is_valid=False, errors=["Missing field: acquired"])
-        
-        # 使用带模拟验证器的服务
-        service_with_mock_validator = EventExtractionService(self.mock_extractor, mock_validator)
-        self.mock_extractor.extract = AsyncMock(return_value=invalid_event_instance)
+        self.mock_extractor.extract = AsyncMock(return_value=valid_event_instance)
 
-        # 运行测试
-        result = asyncio.run(service_with_mock_validator.extract_event(
-            text="...",
+        # 2. 模拟 validator 的 validate_event 方法，让它返回“验证失败”
+        # 这是测试的关键：我们控制依赖项的行为，而不是创建无效数据
+        mock_validation_result = MagicMock()
+        mock_validation_result.is_valid = False
+        mock_validation_result.errors = ["Simulated validation error"]
+        self.validator.validate_event = MagicMock(return_value=mock_validation_result)
+
+        # 3. 运行测试
+        result = asyncio.run(self.service.extract_event(
+            text="A valid text that produces a valid event",
             event_type="company_merger_and_acquisition"
         ))
 
-        # 验证结果
+        # 4. 验证服务是否正确处理了验证失败的情况
         self.assertIsNotNone(result)
         self.assertFalse(result["validation"]["is_valid"])
         self.assertEqual(result["metadata"]["extraction_status"], "validation_failed")
-        self.assertEqual(service_with_mock_validator.stats["validation_failed"], 1)
+        self.assertEqual(self.service.stats["validation_failed"], 1)
+        self.assertEqual(self.service.stats["validation_passed"], 0)
+        # 验证 validator.validate_event 被正确调用
+        self.validator.validate_event.assert_called_once_with(valid_event_instance, "company_merger_and_acquisition")
 
 
 if __name__ == '__main__':

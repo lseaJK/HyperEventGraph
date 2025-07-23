@@ -210,11 +210,86 @@
             "parentTaskId": 6
           }
         ]
+      },
+      {
+        "id": 7,
+        "title": "重构工作流以支持异步、文件驱动的人机交互",
+        "description": "将一次性的 `run_agent_workflow.py` 脚本重构为一个可中断、可恢复的异步工作流。该工作流将通过状态文件和审核文件与用户进行交互，以适应用户无法实时在线的场景。",
+        "details": "",
+        "testStrategy": "",
+        "status": "done",
+        "dependencies": [],
+        "priority": "medium",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "设计并实现状态管理系统",
+            "description": "创建 workflow_state.json 的数据结构。实现加载和保存工作流状态的函数，包括当前阶段、输入文件路径、分流结果、已抽取的事件和关系等。",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 7
+          },
+          {
+            "id": 2,
+            "title": "创建主工作流控制器",
+            "description": "开发新的 run_async_workflow.py 脚本。该脚本将作为工作流的唯一入口点，负责读取状态、调度不同阶段的执行，并处理用户回复。",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 7
+          },
+          {
+            "id": 3,
+            "title": "重构“分流”阶段为异步模块",
+            "description": "将 TriageAgent 的逻辑封装成一个独立的函数。该函数执行后，会更新状态文件，并生成一个 review_request.txt，要求用户确认事件分类。",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 7
+          },
+          {
+            "id": 4,
+            "title": "重构“抽取”阶段为异步模块",
+            "description": "将 ExtractionAgent 的逻辑封装成一个独立的函数。该函数在用户确认分流后执行，将抽取的事件写入状态文件，并生成一个新的 review_request.txt，要求用户审核或修正抽取结果。",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 7
+          },
+          {
+            "id": 5,
+            "title": "重构“关系分析与存储”阶段",
+            "description": "将 RelationshipAnalysisAgent 和 StorageAgent 的逻辑合并为一个最终处理函数。该函数在用户确认抽取结果后执行，完成关系分析、数据存储，并最终将工作流状态标记为“完成”。",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 7
+          },
+          {
+            "id": 6,
+            "title": "实现用户反馈处理逻辑",
+            "description": "在主控制器中，开发用于解析 review_response.txt 的功能。根据用户的回复（例如，status: CONFIRMED 或 data: [...]），更新 workflow_state.json。",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 7
+          },
+          {
+            "id": 7,
+            "title": "编写用户操作指南",
+            "description": "创建一个 README_ASYNC.md 文件，清晰地说明如何启动新工作流、如何查看审核请求，以及如何编写回复文件来与系统互动。",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 7
+          }
+        ]
       }
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-23T13:27:45.859Z",
+      "updated": "2025-07-23T14:32:47.202Z",
       "description": "Tasks for master context"
     }
   }
