@@ -1,0 +1,37 @@
+# Task ID: 6
+# Title: 重构实体去重模块以集成LLM进行智能标准化
+# Status: pending
+# Dependencies: None
+# Priority: medium
+# Description: 重构实体去重模块(EntityDeduplicator)，集成大模型能力以提高名称标准化的准确性。当前模块过于依赖固定的后缀规则，导致对'Tencent Holdings'等名称的错误处理。新的实现将采用混合策略：优先使用保守的规则进行快速处理，对于复杂情况则调用大模型进行智能判断。
+# Details:
+
+
+# Test Strategy:
+
+
+# Subtasks:
+## 1. 修改 EntityDeduplicator 构造函数以支持 LLM 客户端 [pending]
+### Dependencies: None
+### Description: 更新 EntityDeduplicator 的 __init__ 方法，使其能够接收并存储一个LLM客户端实例。
+### Details:
+
+
+## 2. 实现 LLM 驱动的名称标准化方法 [pending]
+### Dependencies: None
+### Description: 创建 _normalize_name_with_llm 方法，该方法将使用few-shot prompt调用LLM来获取标准化的实体名称。
+### Details:
+
+
+## 3. 在匹配函数中集成 LLM 标准化逻辑 [pending]
+### Dependencies: None
+### Description: 在 _exact_match_score 和 _alias_match_score 中引入调用新LLM标准化方法的逻辑。
+### Details:
+
+
+## 4. 更新单元测试以覆盖新逻辑 [pending]
+### Dependencies: None
+### Description: 更新并添加单元测试，以验证新的规则和LLM标准化逻辑。
+### Details:
+
+

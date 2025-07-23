@@ -44,7 +44,7 @@
         "description": "根据需求文档V2.1，完成第四阶段的后台学习系统实现。这包括实现SchemaLearnerAgent的核心能力（如聚类、归纳），定义一个用于后台学习的独立GroupChat，并创建一个简单的管理模块（AdminModule）来启动学习流程和处理人工审核。",
         "details": "",
         "testStrategy": "",
-        "status": "in-progress",
+        "status": "done",
         "dependencies": [
           3
         ],
@@ -82,7 +82,7 @@
             "title": "集成并测试后台学习系统",
             "description": "将SchemaLearnerAgent, GroupChat, 和AdminModule集成在一起，形成完整的后台学习工作流。编写端到端测试，模拟一次完整的学习、审核流程，确保系统稳定运行。",
             "details": "",
-            "status": "in-progress",
+            "status": "done",
             "dependencies": [],
             "parentTaskId": 4
           }
@@ -98,11 +98,59 @@
         "dependencies": [],
         "priority": "high",
         "subtasks": []
+      },
+      {
+        "id": 6,
+        "title": "重构实体去重模块以集成LLM进行智能标准化",
+        "description": "重构实体去重模块(EntityDeduplicator)，集成大模型能力以提高名称标准化的准确性。当前模块过于依赖固定的后缀规则，导致对'Tencent Holdings'等名称的错误处理。新的实现将采用混合策略：优先使用保守的规则进行快速处理，对于复杂情况则调用大模型进行智能判断。",
+        "details": "",
+        "testStrategy": "",
+        "status": "done",
+        "dependencies": [],
+        "priority": "medium",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "修改 EntityDeduplicator 构造函数以支持 LLM 客户端",
+            "description": "更新 EntityDeduplicator 的 __init__ 方法，使其能够接收并存储一个LLM客户端实例。",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 6
+          },
+          {
+            "id": 2,
+            "title": "实现 LLM 驱动的名称标准化方法",
+            "description": "创建 _normalize_name_with_llm 方法，该方法将使用few-shot prompt调用LLM来获取标准化的实体名称。",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 6
+          },
+          {
+            "id": 3,
+            "title": "在匹配函数中集成 LLM 标准化逻辑",
+            "description": "在 _exact_match_score 和 _alias_match_score 中引入调用新LLM标准化方法的逻辑。",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 6
+          },
+          {
+            "id": 4,
+            "title": "更新单元测试以覆盖新逻辑",
+            "description": "更新并添加单元测试，以验证新的规则和LLM标准化逻辑。",
+            "details": "",
+            "status": "done",
+            "dependencies": [],
+            "parentTaskId": 6
+          }
+        ]
       }
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-22T13:31:30.466Z",
+      "updated": "2025-07-23T12:55:04.971Z",
       "description": "Tasks for master context"
     }
   }

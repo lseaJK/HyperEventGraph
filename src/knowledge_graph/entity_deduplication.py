@@ -21,10 +21,12 @@ from pathlib import Path
 import jieba
 from fuzzywuzzy import fuzz, process
 from datetime import datetime
+import autogen
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class EntitySimilarity:
@@ -71,7 +73,8 @@ class DeduplicationConfig:
     # 公司名称标准化
     company_suffixes: List[str] = field(default_factory=lambda: [
         '股份有限公司', '有限公司',
-        'Ltd', 'Co.', 'Inc', 'Corp', 'LLC', 'Group', 'Holdings'
+        'Ltd', 'Co.', 'Inc', 'Corp', 'LLC', 
+        # 'Group', 'Holdings' # 移除过于激进的后缀
     ])
     
     # 人名标准化
@@ -81,15 +84,17 @@ class DeduplicationConfig:
     ])
 
 class EntityDeduplicator:
-    """���能实体去重器"""
+    """智能实体去重器"""
     
-    def __init__(self, config: Optional[DeduplicationConfig] = None):
+    def __init__(self, config: Optional[DeduplicationConfig] = None, llm_client: Optional[Any] = None):
         """初始化去重器
         
         Args:
             config: 去重配置，如果为None则使用默认配置
+            llm_client: 用于语义分析的大模型客户端 (例如, autogen.AssistantAgent)
         """
         self.config = config or DeduplicationConfig()
+        self.llm_client = llm_client
         self.similarity_cache: Dict[Tuple[str, str], EntitySimilarity] = {}
         self.merge_history: List[Dict[str, Any]] = []
         
@@ -118,7 +123,7 @@ class EntityDeduplicator:
             entities, merge_candidates
         )
         
-        # 4. 返���需要手动审核的候选
+        # 4. 返回需要手动审核的候选
         manual_review_candidates = [
             candidate for candidate in merge_candidates 
             if candidate not in auto_merged
@@ -187,23 +192,23 @@ class EntityDeduplicator:
         max_score = 0.0
         best_match_type = "none"
         
-        # 1. 精确匹配
-        exact_score = self._exact_match_score(entity1, entity2)
+        # 1. 精确匹配 (启用LLM)
+        exact_score = self._exact_match_score(entity1, entity2, use_llm=True)
         if exact_score > max_score:
             max_score = exact_score
             best_match_type = "exact"
             if exact_score == 1.0:
-                reasons.append("名称完全匹配")
+                reasons.append("名称完全匹配 (LLM-based)")
         
-        # 2. 别名匹配
-        alias_score = self._alias_match_score(entity1, entity2)
+        # 2. 别名匹配 (启用LLM)
+        alias_score = self._alias_match_score(entity1, entity2, use_llm=True)
         if alias_score > max_score:
             max_score = alias_score
             best_match_type = "alias"
             if alias_score > self.config.alias_match_threshold:
-                reasons.append("别名匹配")
+                reasons.append("别名匹配 (LLM-based)")
         
-        # 3. 模糊匹配
+        # 3. 模糊匹配 (基于规则)
         fuzzy_score = self._fuzzy_match_score(entity1, entity2)
         if fuzzy_score > max_score:
             max_score = fuzzy_score
@@ -211,7 +216,7 @@ class EntityDeduplicator:
             if fuzzy_score > self.config.fuzzy_match_threshold:
                 reasons.append(f"模糊匹配 (相似度: {fuzzy_score:.2f})")
         
-        # 4. 语义匹配
+        # 4. 语义匹配 (基于规则)
         semantic_score = self._semantic_match_score(entity1, entity2)
         if semantic_score > max_score:
             max_score = semantic_score
@@ -231,21 +236,29 @@ class EntityDeduplicator:
             reasons=reasons
         )
     
-    def _exact_match_score(self, entity1: Any, entity2: Any) -> float:
+    def _exact_match_score(self, entity1: Any, entity2: Any, use_llm: bool = False) -> float:
         """计算精确匹配分数"""
-        name1 = self._normalize_name(entity1.name)
-        name2 = self._normalize_name(entity2.name)
+        if use_llm and self.llm_client:
+            name1 = self._normalize_name_with_llm(entity1.name)
+            name2 = self._normalize_name_with_llm(entity2.name)
+        else:
+            name1 = self._normalize_name(entity1.name)
+            name2 = self._normalize_name(entity2.name)
         
         return 1.0 if name1 == name2 else 0.0
     
-    def _alias_match_score(self, entity1: Any, entity2: Any) -> float:
+    def _alias_match_score(self, entity1: Any, entity2: Any, use_llm: bool = False) -> float:
         """计算别名匹配分数"""
-        aliases1 = {self._normalize_name(alias) for alias in getattr(entity1, 'aliases', set())}
-        aliases2 = {self._normalize_name(alias) for alias in getattr(entity2, 'aliases', set())}
-        
-        # 添加主名称到别名集合
-        aliases1.add(self._normalize_name(entity1.name))
-        aliases2.add(self._normalize_name(entity2.name))
+        if use_llm and self.llm_client:
+            aliases1 = {self._normalize_name_with_llm(alias) for alias in getattr(entity1, 'aliases', set())}
+            aliases2 = {self._normalize_name_with_llm(alias) for alias in getattr(entity2, 'aliases', set())}
+            aliases1.add(self._normalize_name_with_llm(entity1.name))
+            aliases2.add(self._normalize_name_with_llm(entity2.name))
+        else:
+            aliases1 = {self._normalize_name(alias) for alias in getattr(entity1, 'aliases', set())}
+            aliases2 = {self._normalize_name(alias) for alias in getattr(entity2, 'aliases', set())}
+            aliases1.add(self._normalize_name(entity1.name))
+            aliases2.add(self._normalize_name(entity2.name))
         
         # 计算交集比例
         intersection = aliases1 & aliases2
@@ -296,29 +309,89 @@ class EntityDeduplicator:
         
         normalized = name
         
-        # 转换为小写
+        # 1. 转换为小写
         if self.config.ignore_case:
             normalized = normalized.lower()
 
-        # 移除公司后缀 (按长度降序排序以处理包含关系)
-        sorted_suffixes = sorted(self.config.company_suffixes, key=len, reverse=True)
-        for suffix in sorted_suffixes:
-            # 使用 re.escape 确保特殊字符被正确处理
-            pattern_suffix = suffix.lower() if self.config.ignore_case else suffix
-            if normalized.endswith(pattern_suffix):
-                # 使用字符串操作移除后缀
-                normalized = normalized[:-len(pattern_suffix)].strip()
-                break  # 只移除最长的一个匹配后缀
-
-        # 标准化空白字符
+        # 2. 移除标点符号 (保留空格和连字符)
+        if self.config.remove_punctuation:
+            normalized = re.sub(r'[^\w\s-]', '', normalized)
+        
+        # 3. 标准化空白字符
         if self.config.normalize_whitespace:
             normalized = re.sub(r'\s+', ' ', normalized).strip()
-        
-        # 移除标点符号
+
+        # 4. 移除公司后缀 (按长度降序排序以处理包含关系)
+        sorted_suffixes = sorted(self.config.company_suffixes, key=len, reverse=True)
+        for suffix in sorted_suffixes:
+            pattern_suffix = suffix.lower() if self.config.ignore_case else suffix
+            
+            # 构造正则表达式，匹配后缀作为整个单词在末尾
+            # e.g., "tencent holdings" -> "tencent"
+            pattern = r'\s+\b' + re.escape(pattern_suffix) + r'$'
+            
+            if re.search(pattern, normalized):
+                normalized = re.sub(pattern, '', normalized).strip()
+                break  # 只移除第一个匹配的后缀
+            elif normalized.endswith(pattern_suffix): # 兼容 "腾讯控股有限公司" -> "腾讯控股"
+                normalized = normalized[:-len(pattern_suffix)].strip()
+                break
+
+        # 5. 最后的清理
         if self.config.remove_punctuation:
-            normalized = re.sub(r'[^\w\s]', '', normalized)
+            normalized = re.sub(r'[^\w\s]', '', normalized) # 移除之前可能保留的连字符
+        if self.config.normalize_whitespace:
+            normalized = re.sub(r'\s+', ' ', normalized).strip()
+
+        return normalized
+
+    def _ask_llm(self, prompt: str) -> str:
+        """向LLM发送请求并获取回复"""
+        if not self.llm_client:
+            logger.warning("LLM client not configured. Cannot perform LLM-based normalization.")
+            return ""
         
-        return normalized.strip()
+        try:
+            response = self.llm_client.generate_reply(messages=[{"role": "user", "content": prompt}])
+            if isinstance(response, str):
+                return response.strip()
+            # 如果是其他格式，需要根据实际情况解析
+            logger.warning(f"Unexpected LLM response format: {type(response)}")
+            return ""
+        except Exception as e:
+            logger.error(f"Error calling LLM: {e}")
+            return ""
+
+    def _normalize_name_with_llm(self, name: str) -> str:
+        """使用LLM进行名称标准化"""
+        prompt = f"""
+        请从以下公司名称中提取核心、通用的实体名称。
+        规则：
+        1. 移除法律后缀，如 "股份有限公司", "有限公司", "Inc.", "Ltd.", "LLC"。
+        2. 保留具有实际意义的词语，如 "Group" (集团) 或 "Holdings" (控股)，除非它们显然是多余的。
+        3. 返回最常见、最简洁的称呼。
+        4. 只返回最终的名称，不要包含任何解释。
+
+        示例:
+        - 输入: '腾讯控股有限公司'
+        - 输出: '腾讯控股'
+        - 输入: 'Apple Inc.'
+        - 输出: 'Apple'
+        - 输入: '阿里巴巴集团'
+        - 输出: '阿里巴巴'
+        - 输入: 'Berkshire Hathaway'
+        - 输出: 'Berkshire Hathaway'
+
+        现在，请处理这个名称: '{name}'
+        """
+        
+        normalized_name = self._ask_llm(prompt)
+        
+        # 如果LLM调用失败或返回空，则退回基础标准化
+        if not normalized_name:
+            return self._normalize_name(name)
+            
+        return normalized_name
     
     def _calculate_confidence(self, entity1: Any, entity2: Any, score: float, match_type: str) -> float:
         """计算匹配置信度"""

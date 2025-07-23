@@ -144,12 +144,34 @@ class TestEntityDeduplication(unittest.TestCase):
             ('腾讯控股有限公司', '腾讯控股'), # 验证后缀移除
             ('  腾讯控股  ', '腾讯控股'),
             ('腾讯-控股!', '腾讯控股'),
-            ('TENCENT Holdings', 'tencent holdings')
+            ('TENCENT Holdings', 'tencent holdings') # 验证 'Holdings' 不再被移除
         ]
         
         for input_name, expected in test_cases:
             normalized = self.deduplicator._normalize_name(input_name)
             self.assertEqual(normalized, expected)
+
+    @unittest.mock.patch('src.knowledge_graph.entity_deduplication.EntityDeduplicator._ask_llm')
+    def test_normalize_name_with_llm(self, mock_ask_llm):
+        """测试使用LLM进行名称标准化"""
+        # 配置模拟LLM的返回值
+        mock_ask_llm.return_value = "腾讯控股"
+
+        # 创建一个带有模拟LLM客户端的deduplicator实例
+        llm_client_mock = unittest.mock.MagicMock()
+        deduplicator_with_llm = EntityDeduplicator(self.config, llm_client=llm_client_mock)
+        
+        # 调用LLM标准化方法
+        normalized_name = deduplicator_with_llm._normalize_name_with_llm('腾讯控股有限公司')
+        
+        # 验证
+        mock_ask_llm.assert_called_once() # 验证LLM被调用
+        self.assertEqual(normalized_name, "腾讯控股")
+
+        # 测试LLM调用失败的回退情况
+        mock_ask_llm.return_value = "" # 模拟LLM返回空
+        normalized_name_fallback = deduplicator_with_llm._normalize_name_with_llm('Apple Inc.')
+        self.assertEqual(normalized_name_fallback, "apple") # 应该回退到基础的标准化方法
     
     def test_calculate_entity_similarity(self):
         """测试实体相似度计算"""
