@@ -1,9 +1,12 @@
 # src/workflows/stages.py
 
 import json
+import asyncio
 from pathlib import Path
 from typing import Dict, Any
+import os
 
+from .state_manager import WorkflowState, StateManager, TriageResult
 from src.agents.triage_agent import TriageAgent
 from src.agents.relationship_analysis_agent import RelationshipAnalysisAgent
 from src.agents.storage_agent import StorageAgent
@@ -13,20 +16,30 @@ from src.event_extraction.schemas import get_event_model
 # (其他Agent和工具的导入将在这里添加)
 
 # --- Agent LLM 配置 (需要从外部传入或从配置文件加载) ---
-# 这是一个示例，实际应用中需要更灵活的配置方式
+kimi_api_key = os.getenv("SILICON_API_KEY")
+if not kimi_api_key:
+    raise ValueError("SILICON_API_KEY is not set in environment variables.")
+
 LLM_CONFIG_KIMI = {
     "config_list": [{
-        "model": "moonshot-v1-8k",
-        "api_key": "YOUR_SILICON_API_KEY", # 需要替换
+        "model": "moonshotai/Kimi-K2-Instruct",
+        "price": [0.002, 0.008],
+        "api_key": kimi_api_key,
         "base_url": "https://api.siliconflow.cn/v1"
     }],
     "temperature": 0.0
 }
-# 同样为DeepSeek创建一个示例配置
+
+
+deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
+if not deepseek_api_key:
+    raise ValueError("DEEPSEEK_API_KEY is not set in environment variables.")
+
 LLM_CONFIG_DEEPSEEK = {
     "config_list": [{
         "model": "deepseek-chat",
-        "api_key": "YOUR_DEEPSEEK_API_KEY", # 需要替换
+        "price": [0.002, 0.008],
+        "api_key": deepseek_api_key,
         "base_url": "https://api.deepseek.com/v1"
     }],
     "temperature": 0.0
@@ -47,11 +60,17 @@ async def execute_triage_stage(state: WorkflowState, state_manager: StateManager
     # 1. 从输入文件加载文本
     try:
         with open(state.input_file, 'r', encoding='utf-8') as f:
-            # 假设输入是JSON，且文本在'text'字段中
+            # 检查输入数据格式
             input_data = json.load(f)
-            text_to_analyze = input_data.get("text")
+            text_to_analyze = None
+            if isinstance(input_data, list) and input_data:
+                print(f"检测到输入文件为列表，包含 {len(input_data)} 个项目。将处理第一个项目。")
+                text_to_analyze = input_data[0]
+            elif isinstance(input_data, dict):
+                text_to_analyze = input_data.get("text")
+
             if not text_to_analyze:
-                raise ValueError("Input JSON must have a 'text' field.")
+                raise ValueError("输入JSON必须包含 'text' 字段，或者是一个非空的字符串列表。")
         state.original_text = text_to_analyze
     except Exception as e:
         print(f"Error reading or parsing input file: {e}")

@@ -28,7 +28,7 @@ from src.output.graph_exporter import GraphExporter
 from src.core.workflow_controller import WorkflowController
 from src.config.workflow_config import ConfigManager
 from src.models.event_data_model import Event, EventRelation, EventType
-from src.monitoring.performance_monitor import PerformanceMonitor
+# from src.monitoring.performance_monitor import PerformanceMonitor
 
 # 配置日��
 logger = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ class RealDataPipeline:
     def __init__(self, config_dir: str = "config"):
         """初始化流水线"""
         self.config_manager = ConfigManager(config_dir)
-        self.performance_monitor = PerformanceMonitor()
+        # self.performance_monitor = PerformanceMonitor()
         
         # 初始化各个组件
         self.event_extractor = DeepSeekEventExtractor()
@@ -84,8 +84,20 @@ class RealDataPipeline:
             with open(data_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             print(f"✅ 成功加载 {len(data)} 条真实新闻数据")
-            # 确保返回的是一个纯文本字符串列表
-            return [item['content'] for item in data if isinstance(item, dict) and 'content' in item]
+            
+            # 检查数据是否为字符串列表
+            if isinstance(data, list) and all(isinstance(item, str) for item in data):
+                return data
+            
+            # 如果是对象列表，则提取'content'字段
+            if isinstance(data, list):
+                content_list = [item['content'] for item in data if isinstance(item, dict) and 'content' in item]
+                if content_list:
+                    return content_list
+
+            print("❌ 数据格式不正确，既不是字符串列表，也不是包含'content'键的对象列表。")
+            return []
+            
         except Exception as e:
             print(f"❌ 加载数据失败: {e}")
             return []
@@ -103,7 +115,18 @@ class RealDataPipeline:
                     print(f"  ⚠️ 第 {i} 条数据不是有效文本，已跳过。")
                     continue
 
-                extracted_events_data = await self.event_extractor.extract_multi_events(text_content)
+                # 修复：使用 extract 方法，并提供默认的 event_model
+                from src.event_extraction.schemas import get_event_model
+                # 假设我们使用一个通用的事件模型，或者您可以根据文本内容动态选择
+                GenericEventModel = get_event_model("base_event")
+                
+                if not GenericEventModel:
+                    print(f"  ⚠️ 无法加载默认的事件模型，已跳过。")
+                    continue
+
+                # extract 方法返回单个事件或None，我们需要将其包装在列表中以保持后续逻辑的兼容性
+                extracted_event = await self.event_extractor.extract(text_content, GenericEventModel)
+                extracted_events_data = [extracted_event.dict()] if extracted_event else []
                 
                 if extracted_events_data:
                     print(f"  ✅ 抽取到 {len(extracted_events_data)} 个事件")
@@ -260,12 +283,13 @@ class RealDataPipeline:
         print(f"📁 数据文件: {data_path}")
         print("=" * 60)
         
-        self.performance_monitor.start()
+        # self.performance_monitor.start()
         
         try:
             texts = self.load_real_data(data_path)
             if not texts:
-                print("❌ 无法加载数据，流水线终止")
+                print("❌ 从数据文件中未能加载到任何有效文本内容，请检查文件格式。")
+                print("流水线终止")
                 return
             
             events = await self.extract_events_from_texts(texts)
@@ -279,10 +303,10 @@ class RealDataPipeline:
             
             self.export_results(enhanced_events, relations, patterns)
             
-            performance_stats = self.performance_monitor.get_performance_summary()
-            print("\n📊 性能统计:")
-            if performance_stats:
-                print(json.dumps(performance_stats, indent=2, default=str))
+            # performance_stats = self.performance_monitor.get_performance_summary()
+            # print("\n📊 性能统计:")
+            # if performance_stats:
+            #     print(json.dumps(performance_stats, indent=2, default=str))
             
             print("\n🎉 流水线运行完成！")
             
@@ -292,7 +316,8 @@ class RealDataPipeline:
             traceback.print_exc()
         
         finally:
-            self.performance_monitor.stop()
+            # self.performance_monitor.stop()
+            pass
 
 def main():
     """主函数"""

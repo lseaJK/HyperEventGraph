@@ -5,6 +5,7 @@ import json
 import uuid
 import asyncio
 from pathlib import Path
+import os
 
 from src.workflows.state_manager import StateManager, WorkflowState
 from src.workflows.stages import (
@@ -90,6 +91,12 @@ class WorkflowController:
         
         # 1. 加载或初始化状态
         state = self.state_manager.load_state()
+
+        # 如果加载的状态没有输入文件（可能来自旧版本），并且用户提供了新的输入文件，
+        # 那么我们认为这是一个新的工作流请求，并忽略旧状态。
+        if state and not state.input_file and input_file:
+            print("Found old state file without input file. Starting a new workflow.")
+            state = None
         
         if input_file:
             if state and state.current_stage not in ["completed", "failed"]:

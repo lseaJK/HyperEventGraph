@@ -27,7 +27,7 @@ class WorkflowState(BaseModel):
     定义工作流状态文件的完整结构
     """
     workflow_id: str
-    input_file: str
+    input_file: Optional[str] = None
     current_stage: str = "pending_triage"
     
     original_text: Optional[str] = None
