@@ -285,11 +285,124 @@
             "parentTaskId": 7
           }
         ]
+      },
+      {
+        "id": 8,
+        "title": "Task #1: 稳健的批量初筛",
+        "description": "开发 run_batch_triage.py。核心要求：1. 实现批处理和检查点机制。2. 必须动态加载最新的事件Schema来执行分类。3. 输出单一的、待审核的 triage_pending_review.jsonl 文件。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 9,
+        "title": "Task #2: 人类智慧网关 - 离线审核",
+        "description": "开发审核辅助脚本 (prepare_review_file.py 和 process_review_results.py)，并定义清晰的CSV审核流程。目标是高效地将AI的初步分类转化为高质量的、经过人类校准的 final_known_events.jsonl 和 final_unknown_events.jsonl。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          8
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 10,
+        "title": "Task #3: 知识增长引擎 - 交互式学习",
+        "description": "开发 run_learning_workflow.py。该脚本读取 final_unknown_events.jsonl，通过人机交互指导 SchemaLearnerAgent 完成学习，并将新学会的Schema更新到核心的 event_schemas.json 文件中，为系统的下一次迭代提供增长。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          9
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 11,
+        "title": "Task #4: 价值实现 - 批量抽取",
+        "description": "开发 run_extraction_workflow.py。该脚本读取高质量的 final_known_events.jsonl，对所有已知事件进行批量化、结构化的信息抽取，产出可直接用于图谱构建的 structured_events.jsonl。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          9
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": 12,
+        "title": "Task #1: 奠定基石 - 建立中央状态库与配置文件",
+        "description": "1. 设计并创建`master_state.db` (SQLite)，用于追踪每个数据点的生命周期状态。2. 创建唯一的`config.yaml`中央配置文件，管理所有路径、批次大小、模型名称等参数。3. 开发一个所有其他脚本都将引用的配置加载模块。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": 13,
+        "title": "Task #2: 实施第一阶段 - 开发与状态库集成的批量初筛工作流",
+        "description": "开发`run_batch_triage.py`。它必须：1. 从`config.yaml`读取配置。2. 从`master_state.db`查询状态为`pending_triage`的数据。3. 在分类时引入置信度分数。4. 将分类结果和置信度写回`master_state.db`，并更新状态为`pending_review`。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          12
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 14,
+        "title": "Task #3: 实施第二阶段 - 开发支持优先级的离线人工审核工作流",
+        "description": "开发审核辅助脚本。`prepare_review_file.py`需从数据库查询待审核数据，并根据置信度排序生成CSV。`process_review_results.py`需读取审核后的CSV，并将最终结果更新回`master_state.db`，设置状态为`pending_learning`或`pending_extraction`。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          13
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 15,
+        "title": "Task #4: 实施第三阶段 - 开发增强型交互式学习工作流",
+        "description": "开发`run_learning_workflow.py`。它必须：1. 从数据库查询待学习数据。2. 实现更丰富的交互指令(如`show_samples`, `merge_clusters`)。3. 在学会新Schema后，将`event_schemas.json`更新，并把对应数据的状态在数据库中重置为`pending_triage`，以闭合知识循环。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          14
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 16,
+        "title": "Task #5: 实施第四阶段 - 开发批量抽取工作流",
+        "description": "开发`run_extraction_workflow.py`。它从`master_state.db`查询状态为`pending_extraction`的数据，进行批量抽取，并将最终的结构化数据存入指定位置，同时在数据库中将任务状态更新为`completed`。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          14
+        ],
+        "priority": "medium",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-23T14:32:47.202Z",
+      "updated": "2025-07-27T09:23:19.027Z",
       "description": "Tasks for master context"
     }
   }
