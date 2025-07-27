@@ -105,23 +105,22 @@ The AI has classified the event in the text with the following details:
 
 --- Actions ---
 
-1. To CONFIRM this classification and proceed to the extraction stage,
-   create a file named 'review_response.txt' with the following content:
-   
-   status: CONFIRMED
+Please create a file named 'review_response.txt' with ONE of the following options:
 
-2. To REJECT this classification and stop the workflow,
-   create 'review_response.txt' with:
-   
-   status: REJECTED
+1.  **To ACCEPT this classification and continue:**
+    Simply put the following text in the file:
+    status: CONFIRMED
 
-3. To CORRECT the classification, create 'review_response.txt' with the
-   corrected data in JSON format:
+2.  **To CORRECT the classification before continuing:**
+    Create the file with the corrected data in JSON format. For example:
+    {{
+        "domain": "your_corrected_domain",
+        "event_type": "your_corrected_event_type"
+    }}
 
-   {{
-       "domain": "your_corrected_domain",
-       "event_type": "your_corrected_event_type"
-   }}
+3.  **To REJECT and STOP the workflow:**
+    Put the following text in the file:
+    status: REJECTED
 
 Please provide your response and run the workflow again.
 """
@@ -180,7 +179,7 @@ async def execute_extraction_stage(state: WorkflowState, state_manager: StateMan
 Workflow ID: {state.workflow_id}
 Event Type: {event_type}
 
-The AI has extracted the following event(s). Please review, correct, or add information as needed.
+The AI has extracted the following event(s). Please review the data below.
 
 --- Extracted Data ---
 {json.dumps(extracted_events_dict, indent=2, ensure_ascii=False)}
@@ -188,13 +187,19 @@ The AI has extracted the following event(s). Please review, correct, or add info
 
 --- Actions ---
 
-1. To CONFIRM the extracted data and proceed to the finalization stage,
-   create a file named 'review_response.txt' with the following content:
-   
-   status: CONFIRMED
+Please create a file named 'review_response.txt' with ONE of the following options:
 
-2. To CORRECT the data, copy the JSON block above into 'review_response.txt',
-   make your changes, and save the file.
+1.  **To ACCEPT the data as is and continue:**
+    Simply put the following text in the file:
+    status: CONFIRMED
+
+2.  **To CORRECT the data before continuing:**
+    Copy the JSON data block from above into the file and make your edits.
+    The workflow will proceed using your corrected data.
+
+3.  **To REJECT and STOP the workflow:**
+    Put the following text in the file:
+    status: REJECTED
 
 Please provide your response and run the workflow again.
 """

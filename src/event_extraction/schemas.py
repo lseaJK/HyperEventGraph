@@ -77,11 +77,11 @@ class TechnologicalBreakthrough(BaseEvent):
 class SupplyChainDynamics(BaseEvent):
     """供应链动态事件"""
     event_type: str = Field("供应链动态", description="事件类型，固定为‘供应链动态’")
-    company: str = Field(..., description="相关公司")
-    dynamic_type: str = Field(..., description="动态类型(断供/涨价/合作/事故)")
-    affected_link: str = Field(..., description="影响环节")
-    involved_materials: str = Field(..., description="涉及物料")
-    affected_objects: str = Field(..., description="影响对象(上/下游)")
+    company: Optional[str] = Field(None, description="相关公司")
+    dynamic_type: Optional[str] = Field(None, description="动态类型(断供/涨价/合作/事故)")
+    affected_link: Optional[str] = Field(None, description="影响环节")
+    involved_materials: Optional[str] = Field(None, description="涉及物料")
+    affected_objects: Optional[str] = Field(None, description="影响对象(上/下���)")
 
 class CollaborationJointVenture(BaseEvent):
     """合作合资事件"""
