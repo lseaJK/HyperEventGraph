@@ -316,7 +316,7 @@
         "description": "开发 run_learning_workflow.py。该脚本读取 final_unknown_events.jsonl，通过人机交互指导 SchemaLearnerAgent 完成学习，并将新学会的Schema更新到核心的 event_schemas.json 文件中，为系统的下一次迭代提供增长。",
         "details": "",
         "testStrategy": "",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           9
         ],
@@ -342,7 +342,7 @@
         "description": "1. 设计并创建`master_state.db` (SQLite)，用于追踪每个数据点的生命周期状态。2. 创建唯一的`config.yaml`中央配置文件，管理所有路径、批次大小、模型名称等参数。3. 开发一个所有其他脚本都将引用的配置加载模块。",
         "details": "",
         "testStrategy": "",
-        "status": "pending",
+        "status": "in-progress",
         "dependencies": [],
         "priority": "medium",
         "subtasks": []
@@ -402,7 +402,7 @@
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-27T14:24:35.911Z",
+      "updated": "2025-07-27T14:31:08.000Z",
       "description": "Tasks for master context"
     }
   }
