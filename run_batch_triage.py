@@ -1,20 +1,15 @@
 # run_batch_triage.py
 """
-This script is designed for the strategic data preparation phase of the HyperEventGraph project.
-Its primary purpose is to perform a large-scale triage of raw text data, classifying each item
-as either a 'known' or 'unknown' event type.
-
-This batch processing is the crucial first step to enable the project's core "self-evolution"
-capability, driven by the SchemaLearnerAgent.
+This script performs a large-scale triage of raw text data, integrated with a
+central configuration and a master state database.
 
 Workflow:
-1.  Load a large dataset of texts from an input JSON file.
-2.  Implement a checkpointing mechanism to allow resuming from interruptions.
-3.  Dynamically load the latest event schema for classification.
-4.  Iterate through each text item, using the TriageAgent to classify it.
-5.  Save all items classified as 'unknown' to a single output file for manual review
-    and subsequent use by the SchemaLearnerAgent.
-6.  Provide a final summary of the triage process.
+1.  Load the central configuration from `config.yaml`.
+2.  Connect to the master state database.
+3.  Query the database for all items with the status 'pending_triage'.
+4.  For each item, use the TriageAgent to classify it and get a confidence score.
+5.  Update the item's status to 'pending_review' in the database, and store
+    the triage result (decision, event_type, confidence) in the 'notes' field.
 """
 
 import argparse
@@ -24,206 +19,126 @@ from pathlib import Path
 from tqdm import tqdm
 import os
 import sys
+import sqlite3
+import hashlib
+from typing import Dict, Any
 
 # Add project root to sys.path
-project_root = Path(__file__).resolve().parent.parent
+project_root = Path(__file__).resolve().parent
 sys.path.insert(0, str(project_root))
 
 from src.agents.triage_agent import TriageAgent
 from src.workflows.state_manager import TriageResult
-
-# --- Configuration ---
-# Ensure API keys are loaded from environment variables for security
-kimi_api_key = os.getenv("SILICON_API_KEY")
-if not kimi_api_key:
-    # Fallback for local development if .env is used
-    try:
-        from dotenv import load_dotenv
-        load_dotenv()
-        kimi_api_key = os.getenv("SILICON_API_KEY")
-        if not kimi_api_key:
-            raise ValueError
-    except (ImportError, ValueError):
-        print("Warning: SILICON_API_KEY not found. Please set it as an environment variable.")
-        # Allow script to run for testing with mocks, but it will fail with live agent
-        kimi_api_key = "dummy_key_for_testing"
-
-
-LLM_CONFIG_KIMI = {
-    "config_list": [{
-        "model": "moonshotai/Kimi-K2-Instruct",
-        "price": [0.002, 0.008],
-        "api_key": kimi_api_key,
-        "base_url": "https://api.siliconflow.cn/v1"
-    }],
-    "temperature": 0.0
-}
-
-OUTPUT_DIR = Path("output")
-DEFAULT_OUTPUT_FILE = OUTPUT_DIR / "triage_pending_review.jsonl"
-DEFAULT_CHECKPOINT_FILE = OUTPUT_DIR / "triage_checkpoint.json"
-
-# --- Checkpoint Logic ---
-
-def load_checkpoint(checkpoint_file: Path) -> dict:
-    """Loads the checkpoint data from a file."""
-    if checkpoint_file.exists():
-        try:
-            with checkpoint_file.open('r', encoding='utf-8') as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
-            print(f"Warning: Could not read checkpoint file '{checkpoint_file}'. Starting from scratch.")
-    return {}
-
-def save_checkpoint(checkpoint_file: Path, data: dict):
-    """Saves the checkpoint data to a file."""
-    try:
-        checkpoint_file.parent.mkdir(exist_ok=True)
-        with checkpoint_file.open('w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4, ensure_ascii=False)
-    except IOError as e:
-        print(f"Error: Could not save checkpoint to '{checkpoint_file}': {e}")
+from src.config.config_loader import load_config
+from src.database.database_manager import get_db_connection, initialize_database
 
 # --- Main Logic ---
 
-async def run_batch_triage(input_file: Path, output_file: Path, checkpoint_file: Path):
+async def run_batch_triage(config: Dict[str, Any]):
     """
-    Executes the batch triage workflow with checkpointing.
+    Executes the batch triage workflow using the database as the source of truth.
     """
-    # 1. Create output directory if it doesn't exist
-    output_file.parent.mkdir(exist_ok=True)
+    db_path = Path(config['paths']['master_state_db'])
+    batch_size = config['processing']['batch_size']
 
-    # 2. Load input data
-    print(f"Loading data from '{input_file}'...")
     try:
-        with input_file.open('r', encoding='utf-8') as f:
-            input_data = json.load(f)
-            if not isinstance(input_data, list):
-                raise TypeError("Input JSON must be a list of text items.")
-        print(f"Successfully loaded {len(input_data)} items.")
-    except (IOError, json.JSONDecodeError, TypeError) as e:
-        print(f"Error loading or parsing input file: {e}")
+        conn = get_db_connection(db_path)
+        cursor = conn.cursor()
+    except sqlite3.Error as e:
+        print(f"Error connecting to database: {e}")
         return
 
-    # 3. Load Checkpoint
-    checkpoint = load_checkpoint(checkpoint_file)
-    start_index = 0
-    if checkpoint and checkpoint.get("source_file_path") == str(input_file):
-        start_index = checkpoint.get("last_processed_index", -1) + 1
-        print(f"Resuming from checkpoint. Starting at index {start_index}.")
-    else:
-        print("No valid checkpoint found. Starting from the beginning.")
+    # 1. Query for pending items
+    cursor.execute(
+        "SELECT id, notes FROM event_lifecycle WHERE status = 'pending_triage' LIMIT ?",
+        (batch_size,)
+    )
+    items_to_process = cursor.fetchall()
 
-    # 4. Initialize Agent
-    # Do not initialize if we have nothing to process
-    if start_index >= len(input_data):
-        print("All items have already been processed according to the checkpoint.")
-    else:
-        triage_agent = TriageAgent(llm_config=LLM_CONFIG_KIMI)
+    if not items_to_process:
+        print("No items found with status 'pending_triage'. Exiting.")
+        return
 
-    # 5. Process data and write to file
-    processed_count = start_index
-    unknown_count = 0
-    
-    # Open output file in append mode to support resuming
-    with open(output_file, 'a', encoding='utf-8') as f_unknown:
-        
-        if start_index < len(input_data):
-            print(f"Starting triage process. Items for review will be saved to: {output_file}")
+    print(f"Found {len(items_to_process)} items to triage.")
 
-            # Create a progress bar for the items to be processed
-            items_to_process = input_data[start_index:]
-            progress_bar = tqdm(enumerate(items_to_process, start=start_index), 
-                                total=len(items_to_process), 
-                                desc="Triage Progress")
+    # 2. Initialize Agent
+    # This part would be expanded to load LLM config from the main config
+    kimi_api_key = os.getenv("SILICON_API_KEY", "dummy_key_for_testing")
+    llm_config = {
+        "config_list": [{"model": config['models']['triage_model'], "api_key": kimi_api_key, "base_url": "https://api.siliconflow.cn/v1"}],
+        "temperature": 0.0
+    }
+    triage_agent = TriageAgent(llm_config=llm_config)
+    # Ask agent to include confidence score
+    triage_agent.update_system_message(triage_agent.system_message + "\nYou MUST include a 'confidence' score in your JSON output.")
 
-            for index, text_item in progress_bar:
-                if not isinstance(text_item, str) or not text_item.strip():
-                    # Skip empty or invalid items
-                    processed_count += 1
-                    continue
 
-                try:
-                    # Use the agent to classify the text
-                    response_json_str = await triage_agent.generate_reply(
-                        messages=[{"role": "user", "content": text_item}]
-                    )
-                    
-                    triage_data = json.loads(response_json_str)
-                    triage_result = TriageResult(**triage_data)
+    # 3. Process data and update database
+    processed_count = 0
+    progress_bar = tqdm(items_to_process, desc="Triage Progress")
 
-                    # If the item is 'unknown', write it to the review file
-                    if triage_result.status == "unknown":
-                        output_record = {
-                            "triage_result": triage_result.model_dump(),
-                            "original_text": text_item
-                        }
-                        f_unknown.write(json.dumps(output_record, ensure_ascii=False) + '\n')
-                        unknown_count += 1
+    for item_id, original_text in progress_bar:
+        try:
+            response_json_str = await triage_agent.generate_reply(
+                messages=[{"role": "user", "content": original_text}]
+            )
+            triage_data = json.loads(response_json_str)
+            
+            # Ensure confidence is present, default to 0.0 if not
+            if 'confidence' not in triage_data:
+                triage_data['confidence'] = 0.0
 
-                except Exception as e:
-                    # Log errors but continue processing
-                    print(f"\nError processing item at index {index}: {str(text_item)[:100]}...")
-                    print(f"Error: {e}")
-                    # Optionally, save failed items to a separate error log
-                
-                finally:
-                    # Update checkpoint after each item
-                    processed_count += 1
-                    save_checkpoint(checkpoint_file, {
-                        "processed_count": processed_count,
-                        "last_processed_index": index,
-                        "source_file_path": str(input_file)
-                    })
+            triage_result = TriageResult(**triage_data)
 
-    # 6. Final Summary
-    total_items = len(input_data)
+            # Prepare data for DB update
+            new_status = "pending_review"
+            notes_payload = json.dumps({
+                "decision": triage_result.status,
+                "event_type": triage_result.event_type,
+                "confidence": triage_result.confidence
+            })
+
+            cursor.execute(
+                "UPDATE event_lifecycle SET status = ?, notes = ?, last_updated = CURRENT_TIMESTAMP WHERE id = ?",
+                (new_status, notes_payload, item_id)
+            )
+            conn.commit()
+            processed_count += 1
+
+        except Exception as e:
+            print(f"\nError processing item ID {item_id}: {str(original_text)[:100]}...")
+            print(f"Error: {e}")
+            # Optionally, update the status to 'error'
+            cursor.execute(
+                "UPDATE event_lifecycle SET status = 'error', notes = ? WHERE id = ?",
+                (str(e), item_id)
+            )
+            conn.commit()
+
+    # 4. Final Summary
     print("\n--- Batch Triage Complete ---")
-    print(f"Total items in source file: {total_items}")
-    print(f"Total items processed in this run: {processed_count - start_index}")
-    print(f"Total items identified as 'unknown' in this run: {unknown_count}")
-    print(f"Results for review saved to: {output_file}")
+    print(f"Total items processed in this run: {processed_count}")
     print("-----------------------------")
-    print("\nNext step:")
-    print("1. Review the 'triage_pending_review.jsonl' file.")
-    print("2. Use the reviewed data as input for the SchemaLearnerAgent workflow.")
-
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Batch Triage Workflow for HyperEventGraph",
+        description="Batch Triage Workflow with DB Integration.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
-        "--input", 
+        "--config", 
         type=Path, 
-        required=True,
-        help="Path to the input JSON file (must be a list of strings)."
+        default="config.yaml",
+        help="Path to the central YAML configuration file."
     )
-    parser.add_argument(
-        "--output-file",
-        type=Path,
-        default=DEFAULT_OUTPUT_FILE,
-        help="Path to the output file for items needing review."
-    )
-    parser.add_argument(
-        "--checkpoint-file",
-        type=Path,
-        default=DEFAULT_CHECKPOINT_FILE,
-        help="Path to the checkpoint file to resume progress."
-    )
-    
     args = parser.parse_args()
     
-    if not args.input.is_file():
-        print(f"Error: Input file not found at '{args.input}'")
+    if not args.config.is_file():
+        print(f"Error: Config file not found at '{args.config}'")
         return
         
-    asyncio.run(run_batch_triage(
-        input_file=args.input,
-        output_file=args.output_file,
-        checkpoint_file=args.checkpoint_file
-    ))
+    config = load_config(args.config)
+    asyncio.run(run_batch_triage(config))
 
 if __name__ == "__main__":
     main()

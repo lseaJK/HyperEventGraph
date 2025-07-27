@@ -48,10 +48,10 @@ CRITICAL INSTRUCTIONS:
 4. DO NOT mention tools or function calls.
 
 Your output format MUST be exactly:
-{{"status": "known", "domain": "事件领域", "event_type": "事件类型"}}
+{{"status": "known", "domain": "事件领域", "event_type": "事件类型", "confidence": 0.95}}
 
 或者:
-{{"status": "unknown", "event_type": "Unknown", "domain": "unknown"}}
+{{"status": "unknown", "event_type": "Unknown", "domain": "unknown", "confidence": 0.99}}
 
 IMPORTANT: If you output anything other than a pure JSON object, the system will fail.
 
@@ -69,3 +69,9 @@ Analyze the provided text, determine the most appropriate domain and event type,
             llm_config=llm_config,
             **kwargs
         )
+
+    def update_system_message(self, new_system_message: str):
+        """
+        Allows updating the system message after initialization.
+        """
+        self._system_message = new_system_message
