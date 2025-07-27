@@ -353,7 +353,7 @@
         "description": "开发`run_batch_triage.py`。它必须：1. 从`config.yaml`读取配置。2. 从`master_state.db`查询状态为`pending_triage`的数据。3. 在分类时引入置信度分数。4. 将分类结果和置信度写回`master_state.db`，并更新状态为`pending_review`。",
         "details": "",
         "testStrategy": "",
-        "status": "in-progress",
+        "status": "done",
         "dependencies": [
           12
         ],
@@ -402,7 +402,7 @@
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-27T14:59:42.233Z",
+      "updated": "2025-07-27T15:11:54.716Z",
       "description": "Tasks for master context"
     }
   }

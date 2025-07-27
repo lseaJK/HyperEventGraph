@@ -21,6 +21,7 @@ class TriageResult(BaseModel):
     status: str
     domain: str
     event_type: str
+    confidence: Optional[float] = 0.0
 
 class WorkflowState(BaseModel):
     """
