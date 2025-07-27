@@ -9,15 +9,12 @@ capability, driven by the SchemaLearnerAgent.
 
 Workflow:
 1.  Load a large dataset of texts from an input JSON file.
-2.  Iterate through each text item, using the TriageAgent to classify it.
-3.  Display progress using a progress bar (tqdm).
-4.  Segregate the results into two distinct output files:
-    - 'triage_results_known.jsonl': Contains all items classified as known event types.
-      This file serves as the direct input for the subsequent batch extraction stage.
-    - 'triage_results_unknown.jsonl': Contains all items classified as unknown.
-      This file is the essential, large-scale dataset required by the SchemaLearnerAgent
-      to discover new event patterns and expand the system's knowledge.
-5.  Provide a final summary of the triage process.
+2.  Implement a checkpointing mechanism to allow resuming from interruptions.
+3.  Dynamically load the latest event schema for classification.
+4.  Iterate through each text item, using the TriageAgent to classify it.
+5.  Save all items classified as 'unknown' to a single output file for manual review
+    and subsequent use by the SchemaLearnerAgent.
+6.  Provide a final summary of the triage process.
 """
 
 import argparse
@@ -26,6 +23,11 @@ import asyncio
 from pathlib import Path
 from tqdm import tqdm
 import os
+import sys
+
+# Add project root to sys.path
+project_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(project_root))
 
 from src.agents.triage_agent import TriageAgent
 from src.workflows.state_manager import TriageResult
@@ -34,7 +36,18 @@ from src.workflows.state_manager import TriageResult
 # Ensure API keys are loaded from environment variables for security
 kimi_api_key = os.getenv("SILICON_API_KEY")
 if not kimi_api_key:
-    raise ValueError("SILICON_API_KEY is not set in environment variables.")
+    # Fallback for local development if .env is used
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+        kimi_api_key = os.getenv("SILICON_API_KEY")
+        if not kimi_api_key:
+            raise ValueError
+    except (ImportError, ValueError):
+        print("Warning: SILICON_API_KEY not found. Please set it as an environment variable.")
+        # Allow script to run for testing with mocks, but it will fail with live agent
+        kimi_api_key = "dummy_key_for_testing"
+
 
 LLM_CONFIG_KIMI = {
     "config_list": [{
@@ -47,17 +60,38 @@ LLM_CONFIG_KIMI = {
 }
 
 OUTPUT_DIR = Path("output")
-KNOWN_EVENTS_FILE = OUTPUT_DIR / "triage_results_known.jsonl"
-UNKNOWN_EVENTS_FILE = OUTPUT_DIR / "triage_results_unknown.jsonl"
+DEFAULT_OUTPUT_FILE = OUTPUT_DIR / "triage_pending_review.jsonl"
+DEFAULT_CHECKPOINT_FILE = OUTPUT_DIR / "triage_checkpoint.json"
+
+# --- Checkpoint Logic ---
+
+def load_checkpoint(checkpoint_file: Path) -> dict:
+    """Loads the checkpoint data from a file."""
+    if checkpoint_file.exists():
+        try:
+            with checkpoint_file.open('r', encoding='utf-8') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            print(f"Warning: Could not read checkpoint file '{checkpoint_file}'. Starting from scratch.")
+    return {}
+
+def save_checkpoint(checkpoint_file: Path, data: dict):
+    """Saves the checkpoint data to a file."""
+    try:
+        checkpoint_file.parent.mkdir(exist_ok=True)
+        with checkpoint_file.open('w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+    except IOError as e:
+        print(f"Error: Could not save checkpoint to '{checkpoint_file}': {e}")
 
 # --- Main Logic ---
 
-async def run_batch_triage(input_file: Path):
+async def run_batch_triage(input_file: Path, output_file: Path, checkpoint_file: Path):
     """
-    Executes the batch triage workflow.
+    Executes the batch triage workflow with checkpointing.
     """
     # 1. Create output directory if it doesn't exist
-    OUTPUT_DIR.mkdir(exist_ok=True)
+    output_file.parent.mkdir(exist_ok=True)
 
     # 2. Load input data
     print(f"Loading data from '{input_file}'...")
@@ -71,76 +105,112 @@ async def run_batch_triage(input_file: Path):
         print(f"Error loading or parsing input file: {e}")
         return
 
-    # 3. Initialize Agent
-    triage_agent = TriageAgent(llm_config=LLM_CONFIG_KIMI)
+    # 3. Load Checkpoint
+    checkpoint = load_checkpoint(checkpoint_file)
+    start_index = 0
+    if checkpoint and checkpoint.get("source_file_path") == str(input_file):
+        start_index = checkpoint.get("last_processed_index", -1) + 1
+        print(f"Resuming from checkpoint. Starting at index {start_index}.")
+    else:
+        print("No valid checkpoint found. Starting from the beginning.")
 
-    # 4. Process data and write to files
-    known_count = 0
+    # 4. Initialize Agent
+    # Do not initialize if we have nothing to process
+    if start_index >= len(input_data):
+        print("All items have already been processed according to the checkpoint.")
+    else:
+        triage_agent = TriageAgent(llm_config=LLM_CONFIG_KIMI)
+
+    # 5. Process data and write to file
+    processed_count = start_index
     unknown_count = 0
+    
+    # Open output file in append mode to support resuming
+    with open(output_file, 'a', encoding='utf-8') as f_unknown:
+        
+        if start_index < len(input_data):
+            print(f"Starting triage process. Items for review will be saved to: {output_file}")
 
-    # Open output files for writing
-    with open(KNOWN_EVENTS_FILE, 'w', encoding='utf-8') as f_known, \
-         open(UNKNOWN_EVENTS_FILE, 'w', encoding='utf-8') as f_unknown:
+            # Create a progress bar for the items to be processed
+            items_to_process = input_data[start_index:]
+            progress_bar = tqdm(enumerate(items_to_process, start=start_index), 
+                                total=len(items_to_process), 
+                                desc="Triage Progress")
 
-        print(f"Starting triage process. Results will be saved to:")
-        print(f"  - Known events: {KNOWN_EVENTS_FILE}")
-        print(f"  - Unknown events: {UNKNOWN_EVENTS_FILE}")
+            for index, text_item in progress_bar:
+                if not isinstance(text_item, str) or not text_item.strip():
+                    # Skip empty or invalid items
+                    processed_count += 1
+                    continue
 
-        # Use tqdm for a progress bar
-        for text_item in tqdm(input_data, desc="Triage Progress"):
-            if not isinstance(text_item, str) or not text_item.strip():
-                # Skip empty or invalid items
-                continue
+                try:
+                    # Use the agent to classify the text
+                    response_json_str = await triage_agent.generate_reply(
+                        messages=[{"role": "user", "content": text_item}]
+                    )
+                    
+                    triage_data = json.loads(response_json_str)
+                    triage_result = TriageResult(**triage_data)
 
-            try:
-                # Autogen agents are not async by default, run in an executor
-                response = await asyncio.to_thread(
-                    triage_agent.generate_reply,
-                    messages=[{"role": "user", "content": text_item}]
-                )
+                    # If the item is 'unknown', write it to the review file
+                    if triage_result.status == "unknown":
+                        output_record = {
+                            "triage_result": triage_result.model_dump(),
+                            "original_text": text_item
+                        }
+                        f_unknown.write(json.dumps(output_record, ensure_ascii=False) + '\n')
+                        unknown_count += 1
+
+                except Exception as e:
+                    # Log errors but continue processing
+                    print(f"\nError processing item at index {index}: {str(text_item)[:100]}...")
+                    print(f"Error: {e}")
+                    # Optionally, save failed items to a separate error log
                 
-                triage_data = json.loads(response)
-                triage_result = TriageResult(**triage_data)
+                finally:
+                    # Update checkpoint after each item
+                    processed_count += 1
+                    save_checkpoint(checkpoint_file, {
+                        "processed_count": processed_count,
+                        "last_processed_index": index,
+                        "source_file_path": str(input_file)
+                    })
 
-                # Prepare data to be saved
-                output_record = {
-                    "triage_result": triage_result.model_dump(),
-                    "original_text": text_item
-                }
-                
-                # Write to the appropriate file
-                if triage_result.status == "known":
-                    f_known.write(json.dumps(output_record, ensure_ascii=False) + '\n')
-                    known_count += 1
-                else:
-                    f_unknown.write(json.dumps(output_record, ensure_ascii=False) + '\n')
-                    unknown_count += 1
-
-            except Exception as e:
-                # Log errors but continue processing the rest of the data
-                print(f"\nError processing item: {str(text_item)[:100]}...")
-                print(f"Error: {e}")
-                # Optionally save failed items to another file
-                unknown_count += 1 # Classify as unknown on error
-
-    # 5. Final Summary
+    # 6. Final Summary
+    total_items = len(input_data)
     print("\n--- Batch Triage Complete ---")
-    print(f"Total items processed: {len(input_data)}")
-    print(f"Known events: {known_count} (saved to {KNOWN_EVENTS_FILE})")
-    print(f"Unknown events: {unknown_count} (saved to {UNKNOWN_EVENTS_FILE})")
+    print(f"Total items in source file: {total_items}")
+    print(f"Total items processed in this run: {processed_count - start_index}")
+    print(f"Total items identified as 'unknown' in this run: {unknown_count}")
+    print(f"Results for review saved to: {output_file}")
     print("-----------------------------")
-    print("\nNext steps:")
-    print("1. Use 'triage_results_unknown.jsonl' as input for the SchemaLearnerAgent workflow.")
-    print("2. Use 'triage_results_known.jsonl' as input for a batch extraction workflow.")
+    print("\nNext step:")
+    print("1. Review the 'triage_pending_review.jsonl' file.")
+    print("2. Use the reviewed data as input for the SchemaLearnerAgent workflow.")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Batch Triage Workflow for HyperEventGraph")
+    parser = argparse.ArgumentParser(
+        description="Batch Triage Workflow for HyperEventGraph",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     parser.add_argument(
         "--input", 
         type=Path, 
         required=True,
         help="Path to the input JSON file (must be a list of strings)."
+    )
+    parser.add_argument(
+        "--output-file",
+        type=Path,
+        default=DEFAULT_OUTPUT_FILE,
+        help="Path to the output file for items needing review."
+    )
+    parser.add_argument(
+        "--checkpoint-file",
+        type=Path,
+        default=DEFAULT_CHECKPOINT_FILE,
+        help="Path to the checkpoint file to resume progress."
     )
     
     args = parser.parse_args()
@@ -149,7 +219,11 @@ def main():
         print(f"Error: Input file not found at '{args.input}'")
         return
         
-    asyncio.run(run_batch_triage(input_file=args.input))
+    asyncio.run(run_batch_triage(
+        input_file=args.input,
+        output_file=args.output_file,
+        checkpoint_file=args.checkpoint_file
+    ))
 
 if __name__ == "__main__":
     main()

@@ -292,7 +292,7 @@
         "description": "开发 run_batch_triage.py。核心要求：1. 实现批处理和检查点机制。2. 必须动态加载最新的事件Schema来执行分类。3. 输出单一的、待审核的 triage_pending_review.jsonl 文件。",
         "details": "",
         "testStrategy": "",
-        "status": "pending",
+        "status": "done",
         "dependencies": [],
         "priority": "high",
         "subtasks": []
@@ -303,7 +303,7 @@
         "description": "开发审核辅助脚本 (prepare_review_file.py 和 process_review_results.py)，并定义清晰的CSV审核流程。目标是高效地将AI的初步分类转化为高质量的、经过人类校准的 final_known_events.jsonl 和 final_unknown_events.jsonl。",
         "details": "",
         "testStrategy": "",
-        "status": "pending",
+        "status": "in-progress",
         "dependencies": [
           8
         ],
@@ -402,7 +402,7 @@
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-27T09:23:19.027Z",
+      "updated": "2025-07-27T14:09:08.567Z",
       "description": "Tasks for master context"
     }
   }
