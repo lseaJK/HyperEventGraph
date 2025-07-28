@@ -1,24 +1,22 @@
 # prepare_review_file.py
 """
-This script prepares a CSV file for human review from a JSONL file of items
-classified as 'unknown' by the TriageAgent.
+This script prepares a CSV file for human review from the master state database.
 
 Workflow:
-1.  Reads a .jsonl file where each line is a JSON object containing at least an 'original_text' key.
-2.  Creates a structured CSV file with columns designed for efficient human review:
-    - original_text: The text to be reviewed.
-    - human_decision: Reviewer sets this to 'known' or 'unknown'. Defaults to 'unknown'.
-    - human_event_type: If 'known', reviewer specifies the event type from a predefined list.
-    - human_notes: Optional notes from the reviewer.
-3.  Includes a list of known event types in a separate file or as part of the output
-    to guide the reviewer.
+1.  Connects to the master state database.
+2.  Queries for all items with the status 'pending_review'.
+3.  Sorts these items by their triage confidence score in ascending order, so that
+    reviewers address the most uncertain items first.
+4.  Creates a structured CSV file with columns for efficient human review, including
+    the item's unique ID to allow for updates.
+5.  Saves a separate text file with a list of known event types to guide the reviewer.
 """
 
 import argparse
-import json
 from pathlib import Path
 import pandas as pd
 import sys
+import sqlite3
 
 # Add project root to sys.path to allow importing from src
 project_root = Path(__file__).resolve().parent
@@ -26,48 +24,49 @@ sys.path.insert(0, str(project_root))
 
 from src.event_extraction.schemas import EVENT_SCHEMA_REGISTRY
 
-def prepare_review_csv(input_jsonl: Path, output_csv: Path):
+def prepare_review_csv(db_path: str, output_csv: Path):
     """
-    Converts a JSONL file of unknown items into a CSV for human review.
+    Creates a CSV file for human review from database items sorted by confidence.
 
     Args:
-        input_jsonl: Path to the input .jsonl file (e.g., triage_pending_review.jsonl).
+        db_path: Path to the master state SQLite database.
         output_csv: Path to the output .csv file to be created.
     """
-    # 1. Load the JSONL file into a list of dictionaries
+    # 1. Connect to the database and query for items pending review
     try:
-        with input_jsonl.open('r', encoding='utf-8') as f:
-            records = [json.loads(line) for line in f]
-    except (IOError, json.JSONDecodeError) as e:
-        print(f"Error reading or parsing input file '{input_jsonl}': {e}")
+        with sqlite3.connect(db_path) as conn:
+            # Sorting by triage_confidence ascending to prioritize low-confidence items
+            query = "SELECT id, source_text, triage_confidence FROM master_state WHERE current_status = 'pending_review' ORDER BY triage_confidence ASC"
+            df = pd.read_sql_query(query, conn)
+    except (sqlite3.Error, pd.errors.DatabaseError) as e:
+        print(f"Error connecting to or querying the database at '{db_path}': {e}")
         return
 
-    if not records:
-        print("Input file is empty. No review file to generate.")
+    if df.empty:
+        print("No items found with status 'pending_review'. No review file to generate.")
         return
 
-    # 2. Extract the original text from each record
-    texts_to_review = [record.get("original_text", "") for record in records]
+    # 2. Create a DataFrame with the required columns for review
+    # We rename 'id' to 'record_id' to avoid potential confusion if 'id' is used elsewhere
+    df.rename(columns={'id': 'id'}, inplace=True)
+    df['human_decision'] = 'unknown'  # Default value for the reviewer
+    df['human_event_type'] = ''       # To be filled in by the reviewer
+    df['human_notes'] = ''            # Optional notes
 
-    # 3. Create a DataFrame with the required columns for review
-    df = pd.DataFrame({
-        "original_text": texts_to_review,
-        "human_decision": "unknown",  # Default value for the reviewer
-        "human_event_type": "",       # To be filled in by the reviewer
-        "human_notes": ""             # Optional notes
-    })
+    # Reorder columns for clarity in the CSV
+    review_df = df[['id', 'source_text', 'triage_confidence', 'human_decision', 'human_event_type', 'human_notes']]
 
-    # 4. Save the DataFrame to a CSV file
+    # 3. Save the DataFrame to a CSV file
     try:
         output_csv.parent.mkdir(exist_ok=True)
-        df.to_csv(output_csv, index=False, encoding='utf-8-sig')
+        review_df.to_csv(output_csv, index=False, encoding='utf-8-sig')
         print(f"Successfully created review file at: {output_csv}")
-        print(f"Total items for review: {len(df)}")
+        print(f"Total items for review: {len(review_df)}")
     except IOError as e:
         print(f"Error writing to output CSV file '{output_csv}': {e}")
         return
         
-    # 5. Also, save the list of valid event types for the reviewer's convenience
+    # 4. Also, save the list of valid event types for the reviewer's convenience
     event_types_guidance_file = output_csv.parent / "event_types_for_review.txt"
     try:
         with event_types_guidance_file.open('w', encoding='utf-8') as f:
@@ -82,14 +81,14 @@ def prepare_review_csv(input_jsonl: Path, output_csv: Path):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Prepare a CSV file for human review from triage results.",
+        description="Prepare a CSV file for human review from the master state database.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
-        "--input",
+        "--db-path",
         type=Path,
         required=True,
-        help="Path to the input JSONL file (e.g., output/triage_pending_review.jsonl)."
+        help="Path to the master state SQLite database."
     )
     parser.add_argument(
         "--output",
@@ -99,11 +98,11 @@ def main():
     )
     args = parser.parse_args()
 
-    if not args.input.is_file():
-        print(f"Error: Input file not found at '{args.input}'")
+    if not args.db_path.is_file():
+        print(f"Error: Database file not found at '{args.db_path}'")
         return
 
-    prepare_review_csv(input_jsonl=args.input, output_csv=args.output)
+    prepare_review_csv(db_path=str(args.db_path), output_csv=args.output)
 
 if __name__ == "__main__":
     main()

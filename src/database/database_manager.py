@@ -62,6 +62,7 @@ def initialize_database(db_path: Path) -> sqlite3.Connection:
     CREATE TABLE IF NOT EXISTS event_lifecycle (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         source_id TEXT NOT NULL,
+        raw_text TEXT,
         raw_text_hash TEXT NOT NULL UNIQUE,
         status TEXT NOT NULL DEFAULT 'new',
         last_updated TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,

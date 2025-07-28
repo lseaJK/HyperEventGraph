@@ -366,7 +366,7 @@
         "description": "开发审核辅助脚本。`prepare_review_file.py`需从数据库查询待审核数据，并根据置信度排序生成CSV。`process_review_results.py`需读取审核后的CSV，并将最终结果更新回`master_state.db`，设置状态为`pending_learning`或`pending_extraction`。",
         "details": "",
         "testStrategy": "",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           13
         ],
@@ -402,7 +402,7 @@
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-27T15:11:54.716Z",
+      "updated": "2025-07-28T12:47:18.154Z",
       "description": "Tasks for master context"
     }
   }
