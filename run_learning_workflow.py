@@ -35,8 +35,6 @@ def main_loop(db_path: str):
 
     try:
         toolkit = SchemaLearningToolkit(db_path)
-        # Perform the initial clustering right away
-        toolkit.initial_cluster()
     except Exception as e:
         print(f"Error initializing toolkit: {e}")
         traceback.print_exc()
@@ -56,12 +54,12 @@ def main_loop(db_path: str):
             break
         elif command == "help":
             print("\nAvailable Commands:")
+            print("  cluster                - (Re)run the clustering algorithm.")
             print("  list_clusters          - Display current clusters of unknown texts.")
             print("  show_samples <id>      - Show text samples from a specific cluster.")
             print("  merge <id1> <id2>      - Merge two clusters into one.")
-            print("  generate_schema <id>   - Generate a new event schema from a cluster.")
-            print("  save_schema <id>       - Save the generated schema and update DB.")
-            print("  cluster                - Re-run the clustering algorithm.")
+            print("  generate_schema <id>   - Generate a new event schema from a cluster (Not Implemented).")
+            print("  save_schema <id>       - Save the generated schema and update DB (Not Implemented).")
             print("  exit                   - Exit the interactive session.\n")
         else:
             try:
