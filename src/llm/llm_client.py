@@ -46,9 +46,15 @@ class LLMClient:
         if not provider_config or 'base_url' not in provider_config:
             raise ValueError(f"Configuration for provider '{provider}' is missing 'base_url'.")
 
-        # Environment variable names are derived from the provider name, e.g., DEEPSEEK_API_KEY
-        env_var_name = f"{provider.upper()}_API_KEY"
-        api_key = os.environ.get(env_var_name) or provider_config.get('api_key')
+        # Since all providers now use the same API endpoint and key,
+        # we hardcode the environment variable to look for.
+        env_var_name = "SILICON_API_KEY"
+        api_key = os.environ.get(env_var_name)
+
+        if not api_key:
+            # Fallback to provider-specific key for backward compatibility, though not expected.
+            provider_specific_env_var = f"{provider.upper()}_API_KEY"
+            api_key = os.environ.get(provider_specific_env_var) or provider_config.get('api_key')
 
         if not api_key:
             raise ValueError(f"API key for '{provider}' not found. Set {env_var_name} or add it to config.yaml.")

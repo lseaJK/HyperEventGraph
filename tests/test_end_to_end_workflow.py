@@ -13,6 +13,7 @@ from pathlib import Path
 import time
 import json
 import os
+import sys
 
 # Add project root to sys.path
 project_root = Path(__file__).resolve().parent.parent
@@ -50,13 +51,22 @@ class TestEndToEndWorkflow(unittest.TestCase):
             'extraction_workflow': {'output_file': str(cls.extraction_output_path)},
             'llm': {
                 'providers': {
-                    'deepseek': {'base_url': "https://api.deepseek.com/v1"},
-                    'kimi': {'base_url': "https://api.moonshot.cn/v1"}
+                    # We now have a single, unified provider.
+                    'siliconflow': {'base_url': "https://api.siliconflow.cn/v1"}
                 },
                 'models': {
-                    'triage': {'provider': "kimi", 'name': "moonshot-v1-8k"},
-                    'schema_generation': {'provider': "kimi", 'name': "moonshot-v1-32k"},
-                    'extraction': {'provider': "deepseek", 'name': "deepseek-coder"}
+                    'triage': {
+                        'provider': 'siliconflow',
+                        'name': 'moonshotai/Kimi-K2-Instruct'
+                    },
+                    'schema_generation': {
+                        'provider': 'siliconflow',
+                        'name': 'Qwen/Qwen3-235B-A22B-Thinking-2507'
+                    },
+                    'extraction': {
+                        'provider': 'siliconflow',
+                        'name': 'Qwen/Qwen3-235B-A22B-Thinking-2507'
+                    }
                 }
             }
         }
@@ -85,8 +95,19 @@ class TestEndToEndWorkflow(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         """Clean up the temporary environment."""
-        if cls.test_dir.exists():
-            shutil.rmtree(cls.test_dir)
+        if not hasattr(cls, 'test_dir') or not cls.test_dir.exists():
+            return
+
+        for i in range(3):  # Retry up to 3 times
+            try:
+                shutil.rmtree(cls.test_dir)
+                print(f"Successfully removed temporary directory: {cls.test_dir}")
+                break  # Success
+            except OSError as e:
+                print(f"Attempt {i+1} failed to remove {cls.test_dir}: {e}")
+                time.sleep(0.5)  # Wait a bit before retrying
+        else:  # This else belongs to the for loop, runs if loop finishes without break
+            print(f"!!! CRITICAL: Failed to remove temporary directory {cls.test_dir} after multiple attempts.")
 
     def test_full_lifecycle(self):
         """Tests the full data lifecycle with real data and LLM calls."""
@@ -167,6 +188,11 @@ class TestEndToEndWorkflow(unittest.TestCase):
             self.assertEqual(cursor.fetchone()[0], "completed")
         print("✅ STEP 5: Extraction successful.")
         print("\n🎉 End-to-End test completed successfully! 🎉")
+
+        # Explicitly clean up objects that might hold file locks before teardown
+        del toolkit
+        import gc
+        gc.collect()
 
 if __name__ == '__main__':
     unittest.main(argv=['first-arg-is-ignored'], exit=False)

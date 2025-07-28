@@ -1,209 +1,189 @@
-# run_agent_workflow.py
-
-import os
-import json
-import re
-import autogen
-from typing import List, Dict, Any, Optional, Union
-
-# 导入我们创建的Agent
-from src.agents.triage_agent import TriageAgent
-from src.agents.extraction_agent import ExtractionAgent
-from src.agents.relationship_analysis_agent import RelationshipAnalysisAgent
-from src.agents.storage_agent import StorageAgent
-# 导入我们创建的工具
-from src.agents.toolkits.extraction_toolkit import EventExtractionToolkit
-from src.agents.toolkits.relationship_toolkit import RelationshipAnalysisToolkit
-from src.agents.toolkits.storage_toolkit import StorageToolkit
-from src.agents.toolkits.triage_toolkit import TriageToolkit
-
-# ------------------ LLM 配置 ------------------
-# 配置1: Kimi模型，用于决策和工具调用
-kimi_api_key = os.getenv("SILICON_API_KEY")
-if not kimi_api_key:
-    raise ValueError("SILICON_API_KEY is not set in environment variables.")
-
-config_list_kimi = [
-    {
-        "model": "moonshotai/Kimi-K2-Instruct", # "deepseek-ai/DeepSeek-V3",
-        "price": [0.002, 0.008],
-        "api_key": kimi_api_key,
-        "base_url": "https://api.siliconflow.cn/v1"
-    }
-]
-llm_config_kimi = {
-    "config_list": config_list_kimi, "cache_seed": 42, "temperature": 0.0
-}
-
-# 配置2: DeepSeek模型，用于内容生成和抽取
-deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
-if not deepseek_api_key:
-    raise ValueError("DEEPSEEK_API_KEY is not set in environment variables.")
-
-config_list_deepseek = [
-    {
-        "model": "deepseek-chat",
-        "price": [0.002, 0.008],
-        "api_key": deepseek_api_key,
-        "base_url": "https://api.deepseek.com/v1"
-    }
-]
-llm_config_deepseek = {
-    "config_list": config_list_deepseek, "cache_seed": 43, "temperature": 0.0
-}
-
-# ------------------ 工作流上下文 ------------------
-workflow_context = {
-    "original_text": None, "domain": None, "event_type": None,
-    "extracted_events": [], "extracted_relationships": []
-}
-
-# ------------------ Schema Loading and Mapping ------------------
-# 使用新的、统一的Schema注册表
-from src.event_extraction.schemas import EVENT_SCHEMA_REGISTRY, generate_all_json_schemas
-
-try:
-    # 动态生成所有schemas
-    schemas = generate_all_json_schemas()
-    
-    # 创建一个从模型标题到其注册键的映射
-    title_to_key_map = {
-        schema.get('title', key): key 
-        for key, schema in schemas.items()
-    }
-except Exception as e:
-    print(f"[Workflow Error] Could not load schemas from registry: {e}")
-    # Fallback map
-    title_to_key_map = {
-        "公司并购事件": "company_merger_and_acquisition",
-        "投融资事件": "investment_and_financing",
-    }
-
-# ------------------ Agent 初始化 ------------------
-user_proxy = autogen.UserProxyAgent(
-    name="UserProxyAgent",
-    human_input_mode="NEVER",
-    max_consecutive_auto_reply=10,
-    is_termination_msg=lambda x: x.get("content", "") and "TASK_COMPLETE" in x.get("content", ""),
-    code_execution_config=False,
-)
-
-triage_agent = TriageAgent(llm_config=llm_config_kimi)
-extraction_agent = ExtractionAgent(llm_config=llm_config_deepseek)
-relationship_agent = RelationshipAnalysisAgent(llm_config=llm_config_deepseek)
-storage_agent = StorageAgent()
-
-# 注册工具
-extraction_agent.register_function(
-    function_map={
-        "extract_events_from_text": EventExtractionToolkit().extract_events_from_text
-    }
-)
-relationship_agent.register_function(
-    function_map={
-        "analyze_event_relationships": RelationshipAnalysisToolkit().analyze_event_relationships
-    }
-)
-storage_agent.register_function(
-    function_map={
-        "save_events_and_relationships": StorageToolkit().save_events_and_relationships
-    }
-)
-
-
-# ------------------ GroupChat 设置 ------------------
-agents = [user_proxy, triage_agent, extraction_agent, relationship_agent, storage_agent]
-
-def custom_speaker_selection_func(last_speaker: autogen.Agent, groupchat: autogen.GroupChat) -> Union[autogen.Agent, str, None]:
-    messages = groupchat.messages
-    last_message = messages[-1]
-
-    # 初始状态，由UserProxyAgent触发，交给TriageAgent
-    if last_speaker.name == "UserProxyAgent":
-        return triage_agent
-
-    # TriageAgent 完成后，交给 ExtractionAgent
-    if last_speaker.name == "TriageAgent":
-        # 检查TriageAgent的输出是否表示已知事件
-        content = last_message.get("content", "")
-        try:
-            # 假设TriageAgent的输出是JSON字符串
-            triage_result = json.loads(content)
-            if triage_result.get("status") == "known":
-                return extraction_agent
-        except json.JSONDecodeError:
-            # 如果输出不是有效的JSON，或者格式不正确，则终止
-            return user_proxy # 终止
-        return user_proxy # 终止
-
-    # ExtractionAgent 完成后，交给 RelationshipAnalysisAgent
-    if last_speaker.name == "ExtractionAgent":
-        # 检查ExtractionAgent是否提取到了事件
-        content = last_message.get("content", "")
-        if content and content.strip() != "[]":
-             return relationship_agent
-        return user_proxy # 终止
-
-    # RelationshipAnalysisAgent 完成后，交给 StorageAgent
-    if last_speaker.name == "RelationshipAnalysisAgent":
-        return storage_agent
-
-    # StorageAgent 完成后，结束
-    if last_speaker.name == "StorageAgent":
-        return user_proxy
-
-    # 默认或意外情况，终止
-    return user_proxy
-
-group_chat = autogen.GroupChat(agents=agents, messages=[], max_round=15, speaker_selection_method=custom_speaker_selection_func)
-manager = autogen.GroupChatManager(groupchat=group_chat, llm_config=llm_config_kimi)
-
-# ------------------ 启动工作流 ------------------
-if __name__ == "__main__":
-    news_text = "2024年7月15日，科技巨头A���司正式宣布，将以惊人的500亿美元全现金方式收购新兴AI芯片设计公司B公司。此次收购旨在强化A公司在人工智能领域的硬件布局。同时，A公司的CEO表示，收购完成后，将立即启动一项耗资10亿美元的整合计划，以确保B公司的技术能够快速融入A公司的产品线."
-    
-    # Populate the context BEFORE starting the chat
-    workflow_context["original_text"] = news_text
-
-    # 构建一个更丰富的初始消息，包含所有需要的信息
-    initial_message = f"""
-Welcome to the event processing workflow.
-
-Here is the text to analyze:
---- TEXT ---
-{news_text}
---- END TEXT ---
-
-Here are the available event schemas:
---- SCHEMAS ---
-{json.dumps(schemas, indent=2, ensure_ascii=False)}
---- END SCHEMAS ---
-
-Please start the workflow by classifying the event type in the text.
+# tests/test_end_to_end_workflow.py
 """
-    
-    user_proxy.initiate_chat(manager, message=initial_message)
+This module contains the end-to-end test for the entire V3.1 workflow.
+It uses real sample data and the refactored, LLM-driven components.
+"""
 
-    # 从聊天记录中恢复工作流的最终状态
-    final_context = {}
-    for message in group_chat.messages:
-        if message.get("name") == "ExtractionAgent" and "tool_calls" not in message:
-             try:
-                final_context["extracted_events"] = json.loads(message["content"])
-             except (json.JSONDecodeError, TypeError):
-                pass
-        if message.get("name") == "RelationshipAnalysisAgent" and "tool_calls" not in message:
+import unittest
+import shutil
+import yaml
+import sqlite3
+import pandas as pd
+from pathlib import Path
+import time
+import json
+import os
+import sys
+
+# Add project root to sys.path
+project_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(project_root))
+
+from src.core.config_loader import load_config, get_config
+from src.core.database_manager import DatabaseManager
+from run_batch_triage import run_triage_workflow
+from prepare_review_file import prepare_review_workflow
+from process_review_results import process_review_workflow
+from src.agents.toolkits.schema_learning_toolkit import SchemaLearningToolkit
+from run_extraction_workflow import run_extraction_workflow
+
+class TestEndToEndWorkflow(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up a temporary environment for the entire test class."""
+        cls.test_dir = Path("temp_e2e_test_env")
+        if cls.test_dir.exists():
+            shutil.rmtree(cls.test_dir)
+        cls.test_dir.mkdir(exist_ok=True)
+
+        # --- Create a dedicated test configuration ---
+        cls.db_path = cls.test_dir / "test_master_state.db"
+        cls.review_csv_path = cls.test_dir / "review_sheet.csv"
+        cls.schema_path = cls.test_dir / "event_schemas.json"
+        cls.extraction_output_path = cls.test_dir / "structured_events.jsonl"
+        
+        # This config points all workflows to our isolated test directory.
+        test_config = {
+            'database': {'path': str(cls.db_path)},
+            'review_workflow': {'review_csv': str(cls.review_csv_path)},
+            'learning_workflow': {'schema_registry_path': str(cls.schema_path)},
+            'extraction_workflow': {'output_file': str(cls.extraction_output_path)},
+            'llm': {
+                'providers': {
+                    'deepseek': {'base_url': "https://api.siliconflow.cn/v1"},
+                    'kimi': {'base_url': "https://api.siliconflow.cn/v1"}
+                },
+                'models': {
+                    'triage': {'name':'moonshotai/Kimi-K2-Instruct'},
+                    'schema_generation': {'name': 'Qwen/Qwen3-235B-A22B-Thinking-2507'},
+                    'extraction': {'name': 'Qwen/Qwen3-235B-A22B-Thinking-2507'}
+                }
+            }
+        }
+        cls.config_path = cls.test_dir / "test_config.yaml"
+        with open(cls.config_path, 'w') as f:
+            yaml.dump(test_config, f)
+
+        # --- Initialize the database and seed with real data ---
+        db_manager = DatabaseManager(cls.db_path)
+        data_path = project_root / "IC_data" / "filtered_data_demo.json"
+        with open(data_path, 'r', encoding='utf-8') as f:
+            initial_texts = json.load(f)
+        
+        cls.initial_text_data = {} # Store for later reference
+        with sqlite3.connect(cls.db_path) as conn:
+            cursor = conn.cursor()
+            for i, text in enumerate(initial_texts):
+                record_id = f"e2e_{i}"
+                cls.initial_text_data[record_id] = text
+                cursor.execute(
+                    "INSERT INTO master_state (id, source_text, current_status, last_updated) VALUES (?, ?, ?, ?)",
+                    (record_id, text, 'pending_triage', time.time())
+                )
+            conn.commit()
+
+    @classmethod
+    def tearDownClass(cls):
+        """Clean up the temporary environment."""
+        if not hasattr(cls, 'test_dir') or not cls.test_dir.exists():
+            return
+
+        for i in range(3):  # Retry up to 3 times
             try:
-                final_context["extracted_relationships"] = json.loads(message["content"])
-            except (json.JSONDecodeError, TypeError):
-                pass
-    
-    if final_context.get("extracted_events"):
-        print("\nWorkflow finished successfully. Final context:")
-        final_status_message = "TASK_COMPLETE"
-    else:
-        print("\nWorkflow finished, but no events were extracted or the process failed. Final context:")
-        final_status_message = "TASK_FAILED"
+                shutil.rmtree(cls.test_dir)
+                print(f"Successfully removed temporary directory: {cls.test_dir}")
+                break  # Success
+            except OSError as e:
+                print(f"Attempt {i+1} failed to remove {cls.test_dir}: {e}")
+                time.sleep(0.5)  # Wait a bit before retrying
+        else:  # This else belongs to the for loop, runs if loop finishes without break
+            print(f"!!! CRITICAL: Failed to remove temporary directory {cls.test_dir} after multiple attempts.")
 
-    print(json.dumps(final_context, indent=2, ensure_ascii=False))
-    print(f"\nFinal Status: {final_status_message}")
+    def test_full_lifecycle(self):
+        """Tests the full data lifecycle with real data and LLM calls."""
+        # Skip this test if API keys are not set
+        if not os.environ.get("SILICON_API_KEY"):
+            self.skipTest("API keys for DeepSeek or Kimi not set in environment variables.")
+
+        load_config(self.config_path)
+
+        # == Step 1: Triage -> Review ==
+        run_triage_workflow()
+        with sqlite3.connect(self.db_path) as conn:
+            df = pd.read_sql_query("SELECT id, current_status, triage_confidence FROM master_state", conn)
+            self.assertTrue(all(df['current_status'] == 'pending_review'))
+            self.assertFalse(df['triage_confidence'].isnull().any())
+        print("✅ STEP 1: Triage successful.")
+
+        # == Step 2: Prepare Review File ==
+        prepare_review_workflow()
+        self.assertTrue(self.review_csv_path.exists())
+        review_df = pd.read_csv(self.review_csv_path)
+        self.assertEqual(len(review_df), len(self.initial_text_data))
+        self.assertEqual(review_df['triage_confidence'].tolist(), sorted(review_df['triage_confidence'].tolist()))
+        print("✅ STEP 2: Prepare review file successful.")
+
+        # == Step 3: Process Review Results ==
+        # Simulate review: Mark the first item for learning, the second for extraction
+        review_df.loc[0, 'human_decision'] = 'unknown'
+        review_df.loc[1, 'human_decision'] = 'known'
+        review_df.loc[1, 'human_event_type'] = 'Company:Financials' # Assume this schema exists
+        review_df.to_csv(self.review_csv_path, index=False)
+        
+        # Mock a pre-existing schema for the extraction part to work
+        with open(self.schema_path, 'w') as f:
+            json.dump({"Company:Financials": {"description": "Financial news", "properties": {"company": "company name", "revenue": "revenue amount"}}}, f)
+
+        process_review_workflow()
+        with sqlite3.connect(self.db_path) as conn:
+            df = pd.read_sql_query("SELECT id, current_status FROM master_state", conn)
+            self.assertEqual(df.loc[df['id'] == review_df.loc[0, 'id'], 'current_status'].iloc[0], 'pending_learning')
+            self.assertEqual(df.loc[df['id'] == review_df.loc[1, 'id'], 'current_status'].iloc[0], 'pending_extraction')
+        print("✅ STEP 3: Process review results successful.")
+
+        # == Step 4: Learning Loop -> Triage (Closure) ==
+        toolkit = SchemaLearningToolkit(str(self.db_path))
+        toolkit.run_clustering()
+        
+        item_to_learn_id = review_df.loc[0, 'id']
+        cluster_id = toolkit.data_frame[toolkit.data_frame['id'] == item_to_learn_id]['cluster_id'].iloc[0]
+        
+        toolkit.generate_schema_from_cluster(cluster_id)
+        self.assertIn(cluster_id, toolkit.generated_schemas)
+        toolkit.save_schema(cluster_id)
+
+        with open(self.schema_path, 'r') as f:
+            schemas = json.load(f)
+            self.assertGreater(len(schemas), 1) # Should have the initial one plus the new one
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT current_status FROM master_state WHERE id = ?", (item_to_learn_id,))
+            self.assertEqual(cursor.fetchone()[0], "pending_triage")
+        print("✅ STEP 4: Learning loop closure successful.")
+
+        # == Step 5: Extraction -> Completed ==
+        run_extraction_workflow()
+        self.assertTrue(self.extraction_output_path.exists())
+        with open(self.extraction_output_path, 'r') as f:
+            lines = f.readlines()
+            self.assertGreaterEqual(len(lines), 1) # Should have at least one extracted event
+            extracted_data = json.loads(lines[0])
+            self.assertEqual(extracted_data['_event_type'], "Company:Financials")
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            item_to_extract_id = review_df.loc[1, 'id']
+            cursor.execute("SELECT current_status FROM master_state WHERE id = ?", (item_to_extract_id,))
+            self.assertEqual(cursor.fetchone()[0], "completed")
+        print("✅ STEP 5: Extraction successful.")
+        print("\n🎉 End-to-End test completed successfully! 🎉")
+
+        # Explicitly clean up objects that might hold file locks before teardown
+        del toolkit
+        import gc
+        gc.collect()
+
+if __name__ == '__main__':
+    unittest.main(argv=['first-arg-is-ignored'], exit=False)
