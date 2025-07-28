@@ -392,7 +392,7 @@
         "description": "开发`run_extraction_workflow.py`。它从`master_state.db`查询状态为`pending_extraction`的数据，进行批量抽取，并将最终的结构化数据存入指定位置，同时在数据库中将任务状态更新为`completed`。",
         "details": "",
         "testStrategy": "",
-        "status": "in-progress",
+        "status": "done",
         "dependencies": [
           14
         ],
@@ -402,7 +402,7 @@
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-28T13:14:00.070Z",
+      "updated": "2025-07-28T13:22:39.627Z",
       "description": "Tasks for master context"
     }
   }

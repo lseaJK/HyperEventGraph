@@ -101,6 +101,30 @@ class DatabaseManager:
         except sqlite3.Error as e:
             print(f"Error updating record '{record_id}': {e}")
 
+    def update_record_after_triage(self, record_id: str, new_status: str, event_type: str, confidence: float, notes: str):
+        """
+        Specifically updates a record after the triage stage.
+
+        Args:
+            record_id: The unique ID of the record.
+            new_status: The new status (typically 'pending_review').
+            event_type: The event type assigned by the triage agent.
+            confidence: The confidence score from the triage agent.
+            notes: Explanations or other notes from the agent.
+        """
+        query = """
+            UPDATE master_state
+            SET current_status = ?, assigned_event_type = ?, triage_confidence = ?, notes = ?, last_updated = ?
+            WHERE id = ?
+        """
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, (new_status, event_type, confidence, notes, datetime.now().isoformat(), record_id))
+                conn.commit()
+        except sqlite3.Error as e:
+            print(f"Error updating record '{record_id}' after triage: {e}")
+
 # It can also be useful to have a standalone function for one-off initialization
 def initialize_database(db_path: str | Path):
     """

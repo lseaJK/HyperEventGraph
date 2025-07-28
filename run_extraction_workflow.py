@@ -2,7 +2,7 @@
 """
 This script runs the batch extraction workflow. It processes all records
 marked as 'pending_extraction' in the master state database, extracts
-structured information from them, and saves the results.
+structured information from them using an LLM, and saves the results.
 """
 
 import argparse
@@ -17,105 +17,114 @@ sys.path.insert(0, str(project_root))
 
 from src.core.database_manager import DatabaseManager
 from src.core.config_loader import load_config, get_config
+from src.llm.llm_client import LLMClient
 
 class ExtractionAgent:
-    """A placeholder for the real ExtractionAgent."""
+    """An agent that uses an LLM to extract structured data from text."""
     def __init__(self):
-        print("ExtractionAgent (placeholder) initialized.")
+        print("ExtractionAgent initialized.")
+        self.llm_client = LLMClient()
+        self.schema_registry = self._load_schema_registry()
 
-    def extract(self, text: str, event_type: str) -> dict:
-        """
-        A placeholder extraction method. In a real scenario, this would
-        call an LLM with a specific prompt based on the event_type's schema.
-        """
-        print(f"Extracting from text for event type: {event_type}")
-        # Simulate a simple extraction based on the text
-        return {
-            "event_type": event_type,
-            "extracted_summary": f"Summary of '{text[:30]}...'",
-            "confidence": 0.95,
-            "source_text": text
-        }
+    def _load_schema_registry(self) -> dict:
+        config = get_config().get('learning_workflow', {})
+        schema_file = Path(config.get("schema_registry_path", "output/schemas/event_schemas.json"))
+        if not schema_file.exists():
+            print(f"Warning: Schema registry not found at '{schema_file}'.")
+            return {}
+        try:
+            with schema_file.open('r') as f:
+                return json.load(f)
+        except (IOError, json.JSONDecodeError) as e:
+            print(f"Error loading schema registry: {e}")
+            return {}
 
-def run_extraction(db_manager: DatabaseManager, output_file: Path):
-    """
-    Runs the main extraction loop.
+    def _build_extraction_prompt(self, text: str, schema: dict) -> str:
+        schema_properties = json.dumps(schema.get("properties", {}), indent=2)
+        return f"""
+You are an information extraction engine. Analyze the user's text and extract information according to the provided JSON schema.
 
-    Args:
-        db_manager: An instance of the DatabaseManager.
-        output_file: The path to the file where structured results will be saved.
-    """
-    print("Starting extraction workflow...")
+**Instructions:**
+1.  Read the text carefully.
+2.  Extract information that corresponds to each property in the schema.
+3.  If a piece of information is not present, use a null value.
+4.  Your output MUST be a single, valid JSON object that strictly follows the schema's properties.
+
+**JSON Schema Properties:**
+{schema_properties}
+
+**Text to Analyze:**
+"{text}"
+
+Provide the JSON object.
+"""
+
+    def extract(self, text: str, event_type: str) -> dict | None:
+        print(f"Attempting extraction for event type: {event_type}")
+        schema = self.schema_registry.get(event_type)
+        
+        if not schema:
+            print(f"Warning: No schema found for event type '{event_type}'.")
+            return None
+
+        prompt = self._build_extraction_prompt(text, schema)
+        
+        # Call the LLM using the correct task_type
+        extracted_json = self.llm_client.get_json_response(prompt, task_type="extraction")
+        
+        if extracted_json:
+            extracted_json['_event_type'] = event_type
+            extracted_json['_source_text'] = text
+        
+        return extracted_json
+
+def run_extraction_workflow():
+    """The core logic of the batch extraction workflow."""
+    print("\n--- Running Extraction Workflow ---")
+    config = get_config()
+    db_path = config.get('database', {}).get('path')
+    output_path = config.get('extraction_workflow', {}).get('output_file')
+    if not db_path or not output_path:
+        raise ValueError("DB path or output file not in config.")
+
+    output_file = Path(output_path)
+    output_file.parent.mkdir(exist_ok=True)
+    db_manager = DatabaseManager(db_path)
     
-    # 1. Get records to process
     records_df = db_manager.get_records_by_status_as_df('pending_extraction')
-    
     if records_df.empty:
-        print("No records are pending extraction. Workflow complete.")
+        print("No records are pending extraction.")
         return
 
-    print(f"Found {len(records_df)} records to process.")
-    
+    print(f"Found {len(records_df)} records for extraction.")
     agent = ExtractionAgent()
     extracted_results = []
-
-    # 2. Process records in a batch
+    
     for _, row in records_df.iterrows():
-        record_id = row['id']
-        text = row['source_text']
-        event_type = row['assigned_event_type']
+        record_id, text, event_type = row['id'], row['source_text'], row['assigned_event_type']
+        if not event_type: continue
         
-        if not event_type:
-            print(f"Skipping record {record_id} because it has no assigned event type.")
-            continue
-
-        # 3. Call ExtractionAgent
         structured_data = agent.extract(text, event_type)
-        extracted_results.append(structured_data)
+        if structured_data:
+            extracted_results.append(structured_data)
         
-        # 4. Update status in database
         db_manager.update_status_and_schema(record_id, "completed", event_type, "Extraction complete.")
 
-    # 5. Save results to output file
-    try:
+    if extracted_results:
         with output_file.open('a', encoding='utf-8') as f:
             for result in extracted_results:
                 f.write(json.dumps(result, ensure_ascii=False) + '\n')
-        print(f"Successfully extracted {len(extracted_results)} records and saved to '{output_file}'.")
-    except IOError as e:
-        print(f"Error writing to output file '{output_file}': {e}")
+        print(f"Saved {len(extracted_results)} extracted records to '{output_file}'.")
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Run the batch extraction workflow.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
-    parser.add_argument(
-        "--config", 
-        type=Path, 
-        default="config.yaml", 
-        help="Path to the main config.yaml file."
-    )
+    parser = argparse.ArgumentParser(description="Run the batch extraction workflow.")
+    parser.add_argument("--config", type=Path, default="config.yaml", help="Path to config.")
     args = parser.parse_args()
-
     try:
         load_config(args.config)
-        config = get_config()
-        db_path = config.get('database', {}).get('path', 'master_state.db')
-        output_path = config.get('extraction_workflow', {}).get('output_file', 'output/structured_events.jsonl')
-        
-        output_file = Path(output_path)
-        output_file.parent.mkdir(exist_ok=True)
-
-        db_manager = DatabaseManager(db_path)
-        
-        run_extraction(db_manager, output_file)
-
-    except FileNotFoundError as e:
-        print(f"Error: {e}")
+        run_extraction_workflow()
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-        traceback.print_exc()
+        print(f"An error occurred: {e}")
 
 if __name__ == "__main__":
     main()

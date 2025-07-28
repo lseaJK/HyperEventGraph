@@ -1,61 +1,52 @@
-# HyperEventGraph Project Configuration
+# config.yaml
+# This file centralizes all system configurations for the HyperEventGraph project.
 
-# --- Path Settings ---
-# Centralized path management to ensure consistency across all scripts.
-paths:
-  # Source data before any processing
-  raw_data_input: "IC_data/filtered_data.json"
-  
-  # Main database for tracking the state of each data point
-  master_state_db: "database/master_state.db"
-  
-  # Directory for all script outputs
-  output_dir: "output"
-  
-  # Directory for storing generated schemas or other learned artifacts
-  learning_artifacts: "learning"
-  
-  # Location of the event schema definitions
-  schema_registry: "src/event_extraction/schemas.py"
-
-# --- Processing Settings ---
-# Parameters controlling how data is processed in batches.
-processing:
-  # Number of items to process in a single run of a batch script
-  batch_size: 200
-  
-  # Maximum number of items to process in the learning workflow
-  learning_batch_size: 50
-
-# --- Model Settings ---
-# Configuration for the Large Language Models used in different agents.
-models:
-  # Model for the initial triage phase (fast and cheap)
-  triage_model: "moonshot-v1-8k"
-  
-  # Model for the more complex extraction and analysis tasks
-  extraction_model: "moonshot-v1-32k"
-  
-  # Model used by the SchemaLearnerAgent for pattern induction
-  learning_model: "moonshot-v1-128k"
-  
-  # API endpoint configuration
-  api_base_url: "https://api.siliconflow.cn/v1"
-
-# --- Logging Settings ---
-# Controls the verbosity of logs across the application.
-logging:
-  # Log level (e.g., DEBUG, INFO, WARNING, ERROR)
-  level: "INFO"
-  
-  # Path to the main log file
-  log_file: "logs/app.log"
-
-# --- Database Settings ---
-# Configuration for the master state database.
+# --- Database Configuration ---
 database:
-  # Type of the database (currently only sqlite is supported)
-  type: "sqlite"
-  
-  # Timeout for database connections in seconds
-  timeout: 10
+  path: "master_state.db"
+
+# --- LLM Provider and Model Routing Configuration ---
+# The system uses a unified LLM client that routes tasks to different models
+# based on this configuration. API keys should preferably be set as environment
+# variables (e.g., DEEPSEEK_API_KEY, MOONSHOT_API_KEY) for security.
+llm:
+  providers:
+    deepseek:
+      base_url: "https://api.deepseek.com/v1"
+      # API key can be set here directly or via the DEEPSEEK_API_KEY env var.
+      # api_key: "sk-your-deepseek-key"
+    kimi:
+      base_url: "https://api.moonshot.cn/v1"
+      # API key can be set here directly or via the MOONSHOT_API_KEY env var.
+      # api_key: "sk-your-moonshot-key"
+
+  models:
+    # Model to use for the initial triage of raw text.
+    triage:
+      provider: "kimi"
+      name: "moonshot-v1-8k"
+
+    # Model to use for generating a new JSON schema from text samples.
+    schema_generation:
+      provider: "kimi"
+      name: "moonshot-v1-128k"
+
+    # Model to use for extracting structured data based on a schema.
+    extraction:
+      provider: "deepseek"
+      name: "deepseek-coder"
+
+# --- Workflow Specific Configurations ---
+review_workflow:
+  # Path for the CSV file generated for human review.
+  review_csv: "output/review/review_sheet.csv"
+
+learning_workflow:
+  # Path to the central JSON file where learned schemas are stored.
+  schema_registry_path: "output/schemas/event_schemas.json"
+  # Distance threshold for clustering similar texts. Lower is stricter.
+  cluster_distance_threshold: 1.4
+
+extraction_workflow:
+  # Path for the final output file containing structured event data.
+  output_file: "output/extraction/structured_events.jsonl"
