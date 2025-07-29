@@ -74,17 +74,25 @@ class LLMClient:
 
         print(f"Routing task '{task_type}' to provider '{provider}' using model '{model_name}'...")
 
+        # Prepare the parameters for the API call
+        api_params = {
+            "model": model_name,
+            "messages": [
+                {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
+                {"role": "user", "content": prompt}
+            ]
+        }
+
+        # Add optional parameters from config if they exist
+        optional_params = ["temperature", "top_p", "max_tokens", "frequency_penalty", "presence_penalty"]
+        for param in optional_params:
+            if param in model_route:
+                api_params[param] = model_route[param]
+
         try:
             client = self._get_client_for_provider(provider)
             
-            response = await client.chat.completions.create(
-                model=model_name,
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
-                    {"role": "user", "content": prompt}
-                ]
-                # response_format={"type": "json_object"} # Removed as it's not supported by all providers
-            )
+            response = await client.chat.completions.create(**api_params)
             return response.choices[0].message.content
             
         except APIError as e:

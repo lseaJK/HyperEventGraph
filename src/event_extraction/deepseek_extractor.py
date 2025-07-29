@@ -22,20 +22,31 @@ class DeepSeekEventExtractor(BaseEventExtractor):
     使用DeepSeek模型进行事件抽取的具体实现。
     """
     
-    def __init__(self, config: Optional[DeepSeekConfig] = None):
+    def __init__(self):
         """
-        初始化DeepSeek事件抽取器。
-        
-        Args:
-            config (Optional[DeepSeekConfig]): DeepSeek配置。如果为None，则加载默认配置。
+        Initializes the DeepSeekEventExtractor by loading configuration
+        directly from the central config.yaml file.
         """
-        self.config = config or get_config("default")
-        # <--- 修复：使用 AsyncOpenAI 客户端并传入 base_url
-        self.client = AsyncOpenAI(api_key=self.config.api_key, base_url=self.config.base_url)
+        central_config = get_config()
+        self.model_route = central_config.get('llm', {}).get('models', {}).get('extraction')
+        if not self.model_route:
+            raise ValueError("Extraction model configuration not found in config.yaml under llm.models.extraction")
+
+        provider_name = self.model_route['provider']
+        provider_config = central_config.get('llm', {}).get('providers', {}).get(provider_name)
+        if not provider_config:
+            raise ValueError(f"Provider configuration for '{provider_name}' not found in config.yaml")
+
+        api_key_env_var = f"{provider_name.upper()}_API_KEY"
+        api_key = os.getenv(api_key_env_var)
+        if not api_key:
+            raise ValueError(f"API key not found. Please set the {api_key_env_var} environment variable.")
+
+        self.client = AsyncOpenAI(api_key=api_key, base_url=provider_config['base_url'])
         self.template_generator = PromptTemplateGenerator()
         self.json_parser = JsonParser()
         
-        logger.info(f"DeepSeekEventExtractor 初始化完成，模型: {self.config.model_name}")
+        logger.info(f"DeepSeekEventExtractor initialized to use model '{self.model_route['name']}' from provider '{provider_name}'.")
 
     async def extract(
         self,
@@ -44,58 +55,44 @@ class DeepSeekEventExtractor(BaseEventExtractor):
         metadata: Optional[Dict[str, Any]] = None
     ) -> Optional[BaseEvent]:
         """
-        从文本中抽取单个结构化事件。
-
-        Args:
-            text (str): 输入文本。
-            event_model (Type[BaseEvent]): 目标事件的Pydantic模型。
-            metadata (Optional[Dict[str, Any]]): 附加元数据。
-
-        Returns:
-            一个Pydantic事件模型实例，如果抽取失败则返回None。
+        Extracts a single structured event from text.
         """
-        # 1. 生成JSON Schema和Prompt
         json_schema = event_model.schema()
-        prompt = self.template_generator.generate_prompt(
-            text=text,
-            event_schema=json_schema
-        )
+        prompt = self.template_generator.generate_prompt(text=text, event_schema=json_schema)
         
-        # 2. 调用 API
+        api_params = {
+            "model": self.model_route['name'],
+            "messages": [{"role": "user", "content": prompt}]
+        }
+
+        optional_params = ["temperature", "top_p", "max_tokens"]
+        for param in optional_params:
+            if param in self.model_route:
+                api_params[param] = self.model_route[param]
+        
         try:
-            response = await self.client.chat.completions.create(
-                model=self.config.model_name,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-                # response_format={"type": "json_object"}, # Removed for broader provider compatibility
-            )
-            
+            response = await self.client.chat.completions.create(**api_params)
             content = response.choices[0].message.content
             
-            # 3. 解析JSON结果
             parse_result = self.json_parser.parse(content, expected_schema=json_schema)
             
             if not parse_result.success:
-                logger.warning(f"LLM返回的JSON为空或解析失败: {parse_result.error_message}")
+                logger.warning(f"LLM returned JSON that failed parsing: {parse_result.error_message}")
                 return None
 
             extracted_data = parse_result.data
 
-            # 4. 使用Pydantic模型进行验证和实例化
             if metadata:
-                for key, value in metadata.items():
-                    if key in event_model.__fields__:
-                        extracted_data[key] = value
+                extracted_data.update(metadata)
             
             event_instance = event_model(**extracted_data)
             return event_instance
 
         except ValidationError as e:
-            logger.error(f"Pydantic验证失败: {e.errors()}")
+            logger.error(f"Pydantic validation failed: {e.errors()}")
             return None
         except Exception as e:
-            logger.error(f"调用API或处理响应时出错: {e}", exc_info=True)
+            logger.error(f"Error during API call or processing: {e}", exc_info=True)
             return None
 
     def get_supported_event_types(self) -> List[str]:
