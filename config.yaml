@@ -27,15 +27,15 @@ llm:
     schema_generation:
       provider: "siliconflow"
       name: "deepseek-ai/DeepSeek-R1"
-      temperature:0.6
-      top_p:0.8
+      temperature: 0.6
+      top_p: 0.8
 
     # Model for extraction: strong instruction-following and JSON capabilities.
     extraction:
       provider: "siliconflow"
       name: "deepseek-ai/DeepSeek-R1"
-      temperature:0.3
-      top_p:0.8
+      temperature: 0.3
+      top_p: 0.8
       max_tokens: 10000
 
 # --- Workflow Specific Configurations ---
