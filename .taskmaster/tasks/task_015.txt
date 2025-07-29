@@ -1,0 +1,11 @@
+# Task ID: 15
+# Title: Task #4: 实施第三阶段 - 开发增强型交互式学习工作流
+# Status: done
+# Dependencies: 14
+# Priority: high
+# Description: 开发`run_learning_workflow.py`。它必须：1. 从数据库查询待学习数据。2. 实现更丰富的交互指令(如`show_samples`, `merge_clusters`)。3. 在学会新Schema后，将`event_schemas.json`更新，并把对应数据的状态在数据库中重置为`pending_triage`，以闭合知识循环。
+# Details:
+
+
+# Test Strategy:
+

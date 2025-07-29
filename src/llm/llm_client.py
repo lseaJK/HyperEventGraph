@@ -42,26 +42,18 @@ class LLMClient:
         if provider in self.provider_clients:
             return self.provider_clients[provider]
 
-        provider_config = self.config.get('providers', {}).get(provider)
-        if not provider_config or 'base_url' not in provider_config:
-            raise ValueError(f"Configuration for provider '{provider}' is missing 'base_url'.")
-
-        # Since all providers now use the same API endpoint and key,
-        # we hardcode the environment variable to look for.
-        env_var_name = "SILICON_API_KEY"
-        api_key = os.environ.get(env_var_name)
-
+        provider_config = self.config['providers'][provider_name]
+        api_key_env_var = f"{provider_name.upper()}_API_KEY"
+        
+        api_key = os.getenv(api_key_env_var, provider_config.get('api_key'))
         if not api_key:
-            # Fallback to provider-specific key for backward compatibility, though not expected.
-            provider_specific_env_var = f"{provider.upper()}_API_KEY"
-            api_key = os.environ.get(provider_specific_env_var) or provider_config.get('api_key')
-
-        if not api_key:
-            raise ValueError(f"API key for '{provider}' not found. Set {env_var_name} or add it to config.yaml.")
-
-        client = OpenAI(api_key=api_key, base_url=provider_config['base_url'])
-        self.provider_clients[provider] = client
-        return client
+            raise ValueError(f"API key for provider '{provider_name}' not found. "
+                             f"Please set the {api_key_env_var} environment variable.")
+        
+        self.client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=provider_config['base_url']
+        )
 
     def get_json_response(self, prompt: str, task_type: TaskType) -> Dict[str, Any] | None:
         """

@@ -1,0 +1,11 @@
+# Task ID: 16
+# Title: Task #5: 实施第四阶段 - 开发批量抽取工作流
+# Status: done
+# Dependencies: 14
+# Priority: medium
+# Description: 开发`run_extraction_workflow.py`。它从`master_state.db`查询状态为`pending_extraction`的数据，进行批量抽取，并将最终的结构化数据存入指定位置，同时在数据库中将任务状态更新为`completed`。
+# Details:
+
+
+# Test Strategy:
+

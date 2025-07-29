@@ -7,34 +7,28 @@ database:
 
 # --- LLM Provider and Model Routing Configuration ---
 # The system uses a unified LLM client that routes tasks to different models
-# based on this configuration. API keys should preferably be set as environment
-# variables (e.g., DEEPSEEK_API_KEY, MOONSHOT_API_KEY) for security.
+# based on this configuration. API keys should be set as environment variables.
 llm:
   providers:
-    deepseek:
-      base_url: "https://api.deepseek.com/v1"
-      # API key can be set here directly or via the DEEPSEEK_API_KEY env var.
-      # api_key: "sk-your-deepseek-key"
-    kimi:
-      base_url: "https://api.moonshot.cn/v1"
-      # API key can be set here directly or via the MOONSHOT_API_KEY env var.
-      # api_key: "sk-your-moonshot-key"
+    siliconflow:
+      base_url: "https://api.siliconflow.cn/v1"
+      # API key is read from the SILICON_API_KEY environment variable.
 
   models:
-    # Model to use for the initial triage of raw text.
+    # Model for initial triage: fast and cost-effective.
     triage:
-      provider: "kimi"
-      name: "moonshot-v1-8k"
+      provider: "siliconflow"
+      name: "zai-org/GLM-4.5-Air"
 
-    # Model to use for generating a new JSON schema from text samples.
+    # Model for schema generation: powerful, large context.
     schema_generation:
-      provider: "kimi"
-      name: "moonshot-v1-128k"
+      provider: "siliconflow"
+      name: "zai-org/GLM-4.5"
 
-    # Model to use for extracting structured data based on a schema.
+    # Model for extraction: strong instruction-following and JSON capabilities.
     extraction:
-      provider: "deepseek"
-      name: "deepseek-coder"
+      provider: "siliconflow"
+      name: "zai-org/GLM-4.5"
 
 # --- Workflow Specific Configurations ---
 review_workflow:

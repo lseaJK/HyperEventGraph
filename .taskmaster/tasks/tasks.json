@@ -398,11 +398,34 @@
         ],
         "priority": "medium",
         "subtasks": []
+      },
+      {
+        "id": 17,
+        "title": "系统优化与文档完善",
+        "description": "对系统进行持续优化，并创建和维护关键技术文档，以提高项目的可维护性和可理解性。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          16
+        ],
+        "priority": "medium",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "创建Prompt调优指南",
+            "description": "创建 PROMPT_TUNING_GUIDE.md 文件，详细说明所有LLM调用场景、目标、提示词和预期输出，为模型优化和选型提供依据。",
+            "details": "",
+            "status": "review",
+            "dependencies": [],
+            "parentTaskId": 17
+          }
+        ]
       }
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-28T13:22:39.627Z",
+      "updated": "2025-07-29T14:48:49.957Z",
       "description": "Tasks for master context"
     }
   }

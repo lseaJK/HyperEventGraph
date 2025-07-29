@@ -1,0 +1,11 @@
+# Task ID: 12
+# Title: Task #1: 奠定基石 - 建立中央状态库与配置文件
+# Status: done
+# Dependencies: None
+# Priority: medium
+# Description: 1. 设计并创建`master_state.db` (SQLite)，用于追踪每个数据点的生命周期状态。2. 创建唯一的`config.yaml`中央配置文件，管理所有路径、批次大小、模型名称等参数。3. 开发一个所有其他脚本都将引用的配置加载模块。
+# Details:
+
+
+# Test Strategy:
+

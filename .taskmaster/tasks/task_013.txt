@@ -1,0 +1,11 @@
+# Task ID: 13
+# Title: Task #2: 实施第一阶段 - 开发与状态库集成的批量初筛工作流
+# Status: done
+# Dependencies: 12
+# Priority: high
+# Description: 开发`run_batch_triage.py`。它必须：1. 从`config.yaml`读取配置。2. 从`master_state.db`查询状态为`pending_triage`的数据。3. 在分类时引入置信度分数。4. 将分类结果和置信度写回`master_state.db`，并更新状态为`pending_review`。
+# Details:
+
+
+# Test Strategy:
+

@@ -1,0 +1,11 @@
+# Task ID: 10
+# Title: Task #3: 知识增长引擎 - 交互式学习
+# Status: done
+# Dependencies: 9
+# Priority: high
+# Description: 开发 run_learning_workflow.py。该脚本读取 final_unknown_events.jsonl，通过人机交互指导 SchemaLearnerAgent 完成学习，并将新学会的Schema更新到核心的 event_schemas.json 文件中，为系统的下一次迭代提供增长。
+# Details:
+
+
+# Test Strategy:
+

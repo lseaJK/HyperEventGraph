@@ -1,0 +1,11 @@
+# Task ID: 8
+# Title: Task #1: 稳健的批量初筛
+# Status: done
+# Dependencies: None
+# Priority: high
+# Description: 开发 run_batch_triage.py。核心要求：1. 实现批处理和检查点机制。2. 必须动态加载最新的事件Schema来执行分类。3. 输出单一的、待审核的 triage_pending_review.jsonl 文件。
+# Details:
+
+
+# Test Strategy:
+

@@ -1,0 +1,19 @@
+# Task ID: 17
+# Title: 系统优化与文档完善
+# Status: pending
+# Dependencies: 16
+# Priority: medium
+# Description: 对系统进行持续优化，并创建和维护关键技术文档，以提高项目的可维护性和可理解性。
+# Details:
+
+
+# Test Strategy:
+
+
+# Subtasks:
+## 1. 创建Prompt调优指南 [review]
+### Dependencies: None
+### Description: 创建 PROMPT_TUNING_GUIDE.md 文件，详细说明所有LLM调用场景、目标、提示词和预期输出，为模型优化和选型提供依据。
+### Details:
+
+
