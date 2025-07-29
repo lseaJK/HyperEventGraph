@@ -1,42 +1,25 @@
 # run_prompt_tuning_examples.py
 """
-This script generates concrete examples for each of the three core LLM-driven
-tasks in the HyperEventGraph system: Triage, Schema Generation, and Extraction.
+A self-contained and reliable script to generate concrete examples for each of the 
+three core LLM-driven tasks: Triage, Schema Generation, and Event Extraction.
 
-It is designed to be run after the system has been configured to use a new
-LLM provider, allowing developers to see the exact prompts and the model's
-raw JSON output for tuning and evaluation purposes.
+This script directly implements the prompt templating logic and uses real data
+to produce authentic prompts for tuning and evaluation.
 """
 import asyncio
 import json
 from pathlib import Path
 import sys
+import random
 
 # Add project root to sys.path
 project_root = Path(__file__).resolve().parent
 sys.path.insert(0, str(project_root))
 
-from src.core.config_loader import load_config, get_config
+from src.core.config_loader import load_config
 from src.llm.llm_client import LLMClient
-from src.agents.toolkits.schema_learning_toolkit import SchemaLearningToolkit
-from src.event_extraction.deepseek_extractor import DeepSeekEventExtractor
-from src.event_extraction.schemas import get_event_model, EVENT_SCHEMA_REGISTRY
-
-# --- Sample Data for Each Scenario ---
-
-TRIAGE_TEXT = "《科创板日报》24日讯，晶圆代工业下半年展望黯淡，IC设计业者透露，目前除了台积电仍坚守价格之外，其他晶圆代工厂都已有不同程度与形式降价。"
-
-SCHEMA_GEN_SAMPLES = [
-    "财联社7月21日电，AMD董事长兼CEO苏姿丰今日表示，除了台积电，AMD还将考虑由其他代工厂商来生产AMD设计的芯片，以确保供应链的弹性。",
-    "《科创板日报》20日讯，据韩媒报道，有业内人士透露，三星电子将为特斯拉HW 5.0生产新一代FSD芯片。该芯片将采用三星4nm工艺制程。",
-    "《科创板日报》13日讯，IBM总经理卡勒受访表示，旗下新一代企业级AI数据平台“Watson”系统将采用自研AI芯片，并交由三星代工。"
-]
-
-EXTRACTION_TEXT = "财联社7月17日电，中芯国际(00981.HK)发布公告，高永岗因工作调整，辞任公司董事长、执行董事及董事会提名委员会主席职务；公司副董事长刘训峰博士获委任为公司董事长。"
-EXTRACTION_SCHEMA_NAME = "Company:ExecutiveChange"
 
 # --- Helper to print formatted sections ---
-
 def print_section(title, prompt, result):
     print("\n" + "="*80)
     print(f"🎬 SCENARIO: {title}")
@@ -52,13 +35,13 @@ def print_section(title, prompt, result):
         print(result if result else "None")
     print("\n" + "="*80)
 
-async def run_triage_example(llm_client: LLMClient):
-    """Generates an example for the Triage task."""
-    # This simulates the TriageAgent's core logic
-    event_types_str = "\n- ".join(list(EVENT_SCHEMA_REGISTRY.keys()))
+# --- Prompt Generation Logic (copied and adapted from source code) ---
+
+def get_triage_prompt(text_sample: str, event_types: list) -> str:
+    event_types_str = "\n- ".join(event_types)
     domains_str = "\n- ".join(["financial", "circuit", "general"]) # Example domains
     
-    prompt = f"""
+    return f"""
 You are a Triage Agent responsible for classifying event types and their domains.
 
 CRITICAL INSTRUCTIONS:
@@ -84,60 +67,115 @@ Here are the event types you can recognize:
 Analyze the provided text, determine the most appropriate domain and event type, and then output ONLY the JSON classification.
 
 --- TEXT TO ANALYZE ---
-{TRIAGE_TEXT}
+{text_sample}
 """
-    result = await llm_client.get_raw_response(prompt, task_type="triage")
-    print_section("1. Batch Triage", prompt, result)
 
-async def run_schema_gen_example(llm_client: LLMClient):
-    """Generates an example for the Schema Generation task."""
-    # This simulates the SchemaLearningToolkit's core logic
-    toolkit = SchemaLearningToolkit(db_path=":memory:") # Use in-memory to avoid real DB dependency
-    prompt = toolkit._build_schema_generation_prompt(SCHEMA_GEN_SAMPLES)
+def get_schema_gen_prompt(text_samples: list) -> str:
+    sample_block = "\n".join([f"- \"{s}\"" for s in text_samples])
+    return f"""
+You are an expert data architect. Your task is to analyze text samples describing a specific event type and create a concise JSON schema.
+
+**Instructions:**
+1.  **Analyze Samples:** Understand the common theme.
+2.  **Create Schema:** Generate a JSON object with "schema_name", "description", and "properties".
+    -   `schema_name`: PascalCase:PascalCase format (e.g., "Company:ProductLaunch").
+    -   `description`: A one-sentence explanation.
+    -   `properties`: A dictionary of snake_case keys with brief descriptions.
+3.  **Output:** Your entire output must be a single, valid JSON object.
+
+**Text Samples:**
+{sample_block}
+
+**Example Output:**
+{{
+  "schema_name": "Company:LeadershipChange",
+  "description": "Describes the appointment or departure of a key executive.",
+  "properties": {{
+    "company": "The company involved.",
+    "executive_name": "The name of the executive.",
+    "new_role": "The new position or title."
+  }}
+}}
+"""
+
+def get_extraction_prompt(text_sample: str, event_schema: dict) -> str:
+    event_title = event_schema.get("title", "未知事件")
+    event_description = event_schema.get("description", "无描述")
     
-    result = await llm_client.get_raw_response(prompt, task_type="schema_generation")
-    print_section("2. Schema Generation", prompt, result)
+    return f"""
+You are an expert information extraction AI.
+Your task is to extract structured data from the provided text based on the given JSON schema.
 
-async def run_extraction_example():
-    """Generates an example for the Event Extraction task."""
-    # This simulates the DeepSeekEventExtractor's core logic
-    extractor = DeepSeekEventExtractor()
-    EventModel = get_event_model(EXTRACTION_SCHEMA_NAME)
-    
-    if not EventModel:
-        print(f"Could not find schema for '{EXTRACTION_SCHEMA_NAME}'")
-        return
+**CRITICAL INSTRUCTIONS:**
+1.  Your output MUST be a single, valid JSON object that strictly conforms to the provided schema.
+2.  Do NOT include any text or explanation before or after the JSON object.
+3.  If a piece of information is not present in the text, omit the corresponding key or set its value to null.
 
-    json_schema = EventModel.schema()
-    prompt = extractor.template_generator.generate_prompt(
-        text=EXTRACTION_TEXT,
-        event_schema=json_schema
-    )
-    
-    # We call the client directly to get the raw response for inspection
-    result = await extractor.client.chat.completions.create(
-        model=extractor.config.model_name,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=extractor.config.temperature,
-        max_tokens=extractor.config.max_tokens,
-        response_format={"type": "json_object"},
-    )
-    content = result.choices[0].message.content
-    print_section("3. Event Extraction", prompt, content)
+**JSON Schema to follow:**
+```json
+{json.dumps(event_schema, indent=2, ensure_ascii=False)}
+```
 
+**Text to analyze:**
+---
+{text_sample}
+---
+
+**Your JSON Output:**
+"""
 
 async def main():
     """Main function to run all examples."""
     print("Loading configuration from config.yaml...")
     load_config("config.yaml")
     
-    # A single LLM client is used, which routes to the correct model via task_type
+    print("Loading data from IC_data/filtered_data.json...")
+    data_file = project_root / "IC_data" / "filtered_data.json"
+    with open(data_file, 'r', encoding='utf-8') as f:
+        all_texts = json.load(f)
+
+    print("Loading schemas from output/schemas/event_schemas.json...")
+    schema_file = project_root / "output" / "schemas" / "event_schemas.json"
+    if schema_file.exists():
+        with open(schema_file, 'r', encoding='utf-8') as f:
+            all_schemas = json.load(f)
+    else:
+        print("Warning: Schema file not found. Using fallback schemas for examples.")
+        all_schemas = {
+            "Company:ExecutiveChange": {
+                "title": "Company:ExecutiveChange", "description": "...",
+                "properties": {"company": {}, "departing_executive": {}, "new_executive": {}, "role": {}}
+            }
+        }
+
     llm_client = LLMClient()
 
-    await run_triage_example(llm_client)
-    await run_schema_gen_example(llm_client)
-    await run_extraction_example()
+    # --- Scenario 1: Triage ---
+    triage_sample = random.choice(all_texts)
+    triage_prompt = get_triage_prompt(triage_sample, list(all_schemas.keys()))
+    triage_result = await llm_client.get_raw_response(triage_prompt, task_type="triage")
+    print_section("1. Batch Triage", triage_prompt, triage_result)
+
+    # --- Scenario 2: Schema Generation ---
+    schema_gen_samples = random.sample(all_texts, 3)
+    schema_gen_prompt = get_schema_gen_prompt(schema_gen_samples)
+    schema_gen_result = await llm_client.get_raw_response(schema_gen_prompt, task_type="schema_generation")
+    print_section("2. Schema Generation", schema_gen_prompt, schema_gen_result)
+
+    # --- Scenario 3: Event Extraction ---
+    extraction_schema_name = "Company:ExecutiveChange"
+    extraction_schema = all_schemas.get(extraction_schema_name)
+    if not extraction_schema:
+        extraction_schema_name = list(all_schemas.keys())[0]
+        extraction_schema = all_schemas[extraction_schema_name]
+        
+    # Find a relevant text for the chosen schema
+    extraction_sample = next((text for text in all_texts if "辞任" in text or "董事长" in text or "CEO" in text), random.choice(all_texts))
     
+    extraction_prompt = get_extraction_prompt(extraction_sample, extraction_schema)
+    extraction_result = await llm_client.get_raw_response(extraction_prompt, task_type="extraction")
+    print_section(f"3. Event Extraction (Schema: {extraction_schema_name})", extraction_prompt, extraction_result)
+
     print("\n✅ All examples generated. Please review the prompts and responses for tuning.")
 
 if __name__ == "__main__":

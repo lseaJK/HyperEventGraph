@@ -68,7 +68,7 @@ class DeepSeekEventExtractor(BaseEventExtractor):
                 messages=[{"role": "user", "content": prompt}],
                 temperature=self.config.temperature,
                 max_tokens=self.config.max_tokens,
-                response_format={"type": "json_object"},
+                # response_format={"type": "json_object"}, # Removed for broader provider compatibility
             )
             
             content = response.choices[0].message.content

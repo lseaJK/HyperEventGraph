@@ -7,7 +7,7 @@ and routes requests to the appropriate model based on the task type defined in c
 
 import os
 import json
-from openai import OpenAI, APIError
+from openai import AsyncOpenAI, APIError
 from typing import Dict, Any, Literal
 
 # Add project root to sys.path
@@ -32,39 +32,35 @@ class LLMClient:
         if not self.config or 'providers' not in self.config or 'models' not in self.config:
             raise ValueError("LLM configuration is missing or incomplete in config.yaml.")
         
-        self.provider_clients: Dict[str, OpenAI] = {}
+        self.provider_clients: Dict[str, AsyncOpenAI] = {}
 
-    def _get_client_for_provider(self, provider: str) -> OpenAI:
+    def _get_client_for_provider(self, provider: str) -> AsyncOpenAI:
         """
-        Lazily initializes and returns an OpenAI-compatible client for a given provider.
+        Lazily initializes and returns an AsyncOpenAI client for a given provider.
         API keys are sourced from environment variables first, then the config file.
         """
         if provider in self.provider_clients:
             return self.provider_clients[provider]
 
-        provider_config = self.config['providers'][provider_name]
-        api_key_env_var = f"{provider_name.upper()}_API_KEY"
+        provider_config = self.config['providers'][provider]
+        api_key_env_var = f"{provider.upper()}_API_KEY"
         
         api_key = os.getenv(api_key_env_var, provider_config.get('api_key'))
         if not api_key:
-            raise ValueError(f"API key for provider '{provider_name}' not found. "
+            raise ValueError(f"API key for provider '{provider}' not found. "
                              f"Please set the {api_key_env_var} environment variable.")
         
-        self.client = AsyncOpenAI(
+        client = AsyncOpenAI(
             api_key=api_key,
             base_url=provider_config['base_url']
         )
+        self.provider_clients[provider] = client
+        return client
 
-    def get_json_response(self, prompt: str, task_type: TaskType) -> Dict[str, Any] | None:
+    async def get_raw_response(self, prompt: str, task_type: TaskType) -> str | None:
         """
-        Sends a prompt to the appropriate LLM based on the task type and requests a JSON response.
-
-        Args:
-            prompt: The prompt to send to the model.
-            task_type: The type of task, which determines which model and provider to use.
-
-        Returns:
-            A dictionary parsed from the LLM's JSON response, or None on error.
+        Sends a prompt and returns the raw string response from the LLM.
+        This is useful for debugging and prompt tuning.
         """
         model_route = self.config.get('models', {}).get(task_type)
         if not model_route:
@@ -81,61 +77,36 @@ class LLMClient:
         try:
             client = self._get_client_for_provider(provider)
             
-            response = client.chat.completions.create(
+            response = await client.chat.completions.create(
                 model=model_name,
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
                     {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"}
+                ]
+                # response_format={"type": "json_object"} # Removed as it's not supported by all providers
             )
-            response_content = response.choices[0].message.content
-            return json.loads(response_content)
+            return response.choices[0].message.content
             
         except APIError as e:
             print(f"An API error occurred with provider '{provider}': {e}")
             return None
-        except json.JSONDecodeError as e:
-            print(f"Failed to decode JSON from LLM response: {e}")
-            print(f"Raw response: {response_content}")
-            return None
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
-if __name__ == '__main__':
-    # Example Usage - requires a config file and API keys set as environment variables
-    from src.core.config_loader import load_config
-    
-    # Ensure a valid config.yaml exists for this test to run
-    if not Path("config.yaml").exists():
-        print("ERROR: config.yaml not found. Please create one based on the new architecture.")
-    else:
-        try:
-            load_config("config.yaml")
+    async def get_json_response(self, prompt: str, task_type: TaskType) -> Dict[str, Any] | None:
+        """
+        Sends a prompt and returns a parsed JSON dictionary.
+        """
+        raw_response = await self.get_raw_response(prompt, task_type)
+        if not raw_response:
+            return None
             
-            # Make sure to set your DEEPSEEK_API_KEY and MOONSHOT_API_KEY env vars
-            if not os.environ.get("DEEPSEEK_API_KEY") or not os.environ.get("MOONSHOT_API_KEY"):
-                print("\nWARNING: DEEPSEEK_API_KEY or MOONSHOT_API_KEY not set. Skipping live tests.")
-            else:
-                print("Running live tests with the new LLMClient...")
-                client = LLMClient()
-
-                # Test extraction task (routes to DeepSeek)
-                print("\n--- Testing Extraction Task ---")
-                extraction_prompt = "Extract the company and product from the text: 'Apple announced the new Vision Pro.'"
-                extraction_response = client.get_json_response(extraction_prompt, task_type="extraction")
-                print("Response:", json.dumps(extraction_response, indent=2))
-                assert isinstance(extraction_response, dict)
-
-                # Test schema generation task (routes to Kimi)
-                print("\n--- Testing Schema Generation Task ---")
-                schema_prompt = "Generate a simple JSON schema for a 'Product Launch' event."
-                schema_response = client.get_json_response(schema_prompt, task_type="schema_generation")
-                print("Response:", json.dumps(schema_response, indent=2))
-                assert isinstance(schema_response, dict)
-                
-                print("\nLive tests successful!")
-
-        except (ValueError, NotImplementedError) as e:
-            print(f"Test setup failed: {e}")
+        try:
+            return json.loads(raw_response)
+        except json.JSONDecodeError as e:
+            print(f"Failed to decode JSON from LLM response: {e}")
+            print(f"Raw response: {raw_response}")
+            return None
