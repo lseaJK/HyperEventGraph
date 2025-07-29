@@ -9,7 +9,10 @@
 请确保您已经完成了以下步骤：
 1.  成功安装所有在 `requirements.txt` 中定义的依赖。
 2.  在您的运行环境中正确设置了所需的大模型API密钥（例如 `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY`）。
-3.  项目的中央数据库 `master_state.db` 中已经包含了处于 `pending_triage` 状态的初始数据。
+3.  **（首次实验）注入初始数据**：如果您是第一次运行实验或希望从一个干净的数据库开始，请先运行以下脚本。它会读取 `IC_data/filtered_data.json` 的内容，并将其存入数据库，状态均为 `pending_triage`。
+    ```bash
+    python temp_seed_data.py
+    ```
 
 ---
 
