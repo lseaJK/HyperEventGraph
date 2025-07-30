@@ -528,11 +528,22 @@
             "parentTaskId": 21
           }
         ]
+      },
+      {
+        "id": 22,
+        "title": "优化抽取Prompt以捕获结构化定量数据",
+        "description": "当前抽取流程无法将description中包含的金额、百分比、日期等信息有效提取到结构化的`quantitative_data`字段中。此任务的目标是：1. 分析`prompts/extraction.md`和相关抽取器代码，定位问题根源。2. 修改并优化Prompt，使其能够准确解析并填充`quantitative_data`字段。3. 通过小批量数据验证修复效果。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [],
+        "priority": "high",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-30T12:37:57.921Z",
+      "updated": "2025-07-30T14:59:17.185Z",
       "description": "Tasks for master context"
     }
   }

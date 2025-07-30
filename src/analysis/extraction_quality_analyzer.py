@@ -26,25 +26,21 @@ def load_data(file_path):
     return data
 
 def analyze_completeness(df):
-    """分析数据完整性"""
     report = ["### 1. 数据完整性校验"]
-    total_records = len(df)
-    report.append(f"- 总记录数: {total_records}")
-    
-    missing_info = df.isnull().sum()
-    report.append("- ��字段缺失数量:")
-    for column, missing_count in missing_info.items():
-        if missing_count > 0:
-            percentage = (missing_count / total_records) * 100
-            report.append(f"  - `{column}`: {missing_count} ({percentage:.2f}%)")
-    
-    # 检查entities字段内部是否为空列表
-    empty_entities = df['entities'].apply(lambda x: isinstance(x, list) and not x).sum()
-    if empty_entities > 0:
-        percentage = (empty_entities / total_records) * 100
-        report.append(f"  - `entities`字段为空列表: {empty_entities} ({percentage:.2f}%)")
-        
-    report.append("\n")
+    total = len(df)
+    report.append(f"- 总记录数: {total}")
+
+    # 缺失值
+    missing = df.isnull().sum()
+    for col, cnt in missing.items():
+        if cnt:
+            report.append(f"  - `{col}`: {cnt} ({cnt/total*100:.2f}%)")
+
+    # 空列表
+    empty = df['involved_entities'].apply(lambda x: isinstance(x, list) and len(x) == 0).sum()
+    if empty:
+        report.append(f"  - `involved_entities` 为空列表: {empty} ({empty/total*100:.2f}%)")
+    report.append("")
     return report
 
 def analyze_event_type_distribution(df):
@@ -57,59 +53,76 @@ def analyze_event_type_distribution(df):
     report.append("\n")
     return report
 
+
+
 def analyze_entities(df):
-    """分析实体"""
     report = ["### 3. 核心实体分析"]
-    all_entities = []
-    # 确保entities列中的每个元素都是列表
-    entities_series = df['entities'].apply(lambda x: x if isinstance(x, list) else [])
-    
-    for entity_list in entities_series:
-        for entity in entity_list:
-            # 兼容两种可能的实体格式
-            if isinstance(entity, dict) and 'name' in entity:
-                all_entities.append(entity['name'])
-            elif isinstance(entity, str):
-                all_entities.append(entity)
-
-    if not all_entities:
-        report.append("- 数据中未发现实体。\n")
-        return report
-
-    entity_counts = Counter(all_entities)
-    report.append("- Top 50 高频实体:")
-    for entity, count in entity_counts.most_common(50):
-        report.append(f"  - `{entity}`: {count}")
-    report.append("\n")
+    entities, bad = [], 0
+    for lst in df['involved_entities'].dropna():
+        for ent in lst:
+            if isinstance(ent, dict) and ent.get("entity_name"):
+                entities.append(ent["entity_name"].strip())
+            else:
+                bad += 1
+    if bad:
+        report.append(f"- 异常实体格式: {bad}")
+    if not entities:
+        report.append("- 无有效实体")
+    else:
+        report.extend([f"  - `{e}`: {c}" for e, c in Counter(entities).most_common(50)])
+    report.append("")
     return report
 
 def analyze_quantitative_data(df):
-    """探查定量数据"""
+    """探查定量数据：字段缺失 vs description 富文本"""
     report = ["### 4. 定量数据探查"]
-    
-    # 正则表达式模式
+
+    # 1) 原始 quantitative_data 缺失情况
+    total = len(df)
+    q_null = df['quantitative_data'].isnull().sum()
+    report.append(f"- `quantitative_data` 字段缺失: {q_null} ({q_null/total*100:.2f}%)")
+
+    # 2) 正则模式（与原来保持一致）
     patterns = {
         "money": r'(\d{1,3}(,\d{3})*(\.\d+)?\s*(元|美元|亿元|万元|亿美元|万亿美元))',
         "percentage": r'(\d+(\.\d+)?%)',
         "date": r'(\d{4}年\d{1,2}月\d{1,2}日|\d{4}-\d{1,2}-\d{1,2})'
     }
-    
-    found_counts = {key: 0 for key in patterns}
-    
-    for description in df['description'].dropna():
-        for key, pattern in patterns.items():
-            if re.search(pattern, description):
-                found_counts[key] += 1
-                
-    report.append("- 在'description'字段中包含特定模式的记录数:")
-    total_records = len(df['description'].dropna())
-    for key, count in found_counts.items():
-        percentage = (count / total_records) * 100 if total_records > 0 else 0
-        report.append(f"  - `{key}`: {count} ({percentage:.2f}%)")
-        
-    report.append("\n")
+
+    # 3) 针对 quantitative_data 为空，但 description 含数值的记录
+    mask = df['quantitative_data'].isnull()
+    sub_df = df.loc[mask, 'description'].dropna()
+
+    found_when_null = {k: 0 for k in patterns}
+    for desc in sub_df:
+        for k, pat in patterns.items():
+            if re.search(pat, desc):
+                found_when_null[k] += 1
+
+    report.append("- 在 quantitative_data 为空的记录中，description 仍包含:")
+    for k, cnt in found_when_null.items():
+        pct = cnt / len(sub_df) * 100 if len(sub_df) else 0
+        report.append(f"  - `{k}`: {cnt} ({pct:.2f}%)")
+
+    # 4) 如果想把提取结果写回 DataFrame，可在此新增列
+    # 这里仅演示：把命中的钱、百分比、日期用 | 拼接
+    def extract_all(txt):
+        if not isinstance(txt, str):
+            return None
+        hits = []
+        for pat in patterns.values():
+            hits.extend(re.findall(pat, txt))
+        return " | ".join(["".join(g) for g in hits]) if hits else None
+
+    df['extracted_quantitative'] = df['description'].apply(extract_all)
+    extracted_not_null = df['extracted_quantitative'].notnull().sum()
+    report.append(f"- 通过 description 提取到数值信息并写入 `extracted_quantitative` 的记录数: "
+                  f"{extracted_not_null}")
+
+    report.append("")
     return report
 
+    
 def main():
     """主函数"""
     print(f"正在从 {INPUT_FILE} 加载数据...")
@@ -123,9 +136,11 @@ def main():
         return
         
     df = pd.json_normalize(raw_data)
+#     print("df.columns",df.columns)
+#     exit(0)
     
     # 确保所有预期的列都存在，如果不存在则用None填充
-    expected_columns = ['event_type', 'description', 'entities']
+    expected_columns = ['event_type', 'description', 'involved_entities']
     for col in expected_columns:
         if col not in df.columns:
             df[col] = None
