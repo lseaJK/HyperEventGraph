@@ -2,17 +2,22 @@ import json
 import os
 import networkx as nx
 import matplotlib.pyplot as plt
-from matplotlib import rcParams
 import uuid
 import random
-from matplotlib.font_manager import FontProperties
+from matplotlib.font_manager import FontProperties, fontManager
+import matplotlib as mpl
 
-import matplotlib.pyplot as plt
-from matplotlib import font_manager
+# Set the font path explicitly
+font_path = '/home/kai/simhei.ttf'
 
-font_path = '/home/kai/simhei.ttf'  # Confirm this path exists
-font_prop = font_manager.FontProperties(fname=font_path)
-plt.rcParams['font.family'] = font_prop.get_name()
+# Add the font to matplotlib's font manager
+fontManager.addfont(font_path)
+font_prop = FontProperties(fname=font_path)
+font_name = font_prop.get_name()
+
+# Set the global font for matplotlib
+plt.rcParams['font.family'] = font_name
+plt.rcParams['axes.unicode_minus'] = False
 
 def build_knowledge_graph(file_path, sample_size=100):
     """
@@ -80,26 +85,7 @@ def build_knowledge_graph(file_path, sample_size=100):
 def visualize_graph(G, output_path='src/analysis/micro_knowledge_graph.png'):
     plt.figure(figsize=(30, 30))
     
-    # Try to find available CJK fonts
-    available_fonts = []
-    for font in ['Noto Sans CJK SC', 'WenQuanYi Micro Hei', 'SimHei', 
-                'Microsoft YaHei', 'Arial Unicode MS']:
-        try:
-            test_font = FontProperties(family=font)
-            plt.text(0, 0, 'test', fontproperties=test_font)
-            available_fonts.append(font)
-        except:
-            continue
-    
-    if not available_fonts:
-        print("Warning: No CJK fonts found. Using default font which may not display CJK characters correctly.")
-        available_fonts = ['DejaVu Sans']
-    
-    # Set the first available font
-    plt.rcParams['font.sans-serif'] = available_fonts
-    plt.rcParams['axes.unicode_minus'] = False
-
-    # Rest of your visualization code...
+    # Layout and drawing
     pos = nx.spring_layout(G, k=1.5, iterations=50)
     
     node_colors = ['skyblue' if d['type'] == 'event' else 'lightgreen'
@@ -112,6 +98,7 @@ def visualize_graph(G, output_path='src/analysis/micro_knowledge_graph.png'):
     node_labels = {n: d['label'][:10] + '...' if len(d['label']) > 10 else d['label']
                   for n, d in G.nodes(data=True)}
     
+    # Draw labels - font will be handled by global settings
     nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=12)
     
     edge_labels = nx.get_edge_attributes(G, 'label')
@@ -134,6 +121,10 @@ if __name__ == "__main__":
         print(f"Error: Data file not found at {data_file}")
         exit(1)
         
+    # Verify font is properly registered
+    available_fonts = [f.name for f in fontManager.ttflist if font_name in f.name]
+    print(f"Available fonts containing '{font_name}': {available_fonts}")
+    
     # Build and visualize graph
     kg = build_knowledge_graph(data_file, sample_size=50)
     visualize_graph(kg)
