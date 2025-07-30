@@ -54,27 +54,62 @@ def log_processed_group(group_id):
     with open(PROCESSED_LOG_FILE, 'a', encoding='utf-8') as f:
         f.write(group_id + '\n')
 
+import yaml
+from src.agents.relationship_analysis_agent import RelationshipAnalysisAgent
+from src.agents.storage_agent import StorageAgent
+
+# --- 配置 ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_FILE = os.path.join(BASE_DIR, 'config.yaml')
+INPUT_FILE = os.path.join(BASE_DIR, 'docs', 'output', 'structured_events.jsonl')
+PROCESSED_LOG_FILE = os.path.join(BASE_DIR, 'docs', 'output', 'processed_event_groups.log')
+
+def load_config(file_path):
+    """加载YAML配置文件"""
+    with open(file_path, 'r', encoding='utf-8') as f:
+        return yaml.safe_load(f)
+
 def main():
     """工作流主函数"""
     print("--- 开始关系分析与知识存储工作流 ---")
 
-    # 1. 初始化Agents
+    # 1. 加载配置
+    config = load_config(CONFIG_FILE)
+    
+    # 从配置中获取数据库和模型路径
+    db_config = config.get('database', {})
+    llm_config = config.get('llm', {})
+    
+    # Neo4j and ChromaDB/Model Cache Config
+    NEO4J_URI = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
+    NEO4J_USER = os.environ.get("NEO4J_USER", "neo4j")
+    NEO4J_PASSWORD = os.environ.get("NEO4J_PASSWORD", "password")
+    CHROMA_DB_PATH = os.path.join(BASE_DIR, 'chroma_db_prototype')
+    MODEL_CACHE_PATH = os.path.join(BASE_DIR, 'models_cache')
+
+
+    # 2. 初始化Agents
     try:
-        analysis_agent = RelationshipAnalysisAgent()
+        # 传入关系分析模型的特定配置
+        rel_analysis_model_config = llm_config.get('models', {}).get('relationship_analysis', {})
+        if not rel_analysis_model_config:
+            raise ValueError("在config.yaml中未找到 'relationship_analysis' 的模型配置")
+            
+        analysis_agent = RelationshipAnalysisAgent(model_config=rel_analysis_model_config)
         storage_agent = StorageAgent(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD, CHROMA_DB_PATH, MODEL_CACHE_PATH)
     except Exception as e:
         print(f"初始化Agent时发生严重错误: {e}")
         return
 
-    # 2. 加载和分组数据
+    # 3. 加载和分组数据
     all_events = load_events(INPUT_FILE)
     event_groups = group_events_by_source(all_events)
     
-    # 3. 加载已处理记录，实现断点续传
+    # 4. 加载已处理记录，实现断点续传
     processed_groups = load_processed_groups()
     print(f"发现 {len(processed_groups)} 个已处理的事件组。")
 
-    # 4. 迭代处理每个事件组
+    # 5. 迭代处理每个事件组
     total_groups = len(event_groups)
     for i, (group_id, events_in_group) in enumerate(event_groups.items()):
         print(f"\n--- 正在处理组 {i+1}/{total_groups}: {group_id} ---")
@@ -84,8 +119,6 @@ def main():
             continue
 
         # a. 分析关系
-        # 假设组内所有事件共享同一个原文上下文
-        # 在当前简化版中，我们用所有事件的描述拼接作为上下文
         source_context = " ".join([e.get('description', '') for e in events_in_group])
         relationships = analysis_agent.analyze_relationships(events_in_group, source_context)
         
@@ -93,7 +126,6 @@ def main():
         print(f"开始为组 '{group_id}' 的 {len(events_in_group)} 个事件进行存储...")
         for event in events_in_group:
             event_id = event['_id']
-            # 筛选出与当前事件相关的关系
             related_relationships = [
                 rel for rel in relationships 
                 if rel.get('source_event_id') == event_id or rel.get('target_event_id') == event_id
@@ -104,7 +136,7 @@ def main():
         log_processed_group(group_id)
         print(f"--- 组 {group_id} 处理完成 ---")
 
-    # 5. 清理资源
+    # 6. 清理资源
     storage_agent.close()
     print("\n--- 工作流全部处理完成 ---")
 

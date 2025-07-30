@@ -38,6 +38,14 @@ llm:
       top_p: 0.8
       max_tokens: 10000
 
+    # Model for relationship analysis: powerful, logical reasoning.
+    relationship_analysis:
+      provider: "siliconflow"
+      name: "deepseek-ai/DeepSeek-R1"
+      temperature: 0.2
+      top_p: 0.8
+      max_tokens: 4096
+
 # --- Workflow Specific Configurations ---
 review_workflow:
   # Path for the CSV file generated for human review.

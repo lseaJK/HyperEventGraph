@@ -8,14 +8,16 @@ class RelationshipAnalysisAgent:
     """
     分析从同一篇原文中抽取的多个事件之间的逻辑关系。
     """
-    def __init__(self, api_key=None, base_url=None):
+    def __init__(self, model_config, api_key=None, base_url=None):
         """
         初始化Agent。
         
         Args:
+            model_config (dict): 包含模型名称、温度等参数的配置字典。
             api_key (str): 用于LLM API的密钥。
             base_url (str): LLM API的基础URL。
         """
+        self.model_config = model_config
         self.api_key = api_key or os.environ.get("SILICONFLOW_API_KEY")
         self.base_url = base_url or "https://api.siliconflow.cn/v1"
         
@@ -30,13 +32,12 @@ class RelationshipAnalysisAgent:
 
         Args:
             events (list): 从同一源文本中提取的事件对象列表。
-            source_text (str): 原始文本，为分析提供上��文。
+            source_text (str): 原始文本，为分析提供上下文。
 
         Returns:
-            list: 一个包含关系信息的字典列表，例如：
-                  [{'source_event_id': 'event_0', 'target_event_id': 'event_1', 'relationship_type': 'Causal', 'reason': '...'}]
+            list: 一个包含关系信息的字典列表。
         """
-        print(f"正在为 {len(events)} 个事件分析关系...")
+        print(f"正在为 {len(events)} 个事件分析关系，使用模型: {self.model_config['name']}...")
         if len(events) < 2:
             print("事件数量少于2，无需进行关系分析。")
             return []
@@ -45,27 +46,24 @@ class RelationshipAnalysisAgent:
         
         try:
             response = self.client.chat.completions.create(
-                model="glm-4-0520",
+                model=self.model_config['name'],
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},
-                temperature=0.0,
+                temperature=self.model_config.get('temperature', 0.2),
+                top_p=self.model_config.get('top_p', 0.8),
+                max_tokens=self.model_config.get('max_tokens', 4096)
             )
             
-            # 遵循Task #23规范：保留原始输出，安全解析
             raw_output = response.choices[0].message.content
             print("LLM原始输出:", raw_output)
             
             parsed_result = json.loads(raw_output)
-            
-            # 在此可以添加对parsed_result格式的验证
             
             print("关系分析成功。")
             return parsed_result.get("relationships", [])
 
         except Exception as e:
             print(f"调用LLM进行关系分析时出错: {e}")
-            # 遵循Task #23规范：记录失败案例
-            # 此处仅打印，实际应用中应写入日志文件或数据库
             print(f"解析失败的原始输出: {raw_output if 'raw_output' in locals() else 'N/A'}")
             return []
 
