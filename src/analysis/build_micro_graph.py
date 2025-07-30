@@ -69,7 +69,7 @@ def build_graph(events):
             continue
             
         for entity_info in entities:
-            entity_name_raw = entity_info.get('name')
+            entity_name_raw = entity_info.get('entity_name')
             if not entity_name_raw:
                 continue
             
