@@ -480,11 +480,22 @@
         ],
         "priority": "medium",
         "subtasks": []
+      },
+      {
+        "id": 21,
+        "title": "Task #21: 对10%初步事件抽取结果进行全面分析与技术验证",
+        "description": "基于已完成的10%全量数据抽取结果（docs/output/structured_events.jsonl），执行一次全面的初步分析与处理，旨在校验数据质量、摸清数据特征，并对后续核心任务（Task #18, #19）进行技术原型验证。分析内容包括：1. 数据质量与完整性校验；2. 核心实体与关系分析；3. 事件类型与分布分析；4. 定量数据解析；5. 构建微型知识图谱与向量检索原型，为V4.0的开发扫清障碍。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [],
+        "priority": "medium",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-29T17:31:12.300Z",
+      "updated": "2025-07-30T12:37:57.921Z",
       "description": "Tasks for master context"
     }
   }
