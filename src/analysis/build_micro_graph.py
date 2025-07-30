@@ -2,7 +2,17 @@ import json
 import os
 import networkx as nx
 import matplotlib.pyplot as plt
+from matplotlib import rcParams
+import uuid
 import random
+from matplotlib.font_manager import FontProperties
+
+import matplotlib.pyplot as plt
+from matplotlib import font_manager
+
+font_path = '/home/kai/simhei.ttf'  # Confirm this path exists
+font_prop = font_manager.FontProperties(fname=font_path)
+plt.rcParams['font.family'] = font_prop.get_name()
 
 def build_knowledge_graph(file_path, sample_size=100):
     """
@@ -17,90 +27,113 @@ def build_knowledge_graph(file_path, sample_size=100):
     """
     with open(file_path, 'r', encoding='utf-8') as f:
         lines = f.readlines()
-    
+
     # Ensure sample_size is not larger than the number of lines
-    if len(lines) < sample_size:
-        sample_size = len(lines)
-        
+    sample_size = min(sample_size, len(lines))
     sampled_lines = random.sample(lines, sample_size)
-    
     G = nx.DiGraph()
 
     for line in sampled_lines:
         try:
             event = json.loads(line)
-            
-            event_id = event.get('_source_id', str(random.uuid4()))
-            event_type = event.get('micro_event_type') or event.get('event_type', 'Unknown Event')
-            
-            # Add event node
-            G.add_node(event_type, type='event', label=event_type)
 
+            # Use _source_id from file or generate random UUID
+            event_id = event.get('_source_id', str(uuid.uuid4()))
+            event_type = event.get('micro_event_type') or event.get('event_type', 'Unknown Event')
+
+            # Add event node with additional metadata
+            G.add_node(event_type, 
+                       type='event', 
+                       label=event_type,
+                       event_id=event_id)
+
+            # Process entities
             entities = event.get('involved_entities', [])
             for entity in entities:
                 entity_name = entity.get('entity_name')
                 entity_type = entity.get('entity_type', 'Unknown')
                 role = entity.get('role_in_event', 'involved_in')
 
-                if not entity_name:
+                if not entity_name:  # Skip empty entities
                     continue
 
-                # Add entity node
+                # Add entity node if not exists
                 if not G.has_node(entity_name):
-                    G.add_node(entity_name, type='entity', label=entity_name, entity_type=entity_type)
-                
-                # Add edge from entity to event
-                G.add_edge(entity_name, event_type, label=role)
+                    G.add_node(
+                        entity_name,
+                        type='entity',
+                        label=entity_name,
+                        entity_type=entity_type
+                    )
 
-        except (json.JSONDecodeError, AttributeError):
+                # Add edge from entity to event
+                G.add_edge(entity_name, event_type, 
+                           label=role,
+                           event_id=event_id)
+
+        except (json.JSONDecodeError, AttributeError) as e:
+            print(f"Error processing line: {e}")
             continue
-            
+
     return G
 
 def visualize_graph(G, output_path='src/analysis/micro_knowledge_graph.png'):
-    """
-    Visualizes and saves the knowledge graph.
-
-    Args:
-        G (networkx.DiGraph): The graph to visualize.
-        output_path (str): The path to save the visualization.
-    """
-    plt.figure(figsize=(20, 20))
+    plt.figure(figsize=(30, 30))
     
-    # Use a layout that spreads nodes out
-    pos = nx.spring_layout(G, k=0.5, iterations=50)
+    # Try to find available CJK fonts
+    available_fonts = []
+    for font in ['Noto Sans CJK SC', 'WenQuanYi Micro Hei', 'SimHei', 
+                'Microsoft YaHei', 'Arial Unicode MS']:
+        try:
+            test_font = FontProperties(family=font)
+            plt.text(0, 0, 'test', fontproperties=test_font)
+            available_fonts.append(font)
+        except:
+            continue
+    
+    if not available_fonts:
+        print("Warning: No CJK fonts found. Using default font which may not display CJK characters correctly.")
+        available_fonts = ['DejaVu Sans']
+    
+    # Set the first available font
+    plt.rcParams['font.sans-serif'] = available_fonts
+    plt.rcParams['axes.unicode_minus'] = False
 
-    # Differentiate node colors by type
-    node_colors = []
-    for node in G.nodes(data=True):
-        if node[1]['type'] == 'event':
-            node_colors.append('skyblue')
-        else:
-            node_colors.append('lightgreen')
-
+    # Rest of your visualization code...
+    pos = nx.spring_layout(G, k=1.5, iterations=50)
+    
+    node_colors = ['skyblue' if d['type'] == 'event' else 'lightgreen'
+                  for _, d in G.nodes(data=True)]
+    
     nx.draw_networkx_nodes(G, pos, node_color=node_colors, node_size=3000)
+    nx.draw_networkx_edges(G, pos, arrowstyle='->', arrowsize=20, 
+                         connectionstyle='arc3,rad=0.1', width=1.5)
     
-    # Draw edges and labels
-    nx.draw_networkx_edges(G, pos, arrowstyle='->', arrowsize=20, connectionstyle='arc3,rad=0.1')
+    node_labels = {n: d['label'][:10] + '...' if len(d['label']) > 10 else d['label']
+                  for n, d in G.nodes(data=True)}
     
-    node_labels = nx.get_node_attributes(G, 'label')
-    nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=10)
+    nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=12)
     
     edge_labels = nx.get_edge_attributes(G, 'label')
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=8)
-
-    plt.title("Micro Knowledge Graph Prototype")
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=10)
+    
+    plt.title("Micro Knowledge Graph Prototype", fontsize=20)
     plt.axis('off')
     plt.tight_layout()
-    plt.savefig(output_path, format="PNG")
-    print(f"Knowledge graph visualization saved to {output_path}")
+    
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    plt.savefig(output_path, format="PNG", dpi=150, bbox_inches='tight')
     plt.close()
-
+    print(f"Visualization saved to {output_path}")
 
 if __name__ == "__main__":
-    if not os.path.exists('src/analysis'):
-        os.makedirs('src/analysis')
+    data_file = 'output/extraction/structured_events.jsonl'
+    
+    # Check if data file exists
+    if not os.path.exists(data_file):
+        print(f"Error: Data file not found at {data_file}")
+        exit(1)
         
-    data_file = 'docs/output/structured_events.jsonl'
-    kg = build_knowledge_graph(data_file, sample_size=50) # Use a smaller sample for better visualization
+    # Build and visualize graph
+    kg = build_knowledge_graph(data_file, sample_size=50)
     visualize_graph(kg)
