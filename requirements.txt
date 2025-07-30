@@ -8,3 +8,4 @@ autogen
 # Vector Search & Embeddings
 sentence-transformers
 chromadb
+py2neo

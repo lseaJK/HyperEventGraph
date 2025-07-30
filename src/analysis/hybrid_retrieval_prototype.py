@@ -99,29 +99,59 @@ def llm_rerank(query, candidates, client):
         print("没有候选事件可供重排。")
         return []
 
-    # 构建Prompt
-    prompt = f"""
-    作为一名专业的金融分析师，请根据用户的原始查询，从下面的候选事件列表中，筛选并排序出最相关、最重要的3个事件。
-    请以JSON格式返回，包含一个名为'ranked_events'的列表，列表中每个对象包含'event'（事件描述）和'reason'（选择该事件的理由）。
+    # 1. 构建极简 Prompt：只给编号与文本，让模型返回编号和理由
+    SYSTEM = (
+        "你是一名专业金融分析师。根据用户查询，从候选事件中选出并排序最相关的3条事件，"
+        "请严格返回如下格式的 JSON 对象，不要返回数组或其他结构："
+        '{"ranked_indices":[i,j,k],"reasons":["原因1","原因2","原因3"]}'
+    )
 
-    原始查询: "{query}"
-
-    候选事件列表:
-    """
-    for i, candidate in enumerate(candidates):
-        prompt += f"{i+1}. {candidate}\n"
-
+    USER = f"用户查询: {query}\n\n候选事件:\n"
+    for idx, cand in enumerate(candidates, 1):
+        USER += f"{idx}. {cand}\n"
     print("正在调用LLM进行重排...")
+
     try:
         response = client.chat.completions.create(
-            model="glm-4-0520",  # 使用一个合适的模型
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"},
-            temperature=0.0,
+            model="Qwen/Qwen3-235B-A22B-Thinking-2507",
+            messages=[
+                {"role": "system", "content": SYSTEM},
+                {"role": "user", "content": USER}
+            ],
+            temperature=0.6,
+            top_p=0.8
         )
-        content = response.choices[0].message.content
+        raw = response.choices[0].message.content
+        data = json.loads(raw)
+
+        # 容错：如果 LLM 返回的是列表，而不是我们要求的 dict
+        if isinstance(data, list):
+            # 用 relevance 排序（高>中高>中>低）
+            relevance_order = {"高": 4, "中高": 3, "中": 2, "低": 1}
+            top3 = sorted(
+                data,
+                key=lambda x: relevance_order.get(x.get("relevance", "低"), 0),
+                reverse=True
+            )[:3]
+
+            # 构造最终格式
+            ranked = [
+                {
+                    "event": candidates[item["index"] - 1],
+                    "reason": item["reason"]
+                }
+                for item in top3
+            ]
+        else:
+            # 如果未来某天它真按我们格式返回了
+            ranked = [
+                {"event": candidates[idx - 1], "reason": reason}
+                for idx, reason in zip(data["ranked_indices"], data["reasons"])
+            ]
+
         print("LLM重排完成。")
-        return json.loads(content)
+        return {"ranked_events": ranked}
+
     except Exception as e:
         print(f"调用LLM API时出错: {e}")
         return {"error": str(e)}
