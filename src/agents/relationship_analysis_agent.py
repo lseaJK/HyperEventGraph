@@ -8,16 +8,18 @@ class RelationshipAnalysisAgent:
     """
     分析从同一篇原文中抽取的多个事件之间的逻辑关系。
     """
-    def __init__(self, model_config, api_key=None, base_url=None):
+    def __init__(self, model_config, prompt_template, api_key=None, base_url=None):
         """
         初始化Agent。
         
         Args:
             model_config (dict): 包含模型名称、温度等参数的配置字典。
+            prompt_template (str): 用于关系分析的提示词模板。
             api_key (str): 用于LLM API的密钥。
             base_url (str): LLM API的基础URL。
         """
         self.model_config = model_config
+        self.prompt_template = prompt_template
         self.api_key = api_key or os.environ.get("SILICONFLOW_API_KEY")
         self.base_url = base_url or "https://api.siliconflow.cn/v1"
         
@@ -73,60 +75,65 @@ class RelationshipAnalysisAgent:
         """
         event_descriptions = ""
         for i, event in enumerate(events):
-            event_descriptions += f"事件ID: event_{i}\n"
+            # 使用 event['_id'] 来确保与存储层的一致性
+            event_id = event.get('_id', f'event_{i}')
+            event_descriptions += f"事件ID: {event_id}\n"
             event_descriptions += f"事件类型: {event.get('event_type')}\n"
             event_descriptions += f"描述: {event.get('description')}\n\n"
 
-        prompt = f"""
-        作为一名情报分析师，请仔细阅读以下原始文本和从中抽取的事件列表。
-        你的任务是分析这些事件之间是否存在逻辑关系。
-
-        **原始文本:**
-        ---
-        {source_text}
-        ---
-
-        **事件列表:**
-        ---
-        {event_descriptions}
-        ---
-
-        **任务要求:**
-        1.  识别并返回事件之间的所有直接逻辑关系。
-        2.  关系类型必须是以下几种之一:
-            - `Causal`: 事件A是事件B发生的原因或前提。
-            - `Temporal`: 事件A明确发生在事件B之前或之后。
-            - `Sub-event`: 事件A是构成更宏观的事件B的一个具体组成部分。
-            - `Elaboration`: 事件A是对事件B的进一步详细说明、解释或举例。
-            - `Contradiction`: 事件A与事件B在事实上相互矛盾或对立。
-            - `Influence`: 事件A可能对事件B产生影响，但因果性不强。
-            - `Related`: 事件A和事件B在主题或实体上相关，但无法归入以上强逻辑关系。
-        3.  以JSON格式返回结果，包含一个名为 'relationships' 的列表。列表中每个对象应包含 'source_event_id', 'target_event_id', 'relationship_type', 和 'reason' (解释你判断的理由)。
-        4.  如果事件之间没有关系，则返回一个空的 'relationships' 列表。
-
-        **JSON输出格式示例:**
-        {{
-          "relationships": [
-            {{
-              "source_event_id": "event_0",
-              "target_event_id": "event_1",
-              "relationship_type": "Causal",
-              "reason": "事件0中提到的芯片短缺，是导致事件1中手机价格上涨的直接原因。"
-            }}
-          ]
-        }}
-        """
-        return prompt
+        # 使用传入的模板填充内容
+        return self.prompt_template.format(
+            source_text=source_text,
+            event_descriptions=event_descriptions
+        )
 
 if __name__ == '__main__':
     # 简单的测试用例
-    agent = RelationshipAnalysisAgent()
+    # 注意：直接运行此文件需要手动提供prompt_template
+    prompt_template_for_test = """
+    作为一名情报分析师，请仔细阅读以下原始文本和从中抽取的事件列表。
+    你的任务是分析这些事件之间是否存在逻辑关系。
+
+    **原始文本:**
+    ---
+    {source_text}
+    ---
+
+    **事件列表:**
+    ---
+    {event_descriptions}
+    ---
+
+    **任务要求:**
+    1.  识别并返回事件之间的所有直接逻辑关系。
+    2.  关系类型必须是以下几种之一，请严格遵守其定义:
+        - `Causal`: 事件A是事件B发生的**直接原因或明确前提**。
+        - `Temporal`: 事件A明确发生在事件B之前或之后。
+        - `Sub-event`: 事件A是构成更宏观的事件B的一个具体组成部分。
+        - `Elaboration`: 事件A是对事件B的进一步**信息补充、背景解释或数据举例**。
+        - `Contradiction`: 事件A与事件B在事实上相互矛盾或对立。
+        - `Influence`: 事件A可能对事件B产生影响，但因果性不强。
+        - `Related`: 事件A和事件B在主题或实体上相关，但**确实无法**归入以上任何一种更具体的强逻辑关系。
+    3.  以JSON格式返回结果，包含一个名为 'relationships' 的列表。
+    4.  如果事件之间没有关系，则返回一个空的 'relationships' 列表。
+    """
+    # 此处仅为示例，实际运行中model_config会从外部传入
+    sample_model_config = {
+        "name": "deepseek-ai/DeepSeek-V2",
+        "temperature": 0.2,
+        "top_p": 0.8,
+        "max_tokens": 4096
+    }
+    agent = RelationshipAnalysisAgent(
+        model_config=sample_model_config,
+        prompt_template=prompt_template_for_test
+    )
     
     sample_events = [
-        {'event_type': 'SupplyChainDisruption', 'description': '由于全球芯片短缺，A公司的生产线被迫停产。'},
-        {'event_type': 'MarketAction', 'description': 'A公司宣布其旗舰手机价格上涨15%。'}
+        {'_id': 'event_0', 'event_type': 'SupplyChainDisruption', 'description': '由于全球芯片短缺，A公司的生产线被迫停产。'},
+        {'_id': 'event_1', 'event_type': 'MarketAction', 'description': 'A公司宣布其旗舰手机价格上涨15%。'}
     ]
-    sample_text = "最新消息，由于全球芯片短缺，A公司的生产线被迫停产。受此影响，该公司今日宣布其旗舰手机价格上涨15%。"
+    sample_text = "最新消息，由于全球芯片短缺，A公司的生产线被迫停产。受此影响，该公司今日宣布其旗舰手机价格上涨15%."
     
     relationships = agent.analyze_relationships(sample_events, sample_text)
     print("\n分析出的关系:")
