@@ -3,6 +3,16 @@ import os
 import chromadb
 from sentence_transformers import SentenceTransformer
 
+# pip install -U huggingface_hub hf_transfer
+# export HF_ENDPOINT=https://hf-mirror.com
+# echo 'export HF_ENDPOINT=https://hf-mirror.com' >> ~/.bashrc
+# source ~/.bashrc
+# huggingface-cli download \
+#   --resume-download \
+#   --local-dir-use-symlinks False \
+#   sentence-transformers/all-MiniLM-L6-v2 \
+#   --local-dir /home.kai/models/all-MiniLM-L6-v2
+
 def create_vector_database(file_path, sample_size=500):
     """
     Creates a vector database from a sample of structured event data.
@@ -16,7 +26,7 @@ def create_vector_database(file_path, sample_size=500):
     """
     print("Loading sentence transformer model...")
     # Using a multilingual model suitable for the data
-    model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+    model = SentenceTransformer('all-MiniLM-L6-v2',cache_folder='/home/kai/models')
     print("Model loaded.")
 
     client = chromadb.Client()
