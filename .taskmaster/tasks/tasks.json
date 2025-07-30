@@ -550,11 +550,86 @@
         "dependencies": [],
         "priority": "high",
         "subtasks": []
+      },
+      {
+        "id": 24,
+        "title": "Task #21.1: 创建 Cortex 模块基础架构",
+        "description": "创建 `run_cortex_workflow.py` 脚本文件和 `src/cortex/` 目录。定义核心组件的类骨架 (`VectorizationService`, `ClusteringOrchestrator`, `RefinementAgent`)。这是Cortex模块的初始化步骤。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 25,
+        "title": "Task #21.2: 实现 ClusteringOrchestrator 的算法粗聚类功能",
+        "description": "实现从数据库读取待处理事件、调用向量化服务、计算实体加权距离、并使用DBSCAN算法进行聚类的核心逻辑。将聚类结果（`event_id` -> `cluster_id`）写入数据库。依赖 Task #21.1。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          24
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 26,
+        "title": "Task #21.3: 实现 RefinementAgent 的基础精炼功能",
+        "description": "实现处理小规模“粗簇”的逻辑。开发 \"Refinement Prompt\"，调用LLM对簇进行分析，并返回“故事单元”。依赖 Task #21.1。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          24
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": 27,
+        "title": "Task #21.4: 实现 RefinementAgent 的大簇处理策略",
+        "description": "实现“摘要-检索-扩展”的迭代逻辑，以处理规模超过预设阈值的“粗簇”。依赖 RefinementAgent 的基础功能。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          26
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": 28,
+        "title": "Task #21.5: 实现 Cortex 的批处理触发机制",
+        "description": "修改 `run_extraction_workflow.py`，在脚本末尾添加 `check_and_trigger_cortex` 函数，实现基于阈值的自动调用。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [],
+        "priority": "low",
+        "subtasks": []
+      },
+      {
+        "id": 29,
+        "title": "Task #21.6: 整合并测试端到端 Cortex 工作流",
+        "description": "将所有组件整合到 `run_cortex_workflow.py` 中，并进行完整的端到端测试，确保从事件输入到生成“故事单元”状态的流程完全通畅。依赖粗聚类和精炼功能的完成。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          25,
+          27
+        ],
+        "priority": "high",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-30T16:06:25.873Z",
+      "updated": "2025-07-30T18:04:42.050Z",
       "description": "Tasks for master context"
     }
   }
