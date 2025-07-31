@@ -8,6 +8,7 @@ This script runs the batch event extraction workflow with enhanced features:
 
 import asyncio
 import json
+import uuid
 from pathlib import Path
 import sys
 from tqdm.asyncio import tqdm_asyncio
@@ -23,6 +24,24 @@ from src.core.prompt_manager import prompt_manager
 
 # Concurrency limit adjusted to respect typical API rate limits (TPM is often the bottleneck)
 CONCURRENCY_LIMIT = 5
+
+def load_processed_ids(file_path: Path) -> set:
+    """Reads the output file to get the IDs of already processed records."""
+    processed_ids = set()
+    if not file_path.exists():
+        return processed_ids
+    
+    with open(file_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            try:
+                data = json.loads(line)
+                if '_source_id' in data:
+                    processed_ids.add(data['_source_id'])
+            except json.JSONDecodeError:
+                # Ignore corrupted lines, but log them if necessary
+                print(f"Warning: Skipping corrupted line in {file_path}")
+                continue
+    return processed_ids
 
 async def worker(record, db_manager, llm_client, semaphore, file_lock, output_file_path):
     """
@@ -54,6 +73,7 @@ async def worker(record, db_manager, llm_client, semaphore, file_lock, output_fi
             async with file_lock:
                 with open(output_file_path, 'a', encoding='utf-8') as f:
                     for event in extracted_events:
+                        event['event_id'] = f"evt_{uuid.uuid4()}"  # Add unique ID to each event
                         event['_source_id'] = record_id
                         event['text'] = text  # Add original text to the output JSON object
                         f.write(json.dumps(event, ensure_ascii=False) + '\n')
@@ -83,6 +103,11 @@ async def run_extraction_workflow():
     db_manager = DatabaseManager(db_path)
     llm_client = LLMClient()
 
+    # Load IDs that have already been processed and written to the output file
+    processed_ids = load_processed_ids(output_file_path)
+    if processed_ids:
+        print(f"Found {len(processed_ids)} records already processed in the output file. They will be skipped.")
+
     print(f"Querying records with status 'pending_extraction' from '{db_path}'...")
     df_to_extract = db_manager.get_records_by_status_as_df('pending_extraction')
 
@@ -90,8 +115,22 @@ async def run_extraction_workflow():
         print("No items found with status 'pending_extraction'. Workflow complete.")
         return
 
+    # Filter out records that are already in the output file
+    original_count = len(df_to_extract)
+    df_to_extract = df_to_extract[~df_to_extract['id'].isin(processed_ids)]
+    filtered_count = len(df_to_extract)
+    
+    if original_count > filtered_count:
+        print(f"Skipped {original_count - filtered_count} records that were already processed.")
+
+    if df_to_extract.empty:
+        print("All pending records have already been processed. Workflow complete.")
+        return
+
+    # total_records = len(df_to_extract)
+    df_to_extract = df_to_extract.head(5)  # 👈 只取前5条记录
     total_records = len(df_to_extract)
-    print(f"Found {total_records} records to process. Starting concurrent extraction with limit {CONCURRENCY_LIMIT}...")
+    print(f"Found {total_records} new records to process. Starting concurrent extraction with limit {CONCURRENCY_LIMIT}...")
 
     semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
     file_lock = asyncio.Lock()
@@ -110,7 +149,7 @@ async def run_extraction_workflow():
     failed_count = total_records - success_count
     
     print("\n--- Event Extraction Workflow Finished ---")
-    print(f"Total records processed: {total_records}")
+    print(f"Total new records processed: {total_records}")
     print(f"  - Successful: {success_count}")
     print(f"  - Failed: {failed_count}")
     if failed_count > 0:
