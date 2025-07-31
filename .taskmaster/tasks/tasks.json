@@ -578,12 +578,22 @@
         "description": "实现从数据库读取待处理事件、调用向量化服务、计算实体加权距离、并使用DBSCAN算法进行聚类的核心逻辑。将聚类结果（`event_id` -> `cluster_id`）写入数据库。依赖 Task #21.1。",
         "details": "",
         "testStrategy": "",
-        "status": "pending",
+        "status": "in-progress",
         "dependencies": [
           24
         ],
         "priority": "high",
-        "subtasks": []
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Refactor vectorization to use local model",
+            "description": "Refactor VectorizationService and related components to use a local sentence-transformers model instead of relying on an LLMClient for embeddings. This involves making the workflow synchronous.",
+            "details": "",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 25
+          }
+        ]
       },
       {
         "id": 26,
@@ -639,7 +649,7 @@
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-31T13:32:11.338Z",
+      "updated": "2025-07-31T14:17:11.458Z",
       "description": "Tasks for master context"
     }
   }

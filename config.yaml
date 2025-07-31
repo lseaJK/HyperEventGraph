@@ -63,9 +63,17 @@ extraction_workflow:
 
 # --- Cortex Workflow Configuration ---
 cortex:
+  vectorizer:
+    model_type: "local" # "local" or "api"
+    model_name: "all-MiniLM-L6-v2"
   clustering:
+    # Weight for entity similarity in the final distance calculation.
+    # A value of 0 means only vector similarity is used.
+    # A value of 1 means only entity similarity is used.
+    # A good starting point is 0.3.
+    entity_weight: 0.3
     # DBSCAN `eps` parameter: The maximum distance between two samples for one to be considered as in the neighborhood of the other.
     # This is the most important DBSCAN parameter to tune.
-    dbscan_eps: 0.5
+    dbscan_eps: 0.8
     # DBSCAN `min_samples` parameter: The number of samples in a neighborhood for a point to be considered as a core point.
     dbscan_min_samples: 2

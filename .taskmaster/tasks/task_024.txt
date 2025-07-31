@@ -1,6 +1,6 @@
 # Task ID: 24
 # Title: Task #21.1: 创建 Cortex 模块基础架构
-# Status: pending
+# Status: done
 # Dependencies: None
 # Priority: high
 # Description: 创建 `run_cortex_workflow.py` 脚本文件和 `src/cortex/` 目录。定义核心组件的类骨架 (`VectorizationService`, `ClusteringOrchestrator`, `RefinementAgent`)。这是Cortex模块的初始化步骤。

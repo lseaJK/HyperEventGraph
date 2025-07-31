@@ -21,7 +21,7 @@ from src.cortex.vectorization_service import VectorizationService
 from src.cortex.clustering_orchestrator import ClusteringOrchestrator
 from src.cortex.refinement_agent import RefinementAgent
 
-async def run_cortex_workflow():
+def run_cortex_workflow():
     """Main function to run the Cortex workflow."""
     print("\n--- Running Cortex Workflow ---")
     
@@ -47,36 +47,56 @@ async def run_cortex_workflow():
     # 3. Perform coarse clustering
     cluster_assignments = orchestrator.cluster_events(events_to_cluster)
     
-    # Group events by cluster_id
-    clusters = {}
-    for event in events_to_cluster:
-        cluster_id = cluster_assignments.get(event['id'])
-        if cluster_id is not None:
-            if cluster_id not in clusters:
-                clusters[cluster_id] = []
-            clusters[cluster_id].append(event)
+    # Update database with cluster results
+    print("Updating database with cluster assignments...")
+    clustered_events = []
+    for event_id, cluster_id in cluster_assignments.items():
+        if cluster_id != -1:
+            # This event belongs to a valid cluster
+            db_manager.update_cluster_info(event_id, cluster_id, 'pending_refinement')
+            # Find the original event dict to pass to the next stage
+            event_data = next((event for event in events_to_cluster if event['id'] == event_id), None)
+            if event_data:
+                event_data['cluster_id'] = cluster_id
+                clustered_events.append(event_data)
+        else:
+            # This event is considered noise
+            db_manager.update_cluster_info(event_id, cluster_id, 'clustered_as_noise')
+    
+    print(f"{len(clustered_events)} events assigned to clusters. {len(events_to_cluster) - len(clustered_events)} events marked as noise.")
 
-    print(f"Grouped events into {len(clusters)} coarse clusters.")
+    # Group events by cluster_id for the refinement stage
+    clusters = {}
+    for event in clustered_events:
+        cluster_id = event['cluster_id']
+        if cluster_id not in clusters:
+            clusters[cluster_id] = []
+        clusters[cluster_id].append(event)
+
+    print(f"Grouped events into {len(clusters)} coarse clusters for refinement.")
 
     # 4. Refine each cluster into stories
     all_stories = []
-    for cluster_id, events_in_cluster in clusters.items():
-        print(f"\nProcessing Cluster #{cluster_id} with {len(events_in_cluster)} events...")
-        stories = refiner.refine_cluster(events_in_cluster)
-        all_stories.extend(stories)
+    if not clusters:
+        print("No clusters to refine. Skipping refinement stage.")
+    else:
+        for cluster_id, events_in_cluster in clusters.items():
+            print(f"\nProcessing Cluster #{cluster_id} with {len(events_in_cluster)} events...")
+            stories = refiner.refine_cluster(events_in_cluster)
+            all_stories.extend(stories)
 
-    # 5. Update database
-    # TODO: Implement logic to assign story_ids and update the status
-    # of each event in the database to 'pending_relationship_analysis'.
+    # 5. Update database with story information
+    # TODO: Implement logic to assign story_ids to events in the database.
+    # This will likely involve another method in DatabaseManager.
     print(f"\nGenerated a total of {len(all_stories)} stories.")
-    print("TODO: Implement database update logic.")
+    print("TODO: Implement database update logic for stories.")
 
     print("\n--- Cortex Workflow Finished ---")
 
 def main():
     """Entry point of the script."""
     load_config("config.yaml")
-    asyncio.run(run_cortex_workflow())
+    run_cortex_workflow()
 
 if __name__ == "__main__":
     main()

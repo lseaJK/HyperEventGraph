@@ -9,3 +9,11 @@
 
 # Test Strategy:
 
+
+# Subtasks:
+## 1. Refactor vectorization to use local model [pending]
+### Dependencies: None
+### Description: Refactor VectorizationService and related components to use a local sentence-transformers model instead of relying on an LLMClient for embeddings. This involves making the workflow synchronous.
+### Details:
+
+
