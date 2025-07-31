@@ -56,6 +56,7 @@ class DatabaseManager:
                 )
                 
                 # Add new columns for Cortex workflow if they don't exist
+                self._add_column_if_not_exists(cursor, 'involved_entities', 'TEXT') # For storing entity JSON
                 self._add_column_if_not_exists(cursor, 'cluster_id', 'INTEGER')
                 self._add_column_if_not_exists(cursor, 'story_id', 'TEXT')
                 
@@ -144,6 +145,36 @@ class DatabaseManager:
                     print(f"Warning: No record found with ID '{record_id}' to update cluster info.")
         except sqlite3.Error as e:
             print(f"Error updating cluster info for record '{record_id}': {e}")
+
+    def update_story_info(self, event_ids: list[str], story_id: str, new_status: str):
+        """
+        Updates the story ID and status for a batch of events belonging to the same story.
+
+        Args:
+            event_ids: A list of unique IDs of the records to update.
+            story_id: The story ID assigned by the RefinementAgent.
+            new_status: The new status to set (e.g., 'pending_relationship_analysis').
+        """
+        if not event_ids:
+            return
+            
+        query = """
+            UPDATE master_state
+            SET story_id = ?, current_status = ?, last_updated = ?
+            WHERE id IN ({})
+        """.format(','.join('?' for _ in event_ids))
+        
+        params = [story_id, new_status, datetime.now().isoformat()] + event_ids
+        
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, params)
+                conn.commit()
+                if cursor.rowcount != len(event_ids):
+                    print(f"Warning: Expected to update {len(event_ids)} records, but updated {cursor.rowcount}.")
+        except sqlite3.Error as e:
+            print(f"Error updating story info for events: {e}")
 
 # It can also be useful to have a standalone function for one-off initialization
 def initialize_database(db_path: str | Path):

@@ -82,14 +82,22 @@ def run_cortex_workflow():
     else:
         for cluster_id, events_in_cluster in clusters.items():
             print(f"\nProcessing Cluster #{cluster_id} with {len(events_in_cluster)} events...")
+            # The agent now returns a list of story dictionaries
             stories = refiner.refine_cluster(events_in_cluster)
             all_stories.extend(stories)
 
     # 5. Update database with story information
-    # TODO: Implement logic to assign story_ids to events in the database.
-    # This will likely involve another method in DatabaseManager.
-    print(f"\nGenerated a total of {len(all_stories)} stories.")
-    print("TODO: Implement database update logic for stories.")
+    if not all_stories:
+        print("\nNo stories were generated. No database updates to perform.")
+    else:
+        print(f"\nGenerated a total of {len(all_stories)} stories. Updating database...")
+        for story in all_stories:
+            story_id = story['story_id']
+            event_ids_in_story = story['event_ids']
+            # Update all events in the story with the new story_id and set status
+            # for the next stage in the pipeline.
+            db_manager.update_story_info(event_ids_in_story, story_id, 'pending_relationship_analysis')
+        print("Database updated with story information.")
 
     print("\n--- Cortex Workflow Finished ---")
 
