@@ -1,216 +1,131 @@
+# src/analysis/hybrid_retrieval_prototype.py
+"""
+This script prototypes a hybrid retrieval system that combines graph-based
+exact-match search with vector-based semantic search.
+It reuses components from the graph and vector prototypes to demonstrate
+the combined power of both approaches.
+"""
 
-
-import json
-import os
-import re
+import sys
+from pathlib import Path
 import networkx as nx
 import chromadb
-from sentence_transformers import SentenceTransformer
-import warnings
-from openai import OpenAI # 使用openai库与符合其API规范的服务交互
 
-# --- 配置 ---
-warnings.filterwarnings("ignore", category=FutureWarning, module="huggingface_hub.file_download")
+# Add project root to sys.path
+project_root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(project_root))
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-INPUT_FILE = os.path.join(BASE_DIR, 'docs', 'output', 'structured_events.jsonl')
-MODEL_CACHE_DIR = os.path.join(BASE_DIR, 'models_cache')
-DB_DIR = os.path.join(BASE_DIR, 'chroma_db_prototype')
-GRAPH_FILE = os.path.join(BASE_DIR, 'docs', 'output', 'micro_graph.gml') # 保存图对象
+# Reuse logic from our previous prototypes
+from src.core.config_loader import load_config
+from src.cortex.vectorization_service import VectorizationService
+from src.analysis.build_micro_graph import load_data as load_graph_data, build_graph
+from src.analysis.vector_search_prototype import prepare_and_embed_data
 
-# LLM (SiliconFlow) 配置
-# 确保在运行前设置环境变量 SILICONFLOW_API_KEY
-# 或者直接在这里填写:
-API_KEY = os.environ.get("SILICONFLOW_API_KEY", "your-api-key-here") 
-BASE_URL = "https://api.siliconflow.cn/v1"
+# --- Configuration ---
+INPUT_FILE_PATH = "output/extraction/structured_events.jsonl"
+CHROMA_DB_PATH = "chroma_db_prototype" # Use the same DB as the vector prototype
+COLLECTION_NAME = "hierarchical_events"
+RECORD_LIMIT = 100
 
-# --- 共享组件 ---
-def get_sentence_transformer_model(cache_dir):
-    model_name = 'all-MiniLM-L6-v2'
-    print(f"正在加载Sentence Transformer模型: {model_name}...")
-    model = SentenceTransformer(model_name, cache_folder=cache_dir)
-    print("模型加载完成。")
-    return model
+class HybridRetriever:
+    """A prototype for a hybrid graph and vector retriever."""
 
-def normalize_entity_name(name):
-    name = name.strip()
-    # 在此可以添加更复杂的别名映射
-    return name
+    def __init__(self):
+        print("Initializing Hybrid Retriever...")
+        self.graph = None
+        self.vector_collection = None
+        self.vectorizer = None
+        self._setup()
+        print("Hybrid Retriever initialized successfully.")
 
-# --- 图谱模块 ---
-def build_or_load_graph(file_path, events):
-    if os.path.exists(file_path):
-        print(f"正在从 {file_path} 加载图谱...")
-        return nx.read_gml(file_path)
+    def _setup(self):
+        """Loads data and builds the necessary graph and vector stores."""
+        # Load data
+        records = load_graph_data(Path(INPUT_FILE_PATH), RECORD_LIMIT)
+        if not records:
+            raise ValueError("No data loaded, cannot proceed.")
+
+        # Build graph store
+        print("\n--- Building Graph Store (NetworkX) ---")
+        self.graph = build_graph(records)
+
+        # Build vector store
+        print("\n--- Building Vector Store (ChromaDB) ---")
+        self.vectorizer = VectorizationService()
+        chroma_client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
         
-    print("正在构建图谱...")
-    G = nx.Graph()
-    for i, event in enumerate(events):
-        event_id = f"event_{i}"
-        G.add_node(event_id, type='Event', description=event.get('description', ''))
-        entities = event.get('involved_entities', [])
-        for entity_info in entities:
-            entity_name = entity_info.get("entity_name")
-            if entity_name:
-                normalized_name = normalize_entity_name(entity_name)
-                G.add_node(normalized_name, type='Entity')
-                G.add_edge(normalized_name, event_id)
-    
-    nx.write_gml(G, file_path)
-    print(f"图谱已构建并保存到 {file_path}")
-    return G
+        # Check if the collection exists and has data
+        try:
+            self.vector_collection = chroma_client.get_collection(name=COLLECTION_NAME)
+            if self.vector_collection.count() > 0:
+                print(f"Using existing ChromaDB collection '{COLLECTION_NAME}' with {self.vector_collection.count()} records.")
+            else:
+                raise ValueError("Collection is empty.")
+        except (ValueError, IndexError): # ChromaDB can throw different errors
+            print(f"Collection '{COLLECTION_NAME}' not found or empty. Rebuilding...")
+            self.vector_collection = chroma_client.get_or_create_collection(name=COLLECTION_NAME)
+            docs, embeds, metas, ids = prepare_and_embed_data(records, self.vectorizer)
+            if docs:
+                self.vector_collection.add(embeddings=embeds, documents=docs, metadatas=metas, ids=ids)
+            print("Vector store rebuilt.")
 
-def graph_retrieval(G, query_text, n_results=5):
-    print("\n--- 步骤 1a: 图谱精确检索 ---")
-    # 这是一个简化的实体提取，实际应用中会更复杂
-    found_entities = [node for node in G.nodes() if G.nodes[node].get('type') == 'Entity' and node in query_text]
-    
-    if not found_entities:
-        print("在查询中未直接找到图谱中的实体。")
-        return []
+    def search(self, query_text: str, entity_keyword: str, top_k: int = 3):
+        """Performs a hybrid search and prints the results."""
+        print("\n" + "="*70)
+        print(f"Performing Hybrid Search for Query: '{query_text}'")
+        print(f"Graph Keyword (Entity): '{entity_keyword}'")
+        print("="*70)
 
-    print(f"在查询中找到实体: {found_entities}")
-    retrieved_events = set()
-    for entity in found_entities:
-        for neighbor in G.neighbors(entity):
-            if G.nodes[neighbor].get('type') == 'Event':
-                retrieved_events.add(G.nodes[neighbor]['description'])
-    
-    print(f"图谱检索到 {len(retrieved_events)} 个候选事件。")
-    return list(retrieved_events)[:n_results]
-
-# --- 向量数据库模块 ---
-def vector_retrieval(db_path, model, query_text, n_results=5):
-    print("\n--- 步骤 1b: 向量模糊检索 ---")
-    client = chromadb.PersistentClient(path=db_path)
-    desc_collection = client.get_collection(name="event_descriptions")
-    
-    query_embedding = model.encode([query_text])
-    results = desc_collection.query(query_embeddings=query_embedding, n_results=n_results)
-    
-    retrieved_docs = results['documents'][0] if results['documents'] else []
-    print(f"向量检索到 {len(retrieved_docs)} 个候选事件。")
-    return retrieved_docs
-
-# --- LLM 重排模块 ---
-def llm_rerank(query, candidates, client):
-    print("\n--- 步骤 2: LLM 智能重排 ---")
-    if not candidates:
-        print("没有候选事件可供重排。")
-        return []
-
-    # 1. 构建极简 Prompt：只给编号与文本，让模型返回编号和理由
-    SYSTEM = (
-        "你是一名专业金融分析师。根据用户查询，从候选事件中选出并排序最相关的3条事件，"
-        "请严格返回如下格式的 JSON 对象，不要返回数组或其他结构："
-        '{"ranked_indices":[i,j,k],"reasons":["原因1","原因2","原因3"]}'
-    )
-
-    USER = f"用户查询: {query}\n\n候选事件:\n"
-    for idx, cand in enumerate(candidates, 1):
-        USER += f"{idx}. {cand}\n"
-    print("正在调用LLM进行重排...")
-
-    try:
-        response = client.chat.completions.create(
-            model="Qwen/Qwen3-235B-A22B-Thinking-2507",
-            messages=[
-                {"role": "system", "content": SYSTEM},
-                {"role": "user", "content": USER}
-            ],
-            temperature=0.6,
-            top_p=0.8
-        )
-        raw = response.choices[0].message.content
-        data = json.loads(raw)
-
-        # 容错：如果 LLM 返回的是列表，而不是我们要求的 dict
-        if isinstance(data, list):
-            # 用 relevance 排序（高>中高>中>低）
-            relevance_order = {"高": 4, "中高": 3, "中": 2, "低": 1}
-            top3 = sorted(
-                data,
-                key=lambda x: relevance_order.get(x.get("relevance", "低"), 0),
-                reverse=True
-            )[:3]
-
-            # 构造最终格式
-            ranked = [
-                {
-                    "event": candidates[item["index"] - 1],
-                    "reason": item["reason"]
-                }
-                for item in top3
-            ]
+        # 1. Graph-based Search (Exact Match)
+        print("\n--- 1. Graph Search Results (Exact & Connected) ---")
+        graph_results = []
+        if self.graph.has_node(entity_keyword):
+            # Find all neighbors of the entity node that are events
+            for neighbor in self.graph.neighbors(entity_keyword):
+                if self.graph.nodes[neighbor].get('type') == 'event':
+                    event_node = self.graph.nodes[neighbor]
+                    graph_results.append({
+                        "event_id": neighbor,
+                        "description": event_node.get('title', 'N/A')
+                    })
+            if graph_results:
+                for i, res in enumerate(graph_results):
+                    print(f"  {i+1}. Event ID: {res['event_id']}\n     Description: {res['description'][:150]}...\n")
+            else:
+                print(f"Found entity '{entity_keyword}', but it's not connected to any events in this data slice.")
         else:
-            # 如果未来某天它真按我们格式返回了
-            ranked = [
-                {"event": candidates[idx - 1], "reason": reason}
-                for idx, reason in zip(data["ranked_indices"], data["reasons"])
-            ]
+            print(f"Entity '{entity_keyword}' not found in the graph.")
 
-        print("LLM重排完成。")
-        return {"ranked_events": ranked}
-
-    except Exception as e:
-        print(f"调用LLM API时出错: {e}")
-        return {"error": str(e)}
-
+        # 2. Vector-based Search (Semantic Similarity)
+        print("\n--- 2. Vector Search Results (Semantically Similar) ---")
+        query_embedding = self.vectorizer.get_embedding(query_text)
+        vector_results = self.vector_collection.query(
+            query_embeddings=[query_embedding],
+            n_results=top_k
+        )
+        
+        for i, (doc, dist, meta) in enumerate(zip(vector_results['documents'][0], vector_results['distances'][0], vector_results['metadatas'][0])):
+            print(f"  {i+1}. Distance: {dist:.4f} (Type: {meta.get('type')}, Event ID: {meta.get('event_id')})\n     Text: {doc[:150]}...\n")
 
 def main():
-    """主函数"""
-    # --- 初始化 ---
-    print("--- 初始化混合检索原型 ---")
-    events = load_data(INPUT_FILE)
-    model = get_sentence_transformer_model(MODEL_CACHE_DIR)
-    graph = build_or_load_graph(GRAPH_FILE, events)
-    
-    llm_client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
-
-    # --- 执行查询 ---
-    query = "华为和苹果在芯片领域的竞争事件"
-    print(f"\n\n--- 开始处理查询: '{query}' ---")
-
-    # 1. 混合召回
-    graph_candidates = graph_retrieval(graph, query)
-    vector_candidates = vector_retrieval(DB_DIR, model, query)
-    
-    # 合并并去重
-    all_candidates = list(set(graph_candidates + vector_candidates))
-    print(f"\n合并后共有 {len(all_candidates)} 个唯一候选事件。")
-
-    # 2. LLM 重排
-    ranked_results = llm_rerank(query, all_candidates, llm_client)
-
-    # 3. 显示最终结果
-    print("\n\n" + "="*50)
-    print("          最终检索与重排结果")
-    print("="*50)
-    print(f"原始查询: {query}\n")
-    
-    if ranked_results and 'ranked_events' in ranked_results:
-        for i, item in enumerate(ranked_results['ranked_events']):
-            print(f"--- 结果 {i+1} ---")
-            print(f"事件: {item.get('event')}")
-            print(f"理由: {item.get('reason')}")
-            print("-" * 20)
-    else:
-        print("未能从LLM获取有效的重排结果。")
-        print("原始候选集如下：")
-        for i, cand in enumerate(all_candidates):
-            print(f"{i+1}. {cand}")
-
-def load_data(file_path):
-    """从jsonl文件加载数据"""
-    data = []
-    with open(file_path, 'r', encoding='utf-8') as f:
-        for line in f:
-            try:
-                data.append(json.loads(line))
-            except json.JSONDecodeError:
-                print(f"警告: 无法解析行: {line.strip()}")
-    return data
+    """Main entry point for the script."""
+    load_config("config.yaml")
+    try:
+        retriever = HybridRetriever()
+        # Example Query: Find events related to "华为" (Huawei)
+        retriever.search(
+            query_text="华为的供应链和合作伙伴",
+            entity_keyword="华为"
+        )
+        # Example Query 2: Find events related to "台积电" (TSMC)
+        retriever.search(
+            query_text="台积电的产能和技术",
+            entity_keyword="台积电"
+        )
+    except Exception as e:
+        import traceback
+        print(f"An unexpected error occurred: {e}")
+        traceback.print_exc()
 
 if __name__ == "__main__":
     main()
-

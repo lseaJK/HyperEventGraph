@@ -11,7 +11,6 @@ import json
 import uuid
 from pathlib import Path
 import sys
-import subprocess
 from tqdm.asyncio import tqdm_asyncio
 
 # Add project root to sys.path
@@ -88,49 +87,6 @@ async def worker(record, db_manager, llm_client, semaphore, file_lock, output_fi
             db_manager.update_status_and_schema(record_id, "extraction_failed", "", str(e))
             return {"id": record_id, "status": "failed", "error": str(e)}
 
-def check_and_trigger_cortex():
-    """
-    Checks if the number of events pending clustering meets the threshold
-    and triggers the Cortex workflow if it does.
-    """
-    print("\n--- Checking if Cortex workflow should be triggered ---")
-    config = get_config()
-    db_path = config.get('database', {}).get('path')
-    trigger_threshold = config.get('cortex', {}).get('trigger_threshold', 100)
-    
-    db_manager = DatabaseManager(db_path)
-    
-    df = db_manager.get_records_by_status_as_df('pending_clustering')
-    pending_count = len(df)
-    
-    print(f"Found {pending_count} events pending clustering. Threshold is {trigger_threshold}.")
-    
-    if pending_count >= trigger_threshold:
-        print("Threshold met. Triggering Cortex workflow...")
-        try:
-            # Using subprocess to call the other script
-            result = subprocess.run(
-                [sys.executable, "run_cortex_workflow.py"],
-                capture_output=True,
-                text=True,
-                check=True  # This will raise an exception if the script returns a non-zero exit code
-            )
-            print("Cortex workflow finished successfully.")
-            print("--- Cortex STDOUT ---")
-            print(result.stdout)
-            print("--- Cortex STDERR ---")
-            print(result.stderr)
-        except FileNotFoundError:
-            print("Error: 'run_cortex_workflow.py' not found.")
-        except subprocess.CalledProcessError as e:
-            print(f"Cortex workflow script failed with exit code {e.returncode}.")
-            print("--- Cortex STDOUT ---")
-            print(e.stdout)
-            print("--- Cortex STDERR ---")
-            print(e.stderr)
-    else:
-        print("Threshold not met. Cortex workflow will not be triggered.")
-
 async def run_extraction_workflow():
     """Main function to run the concurrent extraction workflow."""
     print("\n--- Running Concurrent Event Extraction Workflow ---")
@@ -183,8 +139,6 @@ async def run_extraction_workflow():
 def main():
     load_config("config.yaml")
     asyncio.run(run_extraction_workflow())
-    # After the async workflow is complete, run the synchronous check
-    check_and_trigger_cortex()
 
 if __name__ == "__main__":
     main()

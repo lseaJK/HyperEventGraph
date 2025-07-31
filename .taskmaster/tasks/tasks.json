@@ -496,7 +496,7 @@
             "title": "数据质量审查与特征分析",
             "description": "定量地、全面地理解我们初步抽取的数据质量和内在特征，发现潜在的数据问题和关键模式。具体包括：1. 创建`src/analysis/extraction_quality_analyzer.py`。2. 执行完整性校验、事件类型分布分析、高频实体分析和定量数据探查。3. 输出一份分析报告。",
             "details": "",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "parentTaskId": 21
           },
@@ -505,7 +505,7 @@
             "title": "构建微型知识图谱原型",
             "description": "验证将扁平的事件JSONL数据转化为相互关联的图结构的可行性。具体包括：1. 创建原型脚本`src/analysis/build_micro_graph.py`。2. 使用`networkx`在内存中构建图，将事件和实体创建为节点，并创建它们之间的关系边。3. 为`GraphStorageAgent`的开发提供一个经过验证的图数据模型。",
             "details": "",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "parentTaskId": 21
           },
@@ -627,7 +627,7 @@
         "description": "修改 `run_extraction_workflow.py`，在脚本末尾添加 `check_and_trigger_cortex` 函数，实现基于阈值的自动调用。",
         "details": "",
         "testStrategy": "",
-        "status": "pending",
+        "status": "done",
         "dependencies": [],
         "priority": "low",
         "subtasks": []
@@ -638,7 +638,7 @@
         "description": "将所有组件整合到 `run_cortex_workflow.py` 中，并进行完整的端到端测试，确保从事件输入到生成“故事单元”状态的流程完全通畅。依赖粗聚类和精炼功能的完成。",
         "details": "",
         "testStrategy": "",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           25,
           27
@@ -649,7 +649,7 @@
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-31T14:58:54.393Z",
+      "updated": "2025-07-31T15:53:02.146Z",
       "description": "Tasks for master context"
     }
   }

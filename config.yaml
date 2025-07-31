@@ -67,7 +67,7 @@ cortex:
   trigger_threshold: 100
   vectorizer:
     model_type: "local" # "local" or "api"
-    model_name: "all-MiniLM-L6-v2"
+    model_name: "BAAI/bge-large-zh-v1.5"
   refinement:
     # Threshold for what constitutes a "large" cluster that needs special handling.
     large_cluster_threshold: 20
