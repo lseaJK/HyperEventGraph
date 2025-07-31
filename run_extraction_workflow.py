@@ -127,9 +127,9 @@ async def run_extraction_workflow():
         print("All pending records have already been processed. Workflow complete.")
         return
 
-    # total_records = len(df_to_extract)
-    df_to_extract = df_to_extract.head(5)  # 👈 只取前5条记录
     total_records = len(df_to_extract)
+#     df_to_extract = df_to_extract.head(5)  # 👈 只取前5条记录
+#     total_records = len(df_to_extract)
     print(f"Found {total_records} new records to process. Starting concurrent extraction with limit {CONCURRENCY_LIMIT}...")
 
     semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)

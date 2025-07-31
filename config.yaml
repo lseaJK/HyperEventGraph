@@ -60,3 +60,12 @@ learning_workflow:
 extraction_workflow:
   # Path for the final output file containing structured event data.
   output_file: "output/extraction/structured_events.jsonl"
+
+# --- Cortex Workflow Configuration ---
+cortex:
+  clustering:
+    # DBSCAN `eps` parameter: The maximum distance between two samples for one to be considered as in the neighborhood of the other.
+    # This is the most important DBSCAN parameter to tune.
+    dbscan_eps: 0.5
+    # DBSCAN `min_samples` parameter: The number of samples in a neighborhood for a point to be considered as a core point.
+    dbscan_min_samples: 2
