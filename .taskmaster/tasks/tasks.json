@@ -487,7 +487,7 @@
         "description": "基于已完成的10%全量数据抽取结果（docs/output/structured_events.jsonl），执行一次全面的初步分析与处理，旨在校验数据质量、摸清数据特征，并对后续核心任务（Task #18, #19）进行技术原型验证。分析内容包括：1. 数据质量与完整性校验；2. 核心实体与关系分析；3. 事件类型与分布分析；4. 定量数据解析；5. 构建微型知识图谱与向量检索原型，为V4.0的开发扫清障碍。",
         "details": "",
         "testStrategy": "",
-        "status": "pending",
+        "status": "done",
         "dependencies": [],
         "priority": "medium",
         "subtasks": [
@@ -514,7 +514,7 @@
             "title": "构建微型向量数据库原型",
             "description": "完整实现并验证需求文档中定义的“分层向量化策略”。具体包括：1. 增强`src/analysis/vector_search_prototype.py`。2. 使用`ChromaDB`，对每个事件生成并存储三种不同的向量表示：事件描述、实体中心上下文、原文片段。3. 为`VectorStorageAgent`的开发提供可以直接复用的代码。",
             "details": "",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "parentTaskId": 21
           },
@@ -523,7 +523,7 @@
             "title": "开发混合检索原型并闭合验证循环",
             "description": "模拟`HybridRetrieverAgent`的核心逻辑，证明结合图的精确查询和向量的模糊查询能产生更优越的检索结果。具体包括：1. 创建原型脚本`src/analysis/hybrid_retrieval_prototype.py`。2. 协同调用图谱和向量原型。3. 实现一个演示混合检索流程并输出融合结果的脚本，为`HybridRetrieverAgent`的开发提供逻辑蓝图。",
             "details": "",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "parentTaskId": 21
           }
@@ -649,7 +649,7 @@
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-31T15:53:02.146Z",
+      "updated": "2025-07-31T16:14:40.287Z",
       "description": "Tasks for master context"
     }
   }

@@ -1,6 +1,11 @@
 # config.yaml
 # This file centralizes all system configurations for the HyperEventGraph project.
 
+# --- Global Model Settings ---
+model_settings:
+  # Central directory for caching downloaded models (e.g., from HuggingFace)
+  cache_dir: "/home/kai/models"
+
 # --- Database Configuration ---
 database:
   path: "master_state.db"
