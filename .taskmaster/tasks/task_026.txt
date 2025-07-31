@@ -1,0 +1,11 @@
+# Task ID: 26
+# Title: Task #21.3: 实现 RefinementAgent 的基础精炼功能
+# Status: pending
+# Dependencies: 24
+# Priority: medium
+# Description: 实现处理小规模“粗簇”的逻辑。开发 "Refinement Prompt"，调用LLM对簇进行分析，并返回“故事单元”。依赖 Task #21.1。
+# Details:
+
+
+# Test Strategy:
+

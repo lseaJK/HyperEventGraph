@@ -535,10 +535,20 @@
         "description": "当前抽取流程无法将description中包含的金额、百分比、日期等信息有效提取到结构化的`quantitative_data`字段中。此任务的目标是：1. 分析`prompts/extraction.md`和相关抽取器代码，定位问题根源。2. 修改并优化Prompt，使其能够准确解析并填充`quantitative_data`字段。3. 通过小批量数据验证修复效果。",
         "details": "",
         "testStrategy": "",
-        "status": "pending",
+        "status": "in-progress",
         "dependencies": [],
         "priority": "high",
-        "subtasks": []
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "验证Prompt修复效果",
+            "description": "使用小批量数据（例如，从 `IC_data/filtered_data.json` 中选取5-10条包含明确数量信息的样本）运行一次 `run_extraction_workflow.py`，并人工检查输出的 `structured_events.jsonl` 文件，确认 `quantitative_data` 字段是否已按预期被正确填充。",
+            "details": "",
+            "status": "pending",
+            "dependencies": [],
+            "parentTaskId": 22
+          }
+        ]
       },
       {
         "id": 23,
@@ -546,7 +556,7 @@
         "description": "此为一项规范型任务，定义了所有模块在调用大语言模型（LLM）时必须遵守的核心准则。要求：1. **保留原始输出**：完整记录LLM返回的原始数据。2. **分离解析结果**：使用try-except处理返回内容，成功的结果进入主数据流，失败的案例（含原始数据、错误信息等）必须记录到专门的“失败审查”位置（如独立的日志文件或数据表）。3. **关联ID**: 所有记录必须包含唯一的请求ID以便追溯。此规范将作为未来所有LLM相关功能开发的验收标准。",
         "details": "",
         "testStrategy": "",
-        "status": "pending",
+        "status": "done",
         "dependencies": [],
         "priority": "high",
         "subtasks": []
@@ -629,7 +639,7 @@
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-30T18:04:42.050Z",
+      "updated": "2025-07-31T12:57:33.174Z",
       "description": "Tasks for master context"
     }
   }

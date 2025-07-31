@@ -80,7 +80,90 @@
 ### ✅ 示例输出（只保留已发生的事件）：
 
 ```json
-[ {{ "event_type": "SupplyChainDisruption", "micro_event_type": "InventoryAdjustment", "event_date": "2023-H2", "description": "自2023年下半年库存修正潮开始，晶圆代工厂进行库存调整。", "involved_entities": [ {{ "entity_name": "晶圆代工厂", "entity_type": "Company", "role_in_event": "主体" }} ], "quantitative_data": null, "forecast": null }}, {{ "event_type": "MarketAction", "micro_event_type": "PriceReduction", "event_date": "2023-H2", "description": "自2023年下半年以来，除台积电外的晶圆代工厂降低晶圆代工价格，降幅约15%至20%。", "involved_entities": [ {{ "entity_name": "其他晶圆代工厂", "entity_type": "Company", "role_in_event": "主体" }}, {{ "entity_name": "IC设计业者", "entity_type": "IndustryGroup", "role_in_event": "信息提供者" }} ], "quantitative_data": {{ "metric": "Price", "value": null, "unit": "%", "change_rate": -17.5, "period": "since 2023-H2" }}, "forecast": null }}, {{ "event_type": "MarketAction", "micro_event_type": "PriceStability", "event_date": null, "description": "台积电维持晶圆代工价格不变。", "involved_entities": [ {{ "entity_name": "台积电", "entity_type": "Company", "role_in_event": "主体" }} ], "quantitative_data": null, "forecast": null }}, {{ "event_type": "SupplyChainDisruption", "micro_event_type": "CapacityUtilizationLow", "event_date": null, "description": "晶圆代工厂成熟制程产能利用率低。", "involved_entities": [ {{ "entity_name": "晶圆代工厂", "entity_type": "Company", "role_in_event": "主体" }}, {{ "entity_name": "业界人士", "entity_type": "IndustryExpert", "role_in_event": "观察者" }} ], "quantitative_data": {{ "metric": "Utilization Rate", "value": null, "unit": "%", "change_rate": null, "period": null }}, "forecast": null }} ]
+[
+  {
+    "event_type": "SupplyChainDisruption",
+    "micro_event_type": "InventoryAdjustment",
+    "event_date": "2023-H2",
+    "description": "自2023年下半年库存修正潮开始，晶圆代工厂进行库存调整。",
+    "involved_entities": [
+      {
+        "entity_name": "晶圆代工厂",
+        "entity_type": "Company",
+        "role_in_event": "主体"
+      }
+    ],
+    "quantitative_data": null,
+    "forecast": null
+  },
+  {
+    "event_type": "MarketAction",
+    "micro_event_type": "PriceReduction",
+    "event_date": "2023-H2",
+    "description": "自2023年下半年以来，除台积电外的晶圆代工厂降低晶圆代工价格，降幅约15%至20%。",
+    "involved_entities": [
+      {
+        "entity_name": "其他晶圆代工厂",
+        "entity_type": "Company",
+        "role_in_event": "主体"
+      },
+      {
+        "entity_name": "IC设计业者",
+        "entity_type": "IndustryGroup",
+        "role_in_event": "信息提供者"
+      }
+    ],
+    "quantitative_data": {
+      "metric": "Price Reduction",
+      "value": "15-20",
+      "unit": "%",
+      "change_rate": -17.5,
+      "period": "since 2023-H2"
+    },
+    "forecast": null
+  },
+  {
+    "event_type": "MarketAction",
+    "micro_event_type": "PriceStability",
+    "event_date": null,
+    "description": "台积电维持晶圆代工价格不变。",
+    "involved_entities": [
+      {
+        "entity_name": "台积电",
+        "entity_type": "Company",
+        "role_in_event": "主体"
+      }
+    ],
+    "quantitative_data": null,
+    "forecast": null
+  },
+  {
+    "event_type": "SupplyChainDisruption",
+    "micro_event_type": "CapacityUtilizationLow",
+    "event_date": null,
+    "description": "晶圆代工厂成熟制程产能利用率低。",
+    "involved_entities": [
+      {
+        "entity_name": "晶圆代工厂",
+        "entity_type": "Company",
+        "role_in_event": "主体"
+      },
+      {
+        "entity_name": "业界人士",
+        "entity_type": "IndustryExpert",
+        "role_in_event": "观察者"
+      }
+    ],
+    "quantitative_data": {
+      "metric": "Capacity Utilization",
+      "value": "low",
+      "unit": null,
+      "change_rate": null,
+      "period": null
+    },
+    "forecast": null
+  }
+]
 ```
 
 ---

@@ -1,0 +1,11 @@
+# Task ID: 25
+# Title: Task #21.2: 实现 ClusteringOrchestrator 的算法粗聚类功能
+# Status: pending
+# Dependencies: 24
+# Priority: high
+# Description: 实现从数据库读取待处理事件、调用向量化服务、计算实体加权距离、并使用DBSCAN算法进行聚类的核心逻辑。将聚类结果（`event_id` -> `cluster_id`）写入数据库。依赖 Task #21.1。
+# Details:
+
+
+# Test Strategy:
+
