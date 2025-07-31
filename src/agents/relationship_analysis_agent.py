@@ -28,13 +28,14 @@ class RelationshipAnalysisAgent:
             
         self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
 
-    def analyze_relationships(self, events, source_text):
+    def analyze_relationships(self, events, source_text, context_summary=""):
         """
         分析给定事件列表之间的关系。
 
         Args:
             events (list): 从同一源文本中提取的事件对象列表。
             source_text (str): 原始文本，为分析提供上下文。
+            context_summary (str, optional): 由混合检索器生成的背景摘要。默认为空字符串。
 
         Returns:
             list: 一个包含关系信息的字典列表。
@@ -44,7 +45,7 @@ class RelationshipAnalysisAgent:
             print("事件数量少于2，无需进行关系分析。")
             return []
 
-        prompt = self._build_prompt(events, source_text)
+        prompt = self._build_prompt(events, source_text, context_summary)
         
         try:
             response = self.client.chat.completions.create(
@@ -69,7 +70,7 @@ class RelationshipAnalysisAgent:
             print(f"解析失败的原始输出: {raw_output if 'raw_output' in locals() else 'N/A'}")
             return []
 
-    def _build_prompt(self, events, source_text):
+    def _build_prompt(self, events, source_text, context_summary):
         """
         构建用于关系分析的Prompt。
         """
@@ -83,6 +84,7 @@ class RelationshipAnalysisAgent:
 
         # 使用传入的模板填充内容
         return self.prompt_template.format(
+            context_summary=context_summary,
             source_text=source_text,
             event_descriptions=event_descriptions
         )
@@ -90,9 +92,12 @@ class RelationshipAnalysisAgent:
 if __name__ == '__main__':
     # 简单的测试用例
     # 注意：直接运行此文件需要手动提供prompt_template
+    # 在模板中新增 {context_summary} 占位符
     prompt_template_for_test = """
     作为一名情报分析师，请仔细阅读以下原始文本和从中抽取的事件列表。
-    你的任务是分析这些事件之间是否存在逻辑关系。
+    在分析之前，请参考我们知识库中提供的“背景摘要”。
+
+    {context_summary}
 
     **原始文本:**
     ---
@@ -135,6 +140,9 @@ if __name__ == '__main__':
     ]
     sample_text = "最新消息，由于全球芯片短缺，A公司的生产线被迫停产。受此影响，该公司今日宣布其旗舰手机价格上涨15%."
     
-    relationships = agent.analyze_relationships(sample_events, sample_text)
+    # 模拟一个背景摘要
+    sample_context = "背景摘要：根据历史数据，A公司在过去两年中曾多次因供应链问题导致生产延期。"
+
+    relationships = agent.analyze_relationships(sample_events, sample_text, sample_context)
     print("\n分析出的关系:")
     print(json.dumps(relationships, indent=2, ensure_ascii=False))

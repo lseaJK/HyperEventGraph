@@ -329,7 +329,7 @@
         "description": "开发 run_extraction_workflow.py。该脚本读取高质量的 final_known_events.jsonl，对所有已知事件进行批量化、结构化的信息抽取，产出可直接用于图谱构建的 structured_events.jsonl。",
         "details": "",
         "testStrategy": "",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           9
         ],
@@ -405,7 +405,7 @@
         "description": "对系统进行持续优化，并创建和维护关键技术文档，以提高项目的可维护性和可理解性。",
         "details": "",
         "testStrategy": "",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           16
         ],
@@ -416,7 +416,7 @@
             "title": "创建Prompt调优指南",
             "description": "创建 PROMPT_TUNING_GUIDE.md 文件，详细说明所有LLM调用场景、目标、提示词和预期输出，为模型优化和选型提供依据。",
             "details": "",
-            "status": "review",
+            "status": "done",
             "dependencies": [],
             "parentTaskId": 17
           }
@@ -428,7 +428,7 @@
         "description": "实现一个全新的处理层，负责分析已抽取事件之间的逻辑关系，并将事件节点和关系边持久化地存储到双数据库（图数据库和向量数据库）中，为构建知识图谱奠定基础。",
         "details": "",
         "testStrategy": "",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           17
         ],
@@ -439,7 +439,7 @@
             "title": "V4.0详细设计规划 - 关系分析与知识存储",
             "description": "根据架构师与管理者的讨论，Task #18的具体实现细节如下：1. **新工作流**: 创建`run_relationship_analysis.py`作为抽取后的新阶段。2. **关系分析**: `RelationshipAnalysisToolkit`将使用LLM分析事件间的关系，关系类型体系定义为：`Causal` (因果), `Temporal` (时序), `Sub-event` (从属), `Elaboration` (阐述), `Contradiction` (矛盾), `Influence` (影响), `Related` (相关)。3. **图存储**: `GraphStorageAgent`负责将事件、实体节点和关系边写入图数据库。4. **向量存储**: `VectorStorageAgent`负责实现分层向量化策略，对`_source_text` (原文), `event.description` (事件描述), 和构造的`entity_centric_context` (实体中心上下文) 分别进行向量化并存入ChromaDB。",
             "details": "",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "parentTaskId": 18
           }
@@ -451,7 +451,7 @@
         "description": "开发一个能够同时查询图数据库和向量数据库的混合检索器（HybridRetrieverAgent），并将其集成到现有的抽取和分析工作流中，通过为LLM提供丰富的历史上下文来增强其处理精度，从而闭合知识反馈循环。",
         "details": "",
         "testStrategy": "",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           18
         ],
@@ -462,7 +462,7 @@
             "title": "V4.0详细设计规划 - 混合检索与知识闭环",
             "description": "根据架构师与管理者的讨论，Task #19的具体实现细节如下：1. **触发时机**: 优先在`run_relationship_analysis.py`工作流中引入混合检索。2. **核心Agent**: 实现`HybridRetrieverAgent`作为“情报分析师”。3. **检索策略**: Agent需对新文本进行初步实体识别，然后**并行**查询双数据库：a) **图数据库**: 基于核心实体进行精确的、结构化的关系与事件查询。b) **向量数据库**: 基于全文向量进行模糊的、语义相似的事件案例查询。4. **上下文整合与Prompt增强**: Agent将检索到的图谱事实和相似案例整合成一段简洁的“背景摘要”，并将其注入到关系分析任务的Prompt中，为LLM提供决策参考，实现知识闭环。",
             "details": "",
-            "status": "pending",
+            "status": "done",
             "dependencies": [],
             "parentTaskId": 19
           }
@@ -474,7 +474,7 @@
         "description": "为了提高项目效率，在V4.0的关系分析与知识图谱功能开发的同时，并行地对全量数据（来自IC_data/filtered_data.json）执行初步的事件抽取。此任务的目标是生成一个临时的、包含所有原子事件的structured_events.jsonl文件，为后续的知识图谱构建提供原材料，并提前暴露Prompt在多样化数据上的表现。",
         "details": "",
         "testStrategy": "",
-        "status": "pending",
+        "status": "in-progress",
         "dependencies": [
           19
         ],
@@ -649,7 +649,7 @@
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-31T16:14:40.287Z",
+      "updated": "2025-07-31T17:01:19.488Z",
       "description": "Tasks for master context"
     }
   }

@@ -41,7 +41,7 @@ class HyperRelationStorage:
         """
         config = get_config()
         model_cache_dir = config.get('model_settings', {}).get('cache_dir')
-        model_name = config.get('cortex', {}).get('vectorizer', {}).get('model_name', 'BAAI/bge-large-zh-v1.5')
+        model_name = config.get('cortex', {}).get('vectorizer', {}).get('model_name', 'bge-large-zh-v1.5')
 
         self.neo4j_driver = GraphDatabase.driver(
             neo4j_uri, auth=(neo4j_user, neo4j_password)
