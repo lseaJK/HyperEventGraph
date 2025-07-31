@@ -63,9 +63,14 @@ extraction_workflow:
 
 # --- Cortex Workflow Configuration ---
 cortex:
+  # Number of events in 'pending_clustering' state required to auto-trigger the workflow.
+  trigger_threshold: 100
   vectorizer:
     model_type: "local" # "local" or "api"
     model_name: "all-MiniLM-L6-v2"
+  refinement:
+    # Threshold for what constitutes a "large" cluster that needs special handling.
+    large_cluster_threshold: 20
   clustering:
     # Weight for entity similarity in the final distance calculation.
     # A value of 0 means only vector similarity is used.

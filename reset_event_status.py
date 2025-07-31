@@ -9,6 +9,7 @@ def reset_event_status_for_testing():
     """
     Resets the status of a specified number of events back to 
     'pending_clustering' so the Cortex workflow can be re-run.
+    It now includes events that have already been processed by the refiner.
     """
     if not os.path.exists(DB_PATH):
         print(f"错误: 在 '{DB_PATH}' 未找到数据库文件。")
@@ -21,18 +22,17 @@ def reset_event_status_for_testing():
         with sqlite3.connect(DB_PATH) as conn:
             cursor = conn.cursor()
             
-            # Find events that have already been clustered
+            # Find events that have already been clustered or refined
             query = """
                 SELECT id FROM master_state 
-                WHERE current_status = 'pending_refinement' OR current_status = 'clustered_as_noise'
+                WHERE current_status IN ('pending_refinement', 'clustered_as_noise', 'pending_relationship_analysis')
                 LIMIT ?
             """
             cursor.execute(query, (NUM_TO_RESET,))
             records_to_reset = cursor.fetchall()
             
             if not records_to_reset:
-                print("未找到状态为 'pending_refinement' 或 'clustered_as_noise' 的记录。")
-                print("可能需要从更早的阶段开始准备数据。")
+                print("未找到符合重置条件的记录 (pending_refinement, clustered_as_noise, pending_relationship_analysis)。")
                 return
 
             ids_to_reset = [record[0] for record in records_to_reset]
@@ -40,7 +40,7 @@ def reset_event_status_for_testing():
 
             # Use a placeholder for each ID to update them all at once
             placeholders = ','.join('?' for _ in ids_to_reset)
-            update_query = f"UPDATE master_state SET current_status = 'pending_clustering' WHERE id IN ({placeholders})"
+            update_query = f"UPDATE master_state SET current_status = 'pending_clustering', cluster_id = NULL, story_id = NULL WHERE id IN ({placeholders})"
             
             cursor.execute(update_query, ids_to_reset)
             updated_count = cursor.rowcount

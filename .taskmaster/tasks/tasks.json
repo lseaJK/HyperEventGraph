@@ -601,7 +601,7 @@
         "description": "实现处理小规模“粗簇”的逻辑。开发 \"Refinement Prompt\"，调用LLM对簇进行分析，并返回“故事单元”。依赖 Task #21.1。",
         "details": "",
         "testStrategy": "",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           24
         ],
@@ -614,7 +614,7 @@
         "description": "实现“摘要-检索-扩展”的迭代逻辑，以处理规模超过预设阈值的“粗簇”。依赖 RefinementAgent 的基础功能。",
         "details": "",
         "testStrategy": "",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           26
         ],
@@ -649,7 +649,7 @@
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-31T14:44:05.091Z",
+      "updated": "2025-07-31T14:58:54.393Z",
       "description": "Tasks for master context"
     }
   }

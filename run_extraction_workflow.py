@@ -11,6 +11,7 @@ import json
 import uuid
 from pathlib import Path
 import sys
+import subprocess
 from tqdm.asyncio import tqdm_asyncio
 
 # Add project root to sys.path
@@ -38,7 +39,6 @@ def load_processed_ids(file_path: Path) -> set:
                 if '_source_id' in data:
                     processed_ids.add(data['_source_id'])
             except json.JSONDecodeError:
-                # Ignore corrupted lines, but log them if necessary
                 print(f"Warning: Skipping corrupted line in {file_path}")
                 continue
     return processed_ids
@@ -73,20 +73,63 @@ async def worker(record, db_manager, llm_client, semaphore, file_lock, output_fi
             async with file_lock:
                 with open(output_file_path, 'a', encoding='utf-8') as f:
                     for event in extracted_events:
-                        event['event_id'] = f"evt_{uuid.uuid4()}"  # Add unique ID to each event
+                        event['event_id'] = f"evt_{uuid.uuid4()}"
                         event['_source_id'] = record_id
-                        event['text'] = text  # Add original text to the output JSON object
+                        event['text'] = text
                         f.write(json.dumps(event, ensure_ascii=False) + '\n')
             
-            # 5. Update DB Status
-            db_manager.update_status_and_schema(record_id, "completed", "", f"Successfully extracted {len(extracted_events)} events.")
+            # 5. Update DB Status to 'pending_clustering'
+            db_manager.update_status_and_schema(record_id, "pending_clustering", "", f"Successfully extracted {len(extracted_events)} events.")
             return {"id": record_id, "status": "success", "events_extracted": len(extracted_events)}
 
         except Exception as e:
             error_message = f"Error processing record {record_id}: {e}"
-            print(error_message) # Also print to console for immediate feedback
+            print(error_message)
             db_manager.update_status_and_schema(record_id, "extraction_failed", "", str(e))
             return {"id": record_id, "status": "failed", "error": str(e)}
+
+def check_and_trigger_cortex():
+    """
+    Checks if the number of events pending clustering meets the threshold
+    and triggers the Cortex workflow if it does.
+    """
+    print("\n--- Checking if Cortex workflow should be triggered ---")
+    config = get_config()
+    db_path = config.get('database', {}).get('path')
+    trigger_threshold = config.get('cortex', {}).get('trigger_threshold', 100)
+    
+    db_manager = DatabaseManager(db_path)
+    
+    df = db_manager.get_records_by_status_as_df('pending_clustering')
+    pending_count = len(df)
+    
+    print(f"Found {pending_count} events pending clustering. Threshold is {trigger_threshold}.")
+    
+    if pending_count >= trigger_threshold:
+        print("Threshold met. Triggering Cortex workflow...")
+        try:
+            # Using subprocess to call the other script
+            result = subprocess.run(
+                [sys.executable, "run_cortex_workflow.py"],
+                capture_output=True,
+                text=True,
+                check=True  # This will raise an exception if the script returns a non-zero exit code
+            )
+            print("Cortex workflow finished successfully.")
+            print("--- Cortex STDOUT ---")
+            print(result.stdout)
+            print("--- Cortex STDERR ---")
+            print(result.stderr)
+        except FileNotFoundError:
+            print("Error: 'run_cortex_workflow.py' not found.")
+        except subprocess.CalledProcessError as e:
+            print(f"Cortex workflow script failed with exit code {e.returncode}.")
+            print("--- Cortex STDOUT ---")
+            print(e.stdout)
+            print("--- Cortex STDERR ---")
+            print(e.stderr)
+    else:
+        print("Threshold not met. Cortex workflow will not be triggered.")
 
 async def run_extraction_workflow():
     """Main function to run the concurrent extraction workflow."""
@@ -103,61 +146,45 @@ async def run_extraction_workflow():
     db_manager = DatabaseManager(db_path)
     llm_client = LLMClient()
 
-    # Load IDs that have already been processed and written to the output file
     processed_ids = load_processed_ids(output_file_path)
     if processed_ids:
-        print(f"Found {len(processed_ids)} records already processed in the output file. They will be skipped.")
+        print(f"Found {len(processed_ids)} records already processed, they will be skipped.")
 
-    print(f"Querying records with status 'pending_extraction' from '{db_path}'...")
     df_to_extract = db_manager.get_records_by_status_as_df('pending_extraction')
 
     if df_to_extract.empty:
-        print("No items found with status 'pending_extraction'. Workflow complete.")
+        print("No items found with status 'pending_extraction'.")
         return
 
-    # Filter out records that are already in the output file
     original_count = len(df_to_extract)
     df_to_extract = df_to_extract[~df_to_extract['id'].isin(processed_ids)]
-    filtered_count = len(df_to_extract)
     
-    if original_count > filtered_count:
-        print(f"Skipped {original_count - filtered_count} records that were already processed.")
+    if original_count > len(df_to_extract):
+        print(f"Skipped {original_count - len(df_to_extract)} already processed records.")
 
     if df_to_extract.empty:
-        print("All pending records have already been processed. Workflow complete.")
+        print("All pending records have already been processed.")
         return
 
     total_records = len(df_to_extract)
-#     df_to_extract = df_to_extract.head(5)  # 👈 只取前5条记录
-#     total_records = len(df_to_extract)
-    print(f"Found {total_records} new records to process. Starting concurrent extraction with limit {CONCURRENCY_LIMIT}...")
+    print(f"Found {total_records} new records to process...")
 
     semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
     file_lock = asyncio.Lock()
     
-    tasks = []
-    for index, row in df_to_extract.iterrows():
-        task = worker(row, db_manager, llm_client, semaphore, file_lock, output_file_path)
-        tasks.append(task)
+    tasks = [worker(row, db_manager, llm_client, semaphore, file_lock, output_file_path) for _, row in df_to_extract.iterrows()]
 
-    results = []
-    for future in tqdm_asyncio.as_completed(tasks, total=total_records, desc="Extracting Events"):
-        result = await future
-        results.append(result)
+    results = [await future for future in tqdm_asyncio.as_completed(tasks, total=total_records, desc="Extracting Events")]
 
     success_count = sum(1 for r in results if r['status'] == 'success')
-    failed_count = total_records - success_count
-    
-    print("\n--- Event Extraction Workflow Finished ---")
-    print(f"Total new records processed: {total_records}")
-    print(f"  - Successful: {success_count}")
-    print(f"  - Failed: {failed_count}")
-    if failed_count > 0:
-        print("Failed records have been marked in the database and will be skipped on the next run.")
+    print(f"\n--- Event Extraction Workflow Finished ---")
+    print(f"Successfully processed: {success_count}/{total_records}")
 
 def main():
     load_config("config.yaml")
     asyncio.run(run_extraction_workflow())
+    # After the async workflow is complete, run the synchronous check
+    check_and_trigger_cortex()
 
 if __name__ == "__main__":
     main()
