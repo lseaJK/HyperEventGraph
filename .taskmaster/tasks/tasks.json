@@ -474,7 +474,7 @@
         "description": "为了提高项目效率，在V4.0的关系分析与知识图谱功能开发的同时，并行地对全量数据（来自IC_data/filtered_data.json）执行初步的事件抽取。此任务的目标是生成一个临时的、包含所有原子事件的structured_events.jsonl文件，为后续的知识图谱构建提供原材料，并提前暴露Prompt在多样化数据上的表现。",
         "details": "",
         "testStrategy": "",
-        "status": "in-progress",
+        "status": "done",
         "dependencies": [
           19
         ],
@@ -645,11 +645,22 @@
         ],
         "priority": "high",
         "subtasks": []
+      },
+      {
+        "id": 30,
+        "title": "执行全量数据事件抽取并监控完成情况",
+        "description": "此任务用于追踪 `run_extraction_workflow.py` 在全量数据集上的执行过程。主要工作是监控其进度，确保其顺利完成，并处理在运行过程中可能出现的任何问题。",
+        "details": "",
+        "testStrategy": "",
+        "status": "in-progress",
+        "dependencies": [],
+        "priority": "medium",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-31T17:01:19.488Z",
+      "updated": "2025-07-31T17:19:10.850Z",
       "description": "Tasks for master context"
     }
   }
