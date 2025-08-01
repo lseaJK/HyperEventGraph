@@ -209,13 +209,19 @@ graph TD
 `master_state.db` 是整个系统的“中央神经系统”，它不存储庞大的知识内容，而是精准地记录**每一条数据在知识流水线中的生命周期状态**。
 
 -   **技术选型**: SQLite。轻量、无需独立服务、易于备份和管理，完美契合其作为状态跟踪器的角色。
+
+-   **技术实现摘要**:
+    `DatabaseManager` 类 (`src/core/database_manager.py`) 作为数据库的统一访问接口。其关键实现包括：��初始化时通过 `PRAGMA table_info` 动态检查并添加新列，确保了数据库结构的向后兼容性；提供 `get_records_by_status_as_df` 方法供各工作流高效认领任务；并实现了如 `update_story_info` 等批量更新方法以提升性能。
+
+    ➡️ **详细技术文档**: [./details/01_core_infrastructure.md#1-中央状态数据库管理器-databasemanagerpy](./details/01_core_infrastructure.md#1-中央状态数据库管理器-databasemanagerpy)
+
 -   **核心表结构 (`MasterState`)**:
 
 | 字段名                | 类型        | 描述                                                                                             | 示例                                     |
 | :-------------------- | :---------- | :----------------------------------------------------------------------------------------------- | :--------------------------------------- |
 | `id`                  | `TEXT`      | **主键**。通常是原始文本内容的哈希值，确保唯一性。                                               | `sha256_hash_of_text`                    |
 | `source_text`         | `TEXT`      | 原始文本内容。                                                                                   | "某公司今日宣布..."                      |
-| `current_status`      | `TEXT`      | **核心字段**。标记当前文本所处的处理阶段。                                                       | `pending_triage`, `pending_extraction`   |
+| `current_status`      | `TEXT`      | **核心字段**。标记���前文本所处的处理阶段。                                                       | `pending_triage`, `pending_extraction`   |
 | `triage_confidence`   | `REAL`      | 初筛分类的置信度得分（0.0-1.0）。用于人工审核的优先级排序。                                        | `0.85`                                   |
 | `assigned_event_type` | `TEXT`      | 由 TriageAgent 或人工审核指定的事件类型。                                                        | `公司并购`                               |
 | `story_id`            | `TEXT`      | 由 Cortex 引擎分配的故事单元ID，用于将相关事件聚合。                                             | `story_a1b2c3d4`                         |
@@ -268,7 +274,7 @@ graph TD
 -   **职责**: 作为数据流入系统的第一个关口，负责将多源异构的原始输入（HTML, PDF, Text）标准化。
 -   **流程**:
     1.  使用如 `BeautifulSoup` (HTML) 或 `PyMuPDF` (PDF) 等库提取纯文本内容。
-    2.  进行必要的清洗，如去除广告、导航栏、多余的空白符等。
+    2.  进行必要的清洗，如��除广告、导航栏、多余的空白符等。
     3.  计算文本内容的哈希值作为其唯一 `id`。
     4.  将清洗后的文本和 `id` 存入 `master_state.db`，状态置为 `pending_triage`。
 
@@ -282,7 +288,7 @@ graph TD
         -   生成 `review_sheet.csv`，包含 `id`, `source_text`, `assigned_event_type` (AI给出的) 等字段，并提供一个 `corrected_event_type` 空白列供审核员填写。
     2.  **`process_review_results.py`**:
         -   读取审核员填写完成的 `review_sheet.csv`。
-        -   遍历每一行，将人工校准后的结果直接通过 `database_manager` 更新回 `master_state.db`。
+        -   遍历每一行，将人工校准后的结果通过 `database_manager` 更新回 `master_state.db`。
         -   根据校准结果更新状态：若类型已知，则为 `pending_extraction`；若类型未知或标记为新类型，则为 `pending_learning`。
 
 # Chapter 4: 核心技术与分析层
@@ -295,18 +301,24 @@ graph TD
 
 -   **LLM Engine (`src/llm/llm_client.py`)**:
     -   **职责**: 封装了与大语言模型（本项目中为 Silicon Flow GLM-4.5 系列）的所有交互细节。
-    -   **功能**: 提供统一的接口，支持同步/异步调用、JSON模式响应、温度/Top-P等参数配置、以及基本的重试和错误处理机制。
+    -   **技术实现摘要**:
+        `LLMClient` 类 (`src/llm/llm_client.py`) 作为与LLM交互的统一入口。它通过读取 `config.yaml` 实现模型路由，能根据任务类型（如'triage'）自动选择合适的模型和��数。其核心方法 `get_json_response` 内置了对JSON输出格式的请求和安全的解析，同时提供了异步方法以支持高并发工作流。
+
+        ➡️ **详细技术文档**: [./details/02_llm_engine.md](./details/02_llm_engine.md)
 
 -   **Prompt Manager (`src/core/prompt_manager.py`)**:
     -   **职责**: 实现了业务逻辑与提示词（Prompts）的完全分离。
-    -   **功能**: 作为一个单例服务，它从 `/prompts` 目录动态加载模板文件，并提供一个 `get_prompt()` 方法，允许在运行时安全地填充模板，生成最终的提示词。
+    -   **技术实现摘要**:
+        `PromptManager` (`src/core/prompt_manager.py`) 采用单例模式，确保提示词模板在整个应用生命周期中只从磁盘加载一次。其 `get_prompt` 方法通过模板名称和关键字参数，安全地生成最终提示词，并将模板文件与调用代码解耦。
+
+        ➡️ **详细技术文档**: [./details/07_prompt_engineering.md](./details/07_prompt_engineering.md)
 
 -   **Cortex Engine (`src/cortex/`)**:
     -   **职责**: V4.0架构的核心创新，负责在海量、离散的事件中**重建上下文**，是关系分析的前置大脑。
-    -   **组件**:
-        -   `VectorizationService`: 提供将文本（事件描述）转换为向量表示的基础服务。
-        -   `ClusteringOrchestrator`: 执行“算法粗聚类”，它结合事件的**语义相似度**（向量余弦距离）和**实体共现相似度**（Jaccard距离），利用DBSCAN算法将可能相关的事件聚合为“粗簇”。
-        -   `RefinementAgent`: 执行“LLM精炼”，接收“粗簇”并将其提炼为一个或多个逻辑内聚的“故事单元 (Story)”。对超大簇采用“分块-摘要-合并”策略以提升处理效率和质量。
+    -   **技术实现摘要**:
+        Cortex引擎通过一个“算法粗聚类 + LLM精炼”的两阶段流程工作。`ClusteringOrchestrator` 使用一种创新的**混合距离度量**（融合了向量语义相似度和实体共现相似度）和DBSCAN算法来形成粗簇。随后，`RefinementAgent` 接手，通过LLM将粗簇提炼为逻辑内聚的“故事单元”，并对超大簇采用“分块-摘要-合并”策略以保证处理质量和效率。
+
+        ➡️ **详细技术文档**: [./details/05_cortex_engine.md](./details/05_cortex_engine.md)
 
 ### 4.2. 智能代理 (Agents)
 
@@ -314,68 +326,40 @@ graph TD
 
 -   **TriageAgent (`src/agents/triage_agent.py`)**:
     -   **职责**: 对原始文本进行快速初筛分类。
-    -   **输入**: 一段原始文本。
-    -   **输出**: 一个包含 `status` (`known`/`unknown`)、`event_type`、`confidence` 等字段的JSON对象。它的Prompt是动态构建的，包含了所有已知的事件类型。
+    -   **技术实现摘要**:
+        `TriageAgent` 的核心在于其动态构建的系统提示。在初始化时，它会从中央Schema注册表 (`src/event_extraction/schemas.py`) 加载所有已知的事件类型，并将其注入提示中。这使得Agent的分类能力可以随着系统知识的增长而自动扩展，无需修改代码。其输出被严格约束为固定的JSON格式，以确保下游工作流的稳定性。
+
+        ➡️ **详细技术文档**: [./details/03_intelligent_agents_part1.md#1-初筛代理-triageagent](./details/03_intelligent_agents_part1.md#1-初筛代理-triageagent)
 
 -   **ExtractionAgent (`src/agents/extraction_agent.py`)**:
     -   **职责**: 对事件类型已知的文本进行精准的、结构化的信息抽取。
-    -   **输入**: 原始文本和对应的事件JSON Schema。
-    -   **输出**: 严格遵循输入Schema的事件JSON对象（或列表）。
+    -   **技术实现摘要**:
+        `ExtractionAgent` 是一个**Schema驱动**的代理。它的通用性体现在其系统提示上，该提示指示LLM必须严格遵循用户在运行时提供的JSON Schema进行信息抽取。这种设计将Agent的逻辑与具体的事件定义完全解耦，使其能够灵活适应任何新的、未来的事件类型，而无需任何代码变更。
+
+        ➡️ **详细技术文档**: [./details/03_intelligent_agents_part1.md#2-抽取代理-extractionagent](./details/03_intelligent_agents_part1.md#2-抽取代理-extractionagent)
 
 -   **RelationshipAnalysisAgent (`src/agents/relationship_analysis_agent.py`)**:
     -   **职责**: 分析同一个“故事单元”内多个事件之间的深层逻辑关系。
-    -   **输入**: 一个“故事单元”，包含多个事件描述和原始文本上下文。在V4.0的知识闭环中，还会接收由`HybridRetrieverAgent`提供的“背景摘要”。
-    -   **输出**: 一个关系列表，每个关系都定义了`source_event_id`、`target_event_id`和`relationship_type`（如 `Causal`, `Temporal` 等）。
+    -   **技术实现摘要**:
+        该Agent的核心是其 `_build_prompt` 方法，它将三个层次的上下文（事件列表、原始文本、知识库背景摘要）整合到一个信息极其丰富的Prompt中。它严格定义了输出的JSON结构和关系类型，并通过强大的错误处理确保即使LLM调用失败，也不会中断整个工作流。
+
+        ➡️ **详细技术文档**: [./details/04_intelligent_agents_part2.md#1-关系分析代理-relationshipanalysisagent](./details/04_intelligent_agents_part2.md#1-关系分析代理-relationshipanalysisagent)
 
 -   **SchemaLearnerAgent (`src/agents/schema_learner_agent.py`)**:
     -   **职责**: 在人类专家的引导下，从“未知”事件中发现新模式，并归纳出新的事件JSON Schema。
-    -   **交互方式**: 通过一个交互式的命令行工具 (`run_learning_workflow.py`)，人类专家可以执行聚类、查看样本、合并簇、并触发Schema生成。
+    -   **技术实现摘要**:
+        这是一个**工具驱动**并围绕**人机协同**设计的代理。其核心能力（如聚类、Schema归纳）被封装在 `SchemaLearningToolkit` 中。Agent本身负责解析用户在CLI中的指令，调用相应工具，并将结果格式化后呈现给用户，等待���一步指令，从而实现一个完整的、由专家主导的交互式学习循环。
+
+        ➡️ **详细技术文档**: [./details/04_intelligent_agents_part2.md#2-模式学习代理-schemalearneragent](./details/04_intelligent_agents_part2.md#2-模式学习代理-schemalearneragent)
 
 ### 4.3. 核心工作流 (Workflows)
 
 工作流是由具体的Python脚本实现的任务编排器，它们驱动Agent与数据库交互，完成端到端的业务流程。
 
--   **`run_batch_triage.py`**:
-    -   **触发**: 手动或定时执行。
-    -   **逻辑**:
-        1.  从`master_state.db`查询所有`current_status = 'pending_triage'`的记录。
-        2.  实例化`TriageAgent`。
-        3.  逐条处理记录，调用Agent进行分类。
-        4.  将Agent返回的分类结果（事件类型、置信度、说明）更新回数据库，并将状态置为`pending_review`。
+-   **技术实现摘要**:
+    `run_*.py` 系列脚本是系统业务逻辑的“主动脉”。每个脚本都被设计为可独立执行的应用程序，负责驱动一个特定的业务阶段（如初筛、抽取）。它们通过查询和更新 `master_state.db` 来实现彼此间的解耦和接力。关键技术包括 `run_extraction_workflow.py` 中支持高吞吐量的 `asyncio` 并发模型，以及在抽取和Cortex工作流之间实现的基于阈值的**自动批处理触发**机制。
 
--   **`run_extraction_workflow.py`**:
-    -   **触发**: 手动或定时执行。
-    -   **逻辑**:
-        1.  从`master_state.db`查询所有`current_status = 'pending_extraction'`的记录。
-        2.  采用`asyncio`进行并发处理，以提高效率。
-        3.  对每条记录，调用`ExtractionAgent`进行事件抽取。
-        4.  将抽取的事件JSON写入一个临时的`.jsonl`输出文件。
-        5.  更新数据库记录的状态为`pending_clustering`。
-        6.  **批处理触发**: 当状态为`pending_clustering`的事件数量达到阈值（如100）时，**自动以子进程方式触发`run_cortex_workflow.py`**。
-
--   **`run_cortex_workflow.py`**:
-    -   **触发**: 由`run_extraction_workflow.py`自动触发，或手动执行。
-    -   **逻辑**:
-        1.  从数据库查询所有`current_status = 'pending_clustering'`的事件。
-        2.  调用`Cortex Engine`的`ClusteringOrchestrator`进行粗聚类，并将`cluster_id`写回数据库。
-        3.  对每个簇，调用`RefinementAgent`进行精炼，生成“故事单元”。
-        4.  将`story_id`写回数据库，并将簇内所有事件的状态更新为`pending_relationship_analysis`。
-
--   **`run_relationship_analysis.py`**:
-    -   **触发**: 手动或定时执行。
-    -   **逻辑**:
-        1.  从数据库查询所有`current_status = 'pending_relationship_analysis'`的事件，并按`story_id`分组。
-        2.  对每个“故事”，调用`RelationshipAnalysisAgent`进行关系分析。
-        3.  调用`StorageAgent`，将事件节点和分析出的关系边存入Neo4j和ChromaDB。
-        4.  更新数据库记录的状态为`completed`。
-
--   **`run_learning_workflow.py`**:
-    -   **触发**: 手动执行。
-    -   **逻辑**:
-        1.  提供一个交互式CLI。
-        2.  从数据库加载所有`current_status = 'pending_learning'`的记录。
-        3.  用户通过`cluster`, `show_samples`, `merge`等命令与`SchemaLearnerAgent`交互。
-        4.  当用户确认保存一个新Schema后，工作流将该Schema写入配置文件，并将对应簇内所有记录的状态**重置为`pending_triage`**，使其能被新知识体系重新识别和处理，从而**闭合学习循环**。
+    ➡️ **详细技术文档**: [./details/06_core_workflows.md](./details/06_core_workflows.md)
 
 # Chapter 5: 应用与服务层
 
@@ -438,7 +422,141 @@ graph TD
 
 ## 6. 核心端到端工作流
 
-(内容同前，此处省略以保持简洁)
+本章节通过流程图详细描绘了数据在系统中的完整生命周期，将前面章节中描述的各个静态组件串联成动态的、可执行的业务流程。
+
+➡️ **详细技术文档**: 为了更生动地理解这些流程，建议阅读 [./details/08_end_to_end_flow.md](./details/08_end_to_end_flow.md)，其中以“一篇新闻稿的生命周期”为例，对整个端到端流程进行了叙事性的、逐步的详解。
+
+### 6.1. V3.1 核心数据处理流水线
+
+这是系统最基础、最核心的数据处理流程，它描述了一条文本从被采集到完成初步事件抽取的完整路径。此流程由`master_state.db`中的状态驱动，并包含一个关键的人机协同环节。
+
+```mermaid
+graph TD
+    subgraph "数据源"
+        A[原始文本]
+    end
+
+    subgraph "数据处理与存储层"
+        B(文本解析与清洗)
+        C(写入 master_state.db):::db
+        D{人工审核环节}
+        E[更新 master_state.db]:::db
+    end
+
+    subgraph "核心技术与分析层"
+        F(run_batch_triage.py):::script
+        G(TriageAgent):::agent
+        H(run_extraction_workflow.py):::script
+        I(ExtractionAgent):::agent
+        J(run_learning_workflow.py):::script
+        K(SchemaLearnerAgent):::agent
+    end
+    
+    subgraph "最终产出"
+        L[结构化事件 (JSONL)]
+    end
+
+    A --> B;
+    B --> C;
+    C -- "状态: pending_triage" --> F;
+    F -- "调用" --> G;
+    G -- "返回分类结果" --> F;
+    F -- "更新状态 -> pending_review" --> C;
+    
+    C -- "状态: pending_review" --> D;
+    D -- "校准结果" --> E;
+    
+    E -- "状态 -> pending_extraction" --> H;
+    H -- "调用" --> I;
+    I -- "返回事件JSON" --> H;
+    H --> L;
+    H -- "更新状态 -> pending_clustering" --> E;
+
+    E -- "状态 -> pending_learning" --> J;
+    J -- "与专家交互调用" --> K;
+    K -- "生成新Schema" --> J;
+    J -- "更新Schema并重置状态 -> pending_triage" --> E;
+```
+
+**流程详解**:
+1.  **数据注入**: 原始文本经过解析清洗后，被赋予初始状态 `pending_triage` 并存入 `master_state.db`。
+2.  **批量初筛**: `run_batch_triage.py` 工作流定时启动，获取所有待初筛的文本，并调用 `TriageAgent` 进行分类。分类结果（事件类型、置信度）被写回数据库，状态更新为 `pending_review`。
+3.  **人机协同**:
+    -   对于AI分类结果，由人工进行审核。
+    -   如果分类正确，审核员确认后，状态更新为 `pending_extraction`。
+    -   如果分类错误，审核员修正后，状态更新为 `pending_extraction`。
+    -   如果审核员判断为一种新的、未知的事件类型，状态被更新为 `pending_learning`。
+4.  **知识学习 (学习回路)**: `run_learning_workflow.py` 启动，加载所有待学习的案例。在专家的交互式引导下，`SchemaLearnerAgent` 对相似案例进行聚类，并归纳出新的事件Schema。新Schema保存后，这些案例的状态被**重置为 `pending_triage`**，它们将带着新的知识标签，重新进入处理流水线。**这是系统的第一个知识闭环**。
+5.  **事件抽取**: `run_extraction_workflow.py` 工作流启动，获取所有待抽取的文本，调用 `ExtractionAgent` 进行结构化信息抽取，产出最终的事件JSONL文件，并将数据库状态更新为 `pending_clustering`，为V4.0的流程做准备。
+
+### 6.2. V4.0 知识增强与闭环流程
+
+这是在V3.1基��上的演进，核心是引入了 **Cortex引擎** 和 **HybridRetrieverAgent**，将单向的流水线升级为能够利用已有知识进行推理的智能闭环系统。
+
+```mermaid
+graph TD
+    subgraph "V3.1 产出"
+        A[结构化事件, 状态: pending_clustering]:::db
+    end
+
+    subgraph "Cortex 上下文重建引擎"
+        B(run_cortex_workflow.py):::script
+        C(ClusteringOrchestrator):::tech
+        D(RefinementAgent):::agent
+    end
+
+    subgraph "关系分析与知识存储"
+        E(run_relationship_analysis.py):::script
+        F(RelationshipAnalysisAgent):::agent
+        G(StorageAgent):::agent
+    end
+
+    subgraph "知识闭环 (Knowledge Loop)"
+        H(HybridRetrieverAgent):::agent
+    end
+
+    subgraph "核心知识库"
+        I[Neo4j 图数据库]:::db
+        J[ChromaDB 向量数据库]:::db
+    end
+
+    A --> B;
+    B -- "调用" --> C;
+    C -- "生成粗簇" --> B;
+    B -- "调用" --> D;
+    D -- "生成'故事单元'" --> B;
+    B -- "更新状态 -> pending_relationship_analysis" --> A;
+
+    A -- "状态: pending_relationship_analysis" --> E;
+    
+    E -- "为故事单元检索上下文" --> H;
+    H -- "从" --> I;
+    H -- "从" --> J;
+    H -- "返回背景摘要" --> E;
+
+    E -- "调用(含背景摘要)" --> F;
+    F -- "返回关系" --> E;
+    E -- "调用" --> G;
+    G -- "写入" --> I;
+    G -- "写入" --> J;
+    E -- "更新状态 -> completed" --> A;
+```
+
+**流程详解**:
+1.  **Cortex上下文重建**:
+    -   `run_cortex_workflow.py` 由上游的抽取工作流在数据达到一定阈值时自动触发。
+    -   它首先调用 `ClusteringOrchestrator` 对海量离散的事件进行“粗聚类”。
+    -   然后，`RefinementAgent` 对每个粗簇进行“精炼”，产出逻辑内聚的“故事单元 (Story)”。
+    -   最后，它将 `story_id` 写回数据库，并将故事内所有事件的状态更新为 `pending_relationship_analysis`。
+2.  **知识增强的关系分析**:
+    -   `run_relationship_analysis.py` 工作流启动，按 `story_id` 获取待分析的故事。
+    -   **知识闭环的关键点**: 在调用关系分析之前，它首先调用 `HybridRetrieverAgent`。
+    -   `HybridRetrieverAgent` 并行查询Neo4j和ChromaDB，检索与当前故事相关的历史背景知识，并形成一段“背景摘要”。
+    -   这段“背景摘要”被注入到 `RelationshipAnalysisAgent` 的Prompt中，为LLM提供了丰富的决策依据。
+3.  **知识存储**:
+    -   `RelationshipAnalysisAgent` 在增强的上下文中��成关系分析。
+    -   `StorageAgent` 被调用，将新的事件节点、实体节点以及它们之间的关系边，分别存入Neo4j和ChromaDB。
+    -   至此，新知识被完全融入系统，并可以在下一次被 `HybridRetrieverAgent` 检索到，**完成了第二个、也是最核心的知识闭环**。
 
 ---
 
