@@ -59,6 +59,7 @@ class DatabaseManager:
                 self._add_column_if_not_exists(cursor, 'involved_entities', 'TEXT') # For storing entity JSON
                 self._add_column_if_not_exists(cursor, 'cluster_id', 'INTEGER')
                 self._add_column_if_not_exists(cursor, 'story_id', 'TEXT')
+                self._add_column_if_not_exists(cursor, 'structured_data', 'TEXT') # For storing full extracted event JSON
                 
                 conn.commit()
         except sqlite3.Error as e:
@@ -175,6 +176,25 @@ class DatabaseManager:
                     print(f"Warning: Expected to update {len(event_ids)} records, but updated {cursor.rowcount}.")
         except sqlite3.Error as e:
             print(f"Error updating story info for events: {e}")
+
+    def update_record_with_structured_event(self, record_id: str, new_status: str, schema_name: str, structured_data_json: str, notes: str):
+        """
+        Updates a record with the full structured event data after a successful extraction.
+        """
+        query = """
+            UPDATE master_state
+            SET current_status = ?, assigned_event_type = ?, structured_data = ?, notes = ?, last_updated = ?
+            WHERE id = ?
+        """
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, (new_status, schema_name, structured_data_json, notes, datetime.now().isoformat(), record_id))
+                conn.commit()
+                if cursor.rowcount == 0:
+                    print(f"Warning: No record found with ID '{record_id}' to update with structured event.")
+        except sqlite3.Error as e:
+            print(f"Error updating record '{record_id}' with structured event: {e}")
 
 # It can also be useful to have a standalone function for one-off initialization
 def initialize_database(db_path: str | Path):

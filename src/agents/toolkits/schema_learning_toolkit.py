@@ -31,6 +31,7 @@ class SchemaLearningToolkit:
         self.data_frame = pd.DataFrame()
         self.generated_schemas = {}
         self.embedding_model = None
+        self.summary_cache = {}  # Add a cache for summaries
 
         print("SchemaLearningToolkit initialized.")
         self._load_data_from_db()
@@ -65,8 +66,10 @@ class SchemaLearningToolkit:
             self.embedding_model = None
 
     def reload_data(self):
-        """Reloads data from the database."""
+        """Reloads data from the database and clears the summary cache."""
         self._load_data_from_db()
+        self.summary_cache.clear()
+        print("Summary cache has been cleared.")
 
     async def run_clustering(self):
         """
@@ -79,23 +82,22 @@ class SchemaLearningToolkit:
 
         print("Generating event summaries for clustering via LLM (concurrently)...")
         
-        # --- Generate summaries for all texts in parallel ---
         texts_to_process = self.data_frame['source_text'].tolist()
         tasks = [self._get_ic_event_summary(text) for text in texts_to_process]
         all_summaries = await asyncio.gather(*tasks)
         
-        # --- Create fused text for embedding ---
+        # Populate the cache and create fused text for embedding
         fused_texts = []
         for i, text in enumerate(texts_to_process):
-            summary_str = " ".join(all_summaries[i])
+            summary = all_summaries[i]
+            self.summary_cache[text] = summary  # Populate the cache
+            summary_str = " ".join(summary)
             fused_texts.append(f"{summary_str} {text}")
         
         print("Running clustering on fused (summary + text) embeddings...")
         
-        # Generate embeddings from the fused texts
         embeddings = self.embedding_model.encode(fused_texts, show_progress_bar=True)
 
-        # Perform clustering
         min_cluster_size = self.config.get('min_cluster_size', 3)
         clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size, gen_min_span_tree=True)
         clusterer.fit(embeddings)
@@ -200,35 +202,13 @@ class SchemaLearningToolkit:
 
     async def _get_ic_event_summary(self, text: str) -> list[str]:
         """
-        Uses an LLM to summarize IC-related events from a given text.
+        Uses an LLM to summarize IC-related events from a given text, with caching.
         """
-        
-        system_prompt = """{
-  "system": "你是一个集成电路领域专家，负责从新闻文本中提取集成电路相关事件",
-  "task": {
-    "processing": "识别并提取所有与集成电路设计、制造、应用相关的事件",
-    "output": {
-      "format": "列表形式",
-      "requirements": [
-        "每个事件概述不超过20个字",
-        "只包含与集成电路直接相关的内容",
-        "使用简体中文",
-        "严格使用格式: [事件1, 事件2, ...]"
-      ]
-    }
-  },
-  "examples": [
-    {
-      "input": "《科创板日报》21日讯，晶丰明源董事长胡黎强在今日举行的2023科创板开市四周年论坛芯片半导体圆桌上表示，科创板给了科技创新企业更高的容忍度，支持企业去挑战正确而艰难的事情。以大家电应用领域为例，AC/DC电源芯片以及变频电机控制MCU芯片的客户端大批量出货至少需要3—5年时间，“这些是许多没有上市的芯片公司，很难去坚持的”。胡黎强表示，公司将充分利用好在科创板上市的优势，坚持做“正确而艰难的事”，助力国产芯片升级，让公司也再上一个新台阶。",
-      "output": "[\"晶丰明源董事长谈科创板支持芯片创新\", \"AC/DC电源芯片批量出货需3-5年\", \"变频电机控制MCU芯片研发周期长\", \"科创板助力国产芯片升级\"]"
-    }
-  ],
-  "constraints": [
-    "排除与集成电路无关的泛泛之谈",
-    "不包含记者信息等无关内容",
-    "若技术描述不明确则不提取"
-  ]
-}"""
+        # Return from cache if summary already exists
+        if text in self.summary_cache:
+            return self.summary_cache[text]
+
+        system_prompt = """{  "system": "你是一个集成电路领域专家，负责从新闻文本中提取集成电路相关事件",  "task": {    "processing": "识别并提取所有与集成电路设计、制造、应用相关的事件",    "output": {      "format": "列表形式",      "requirements": [        "每个事件概述不超过20个字",        "只包含与集成电路直接相关的内容",        "使用简体中文",        "严格使用格式: [事件1, 事件2, ...]"      ]    }  },  "examples": [    {      "input": "《科创板日报》21日讯，晶丰明源董事长胡黎强在今日举行的2023科创板开市四周年论坛芯片半导体圆桌上表示，科创板给了科技创新企业更高的容忍度，支持企业去挑战正确而艰难的事情。以大家电应用领域为例，AC/DC电源芯片以及变频电机控���MCU芯片的客户端大批量出货至少需要3—5年时间，“这些是许多没有上市的芯片公司，很难去坚持的”。胡黎强表示，公司将充分利用好在科创板上市的优势，坚持做“正确而艰难的事”，助力国产芯片升级，让公司也再上一个新台阶。",      "output": "[\"晶丰明源董事长谈科创板支持芯片创新\", \"AC/DC电源芯片批量出货需3-5年\", \"变频电机控制MCU芯片研发周期长\", \"科创板助力国产芯片升级\"]"    }  ],  "constraints": [    "排除与集成电路无关的泛泛之谈",    "不包含记者信息等无关内容",    "若技术描述不明确则不提取"  ]}"""
         messages = [
             {
                 "role": "system",
@@ -241,8 +221,6 @@ class SchemaLearningToolkit:
         ]
 
         try:
-            # Note: provider is inferred from the model name if it's a standard one,
-            # but we specify it for clarity and robustness.
             response = await self.llm_client.get_json_response(
                 messages=messages,
                 provider="siliconflow",
@@ -252,17 +230,44 @@ class SchemaLearningToolkit:
             )
             
             if isinstance(response, list):
+                self.summary_cache[text] = response  # Save to cache on success
                 return response
             else:
                 print(f"[Warning] LLM returned a non-list summary: {response}")
-                return ["LLM response was not a valid JSON list."]
+                # Cache the failure to avoid retrying on the same problematic text
+                self.summary_cache[text] = ["LLM response was not a valid JSON list."]
+                return self.summary_cache[text]
 
         except Exception as e:
             print(f"[Warning] LLM call for summary failed: {e}")
-            # Extract the root cause if it's a TypeError from the client
             if "unexpected keyword argument" in str(e):
                  print("[Hint] This might be due to an outdated method signature in LLMClient.")
-            return ["Error during summary generation."]
+            # Cache the failure
+            self.summary_cache[text] = ["Error during summary generation."]
+            return self.summary_cache[text]
+
+    async def _perform_single_extraction(self, text: str, schema: dict) -> dict | None:
+        """
+        A helper to perform a targeted extraction for a single text using a given schema.
+        """
+        print(f"  Performing extraction for text: '{text[:50]}...'")
+        try:
+            # We can reuse the 'extraction' prompt structure
+            prompt = prompt_manager.get_prompt(
+                "extraction",
+                source_text=text,
+                event_schema=json.dumps(schema, ensure_ascii=False, indent=2)
+            )
+            messages = [{"role": "user", "content": prompt}]
+            
+            extracted_data = await self.llm_client.get_json_response(
+                messages=messages,
+                task_type="extraction"
+            )
+            return extracted_data
+        except Exception as e:
+            print(f"    Extraction failed: {e}")
+            return None
 
     def merge_clusters(self, id1: int, id2: int):
         if 'cluster_id' not in self.data_frame.columns:
@@ -342,7 +347,7 @@ class SchemaLearningToolkit:
         print("\n--- Parallel Schema Generation Complete ---")
         print("Run 'list_clusters' to see a summary of the generated schemas.")
 
-    def save_schema(self, cluster_id: int):
+    async def save_schema(self, cluster_id: int):
         if cluster_id not in self.generated_schemas:
             print("No schema generated for this cluster. Use 'generate_schema' or 'generate_all' first.")
             return
@@ -350,6 +355,7 @@ class SchemaLearningToolkit:
         schema_to_save = self.generated_schemas[cluster_id]
         schema_name = schema_to_save['schema_name']
         
+        # --- 1. Save the new schema to the central registry ---
         schema_file = Path(self.config.get("schema_registry_path", "output/schemas/event_schemas.json"))
         schema_file.parent.mkdir(exist_ok=True)
         
@@ -366,13 +372,38 @@ class SchemaLearningToolkit:
             print(f"Error saving schema file: {e}")
             return
 
-        record_ids_to_update = self.data_frame[self.data_frame['cluster_id'] == cluster_id]['id'].tolist()
-        print(f"Updating {len(record_ids_to_update)} records in DB to 'pending_triage'...")
-        for record_id in record_ids_to_update:
-            self.db_manager.update_status_and_schema(record_id, "pending_triage", schema_name, "Schema learned, pending re-triage.")
+        # --- 2. Re-process all items in the cluster with the new schema ---
+        records_to_process = self.data_frame[self.data_frame['cluster_id'] == cluster_id]
+        print(f"\nRe-processing {len(records_to_process)} records in cluster {cluster_id} with new schema '{schema_name}'...")
+
+        for index, record in records_to_process.iterrows():
+            record_id = record['id']
+            source_text = record['source_text']
             
+            # Perform the extraction
+            structured_data = await self._perform_single_extraction(source_text, schema_to_save)
+            
+            if structured_data:
+                # Update DB with the structured data and set status to 'processed'
+                self.db_manager.update_record_with_structured_event(
+                    record_id=record_id,
+                    new_status='processed',
+                    schema_name=schema_name,
+                    structured_data_json=json.dumps(structured_data, ensure_ascii=False),
+                    notes=f"Successfully re-processed with newly learned schema '{schema_name}'."
+                )
+                print(f"  Successfully processed and stored event for record {record_id}.")
+            else:
+                # If extraction fails, mark it for review
+                self.db_manager.update_status_and_schema(
+                    record_id, "pending_review", schema_name, 
+                    f"Schema '{schema_name}' was learned, but immediate re-extraction failed."
+                )
+                print(f"  [Warning] Failed to re-process record {record_id}. Marked for review.")
+
+        # --- 3. Clean up the internal state ---
         self.data_frame = self.data_frame[self.data_frame['cluster_id'] != cluster_id]
         del self.generated_schemas[cluster_id]
         
-        print("Save and update complete.")
-        print("\nNext step: Continue with other clusters or 'exit' the workflow.")
+        print(f"\nSave and re-processing for cluster {cluster_id} complete.")
+        print("Next step: Continue with other clusters or 'exit' the workflow.")

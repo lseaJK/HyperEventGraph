@@ -80,17 +80,19 @@
 
 ## 5. `run_learning_workflow.py` (交互式学习工作流)
 
--   **职责**: 提供一个专家界面，引导系统从未知案例中学习新知识。
+-   **职责**: 提供一个专家界面，引导系统从未知案例中学习新知识，并将学习成果即时转化为结构化数据。
 -   **输入状态**: `pending_learning`
--   **输出状态**: `pending_triage` (学习闭环)
+-   **输出状态**: `processed` 或 `pending_review` (学习并应用成功)
 -   **核心逻辑**:
     1.  启动一个交互式的命令行（CLI）循环。
-    2.  实例化 `SchemaLearningToolkit`，它会自动加载所有 `pending_learning` 状态的数据。
+    2.  实例化 `SchemaLearningToolkit`，它会自动加载所有 `pending_learning` 状态的数据，并使用LLM并发生成事件摘要，用于后续的聚类和展示。
     3.  用户通过输入 `cluster`, `show_samples <id>`, `generate_schema <id>` 等命令与工具包进行交互。
-    4.  当用户对生成的Schema满意并执行 `save_schema` (示意) 命令后，工作流会：
-        a. 将新Schema写入 `event_schemas.json` 注册表。
-        b. 调用 `DatabaseManager`，将该簇内所有事件的状态**重置为 `pending_triage`**。
--   **关键实现**: 这是一个典型的**人机协同**工作流，它将复杂的算法封装在工具包中，通过简单的CLI指令暴露给专家，并最终通过状态重置来**闭合学习循环**。
+    4.  当用户对生成的Schema满意并执行 `save_schema` 命令后，工作流将执行一个完整的“学习-应用”闭环：
+        a. **保存Schema**: 将新Schema写入 `event_schemas.json` 注册表。
+        b. **即时再处理**: `SchemaLearningToolkit` 会自动调用内部的提取模块，使用刚保存的Schema，对该簇内的所有事件进行一次并发的、目标明确的事件抽取。
+        c. **直接入库**: 对于抽取成功的事件，调用 `DatabaseManager` 将完整的结构化JSON存入 `structured_data` 字段，并将状态更新为 `processed`。
+        d. **失败标记**: 对于抽取失败的事件，状态被更新为 `pending_review`，以供人工检查。
+-   **关键实现**: 这是一个典型的**人机协同**工作流。它将复杂的算法封装在工具包中，通过简单的CLI指令���露给专家，并最终通过**即时回处理**来闭合学习循环，实现了知识的即时应用。
 
 ### 知识迭代闭环策略详解
 

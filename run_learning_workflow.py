@@ -163,7 +163,7 @@ async def main_loop(db_path: str):
                 continue
             try:
                 cluster_id = int(args[0])
-                toolkit.save_schema(cluster_id)
+                await toolkit.save_schema(cluster_id)
             except ValueError:
                 print("Invalid argument. Cluster ID must be an integer.")
             except Exception as e:
