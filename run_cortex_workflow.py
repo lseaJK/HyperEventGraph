@@ -108,10 +108,11 @@ def run_cortex_workflow():
     print(f"Noise Points (unclustered): {stats['noise_points']}")
     print("--------------------------\n")
 
-def main():
-    """Entry point of the script."""
+def main_standalone():
+    """Entry point for standalone execution."""
+    print("Initializing configuration for standalone Cortex run...")
     load_config("config.yaml")
     run_cortex_workflow()
 
 if __name__ == "__main__":
-    main()
+    main_standalone()

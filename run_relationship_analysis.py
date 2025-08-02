@@ -46,13 +46,18 @@ def group_events_by_story(events):
     print(f"分组完成，共发现 {len(stories)} 个独立的故事单元。")
     return stories
 
-async def main_workflow():
+async def run_relationship_analysis_workflow():
     """工作流主函数"""
     print("--- 开始关系分析与知识存储工作流 (V4 - 知识闭环版) ---")
 
     # --- 1. 加载配置和Agents ---
-    load_config("config.yaml")
-    config = get_config()
+    # The main CLI should handle config loading.
+    try:
+        config = get_config()
+    except RuntimeError:
+        print("Warning: Config not pre-loaded. Loading for standalone run.")
+        load_config("config.yaml")
+        config = get_config()
     
     db_manager = DatabaseManager(config.get('database', {}).get('path'))
     llm_client = LLMClient()
@@ -61,7 +66,7 @@ async def main_workflow():
         # 调整初始化顺序
         storage_config = config.get('storage', {})
         neo4j_config = storage_config.get('neo4j', {})
-        chroma_config = storage_config.get('chroma', {})
+        chroma_config = chroma_config = storage_config.get('chroma', {})
         
         storage_agent = StorageAgent(
             neo4j_uri=neo4j_config.get('uri'),
@@ -169,12 +174,12 @@ async def main_workflow():
     storage_agent.close()
     print("\n--- 工作流全部处理完成 ---")
 
-def main():
-    """脚本入口"""
+def main_standalone():
+    """脚本入口 for standalone execution"""
     try:
-        asyncio.run(main_workflow())
+        asyncio.run(run_relationship_analysis_workflow())
     except KeyboardInterrupt:
         print("\n操作被用户中断。")
 
 if __name__ == "__main__":
-    main()
+    main_standalone()

@@ -17,9 +17,9 @@ sys.path.insert(0, str(project_root))
 from run_batch_triage import run_triage_workflow
 from run_learning_workflow import run_learning_workflow
 from run_extraction_workflow import run_extraction_workflow
+from run_cortex_workflow import run_cortex_workflow
+from run_relationship_analysis import run_relationship_analysis_workflow
 from src.core.config_loader import load_config
-# from run_cortex_workflow import run_cortex_workflow
-# from run_relationship_analysis import run_relationship_analysis_workflow
 
 def main():
     """
@@ -39,8 +39,7 @@ def main():
 
     # --- Triage Command ---
     triage_parser = subparsers.add_parser("triage", help="Run the batch triage workflow.")
-    # Add arguments for triage if needed, e.g., triage_parser.add_argument(...)
-
+    
     # --- Learning Command ---
     learn_parser = subparsers.add_parser("learn", help="Start the interactive learning workflow.")
 
@@ -64,16 +63,15 @@ def main():
         if args.command == "triage":
             asyncio.run(run_triage_workflow())
         elif args.command == "learn":
-            # The learning workflow handles its own asyncio loop and config loading
+            # The learning workflow handles its own asyncio loop
             run_learning_workflow(args.config)
         elif args.command == "extract":
             asyncio.run(run_extraction_workflow())
         elif args.command == "cortex":
-            print("Cortex command called. (Implementation pending)")
-            # run_cortex_workflow()
+            # Cortex workflow is synchronous
+            run_cortex_workflow()
         elif args.command == "relations":
-            print("Relationship analysis command called. (Implementation pending)")
-            # run_relationship_analysis_workflow()
+            asyncio.run(run_relationship_analysis_workflow())
         else:
             print(f"Unknown command: {args.command}")
             parser.print_help()
