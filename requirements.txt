@@ -10,3 +10,4 @@ sentence-transformers
 chromadb
 hdbscan
 py2neo
+jieba

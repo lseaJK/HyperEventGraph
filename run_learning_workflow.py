@@ -36,7 +36,7 @@ async def review_and_merge_loop(toolkit: SchemaLearningToolkit):
     # 2. Automatically show samples from all clusters
     cluster_ids = toolkit.get_cluster_ids()
     if not cluster_ids:
-        print("No clusters to review.")
+        print("No valid clusters were found to review.")
         return
 
     print("\nDisplaying initial samples for all clusters for detailed review...")
@@ -46,7 +46,7 @@ async def review_and_merge_loop(toolkit: SchemaLearningToolkit):
 
     # 3. Enter merge sub-loop
     while True:
-        print("\nReview the clusters and keywords above. You can now merge, list, or show more samples.")
+        print("\nReview the clusters and their basis above. You can now merge, list, or show more samples.")
         command_str = input("merge_mode> ").strip().lower()
         parts = command_str.split()
         if not parts:

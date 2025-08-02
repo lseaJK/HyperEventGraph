@@ -117,7 +117,6 @@ class SchemaLearningToolkit:
             
         print("\n--- Cluster Summary ---")
         print(cluster_summary.to_string(index=False))
-        print("\nNext steps: Use 'show_samples <id>', 'generate_schema <id>', or 'generate_all' to process clusters.")
 
     def get_cluster_ids(self) -> list[int]:
         """Returns a sorted list of unique cluster IDs, excluding noise."""
