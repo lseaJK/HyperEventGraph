@@ -71,8 +71,15 @@ async def review_and_merge_loop(toolkit: SchemaLearningToolkit):
             toolkit.list_clusters()
         elif command == "show":
             if not args:
-                print("Usage: show <id> [n]")
+                print("Usage: show <id> [n] OR show samples")
                 continue
+            
+            # User feedback: handle `show samples` to display details for large clusters
+            if args[0] == 'samples':
+                min_size = int(args[1]) if len(args) > 1 else 5
+                toolkit.show_samples_for_large_clusters(min_size)
+                continue
+
             try:
                 cluster_id = int(args[0])
                 num_samples = int(args[1]) if len(args) > 1 else None

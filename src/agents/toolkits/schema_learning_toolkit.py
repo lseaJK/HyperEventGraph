@@ -144,19 +144,56 @@ class SchemaLearningToolkit:
         
         # If num_samples is not provided, show all samples in the cluster
         if num_samples is None:
-            num_to_show = len(cluster_data)
-            samples = cluster_data['source_text'].tolist()
-            print(f"\n--- Showing all {num_to_show} Samples from Cluster {cluster_id} ---")
+            samples_df = cluster_data
+            print(f"\n--- Showing all {len(samples_df)} Samples from Cluster {cluster_id} ---")
         else:
             num_to_show = min(num_samples, len(cluster_data))
-            samples = cluster_data['source_text'].head(num_to_show).tolist()
+            samples_df = cluster_data.head(num_to_show)
             print(f"\n--- Showing {num_to_show} Samples from Cluster {cluster_id} ---")
 
-        for i, sample in enumerate(samples):
-            print(f"[{i+1}] {sample}") # Removed truncation
+        for index, row in samples_df.iterrows():
+            print(f"--- Sample (ID: {row['id']}) ---")
+            print(f"  Text: {row['source_text']}")
+            
+            entities_str = row.get('involved_entities', '{}')
+            try:
+                # Safely load the JSON string
+                entities = json.loads(entities_str) if entities_str and entities_str != '{}' else []
+                if entities:
+                    entity_names = [e.get('entity_name', 'N/A') for e in entities]
+                    print(f"  Involved Entities: {', '.join(entity_names)}")
+                else:
+                    print("  Involved Entities: None")
+            except (json.JSONDecodeError, TypeError):
+                print(f"  Involved Entities: (Could not parse: {entities_str})")
+            print("-" * (len(str(row['id'])) + 24))
+
+        if num_samples is not None and len(cluster_data) > num_samples:
+            print(f"
+Note: Showing {num_samples} of {len(cluster_data)} samples. To see all, use 'show {cluster_id}'.")
+
+    def show_samples_for_large_clusters(self, min_size: int = 5):
+        """
+        Shows samples for all clusters containing at least a minimum number of items.
+        """
+        if 'cluster_id' not in self.data_frame.columns:
+            print("Data has not been clustered yet. Run 'cluster' first.")
+            return
+
+        cluster_counts = self.data_frame['cluster_id'].value_counts()
+        large_clusters = cluster_counts[cluster_counts >= min_size].index.tolist()
         
-        if num_samples is not None:
-            print("\nNote: To see all samples for this cluster, use 'show <id>'.")
+        if -1 in large_clusters:
+            large_clusters.remove(-1)  # Exclude noise points
+
+        if not large_clusters:
+            print(f"No clusters found with at least {min_size} samples.")
+            return
+
+        print(f"
+--- Showing samples for all clusters with >= {min_size} items ---")
+        for cluster_id in sorted(large_clusters):
+            self.show_samples(cluster_id)  # This will show all samples for the cluster
 
     def merge_clusters(self, id1: int, id2: int):
         if 'cluster_id' not in self.data_frame.columns:
