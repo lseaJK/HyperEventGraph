@@ -70,41 +70,30 @@ class SchemaLearningToolkit:
 
     async def run_clustering(self):
         """
-        Performs semantic vectorization and HDBSCAN clustering based on AI-generated event summaries.
+        Performs semantic vectorization and HDBSCAN clustering based on a fusion of 
+        AI-generated event summaries and the original text.
         """
         if self.data_frame.empty or self.embedding_model is None:
             print("No data to cluster or embedding model not loaded.")
             return False
 
-        print("Generating event summaries for clustering via LLM...")
+        print("Generating event summaries for clustering via LLM (concurrently)...")
         
-        # --- New: Generate summaries for clustering ---
-        # Use a temporary cache to avoid re-calling the LLM for the same text
-        summary_cache = {}
-        tasks = []
+        # --- Generate summaries for all texts in parallel ---
         texts_to_process = self.data_frame['source_text'].tolist()
-
-        for text in texts_to_process:
-            if text not in summary_cache:
-                tasks.append(self._get_ic_event_summary(text))
-        
-        # Run all summary tasks in parallel
+        tasks = [self._get_ic_event_summary(text) for text in texts_to_process]
         all_summaries = await asyncio.gather(*tasks)
         
-        # Populate cache and create the text for embedding
-        summary_texts = []
+        # --- Create fused text for embedding ---
+        fused_texts = []
         for i, text in enumerate(texts_to_process):
-            if text not in summary_cache:
-                summary_cache[text] = all_summaries.pop(0)
-            # Join the list of events into a single string for embedding
-            summary_texts.append(" ".join(summary_cache[text]))
+            summary_str = " ".join(all_summaries[i])
+            fused_texts.append(f"{summary_str} {text}")
         
-        # --- End New ---
-
-        print("Running clustering on event summaries with SentenceTransformer and HDBSCAN...")
+        print("Running clustering on fused (summary + text) embeddings...")
         
-        # Generate embeddings from the summaries
-        embeddings = self.embedding_model.encode(summary_texts, show_progress_bar=True)
+        # Generate embeddings from the fused texts
+        embeddings = self.embedding_model.encode(fused_texts, show_progress_bar=True)
 
         # Perform clustering
         min_cluster_size = self.config.get('min_cluster_size', 3)
@@ -115,7 +104,7 @@ class SchemaLearningToolkit:
         
         num_clusters = len(set(clusterer.labels_)) - (1 if -1 in clusterer.labels_ else 0)
         
-        print(f"Clustering complete. Found {num_clusters} potential clusters based on event summaries.")
+        print(f"Clustering complete. Found {num_clusters} potential clusters based on fused embeddings.")
         return num_clusters > 0
 
     def list_clusters(self):
@@ -165,7 +154,6 @@ class SchemaLearningToolkit:
             print(f"No cluster with ID: {cluster_id}")
             return
         
-        # If num_samples is not provided, show all samples in the cluster
         if num_samples is None:
             samples_df = cluster_data
             print(f"\n--- Showing all {len(samples_df)} Samples from Cluster {cluster_id} ---")
@@ -174,17 +162,19 @@ class SchemaLearningToolkit:
             samples_df = cluster_data.head(num_to_show)
             print(f"\n--- Showing {num_to_show} Samples from Cluster {cluster_id} ---")
 
-        for index, row in samples_df.iterrows():
+        # Create all summary tasks to be run concurrently
+        tasks = [self._get_ic_event_summary(row['source_text']) for _, row in samples_df.iterrows()]
+        summaries = await asyncio.gather(*tasks)
+
+        # Now display the results
+        for (index, row), summary in zip(samples_df.iterrows(), summaries):
             print(f"--- Sample (ID: {row['id']}) ---")
             print(f"  Text: {row['source_text']}")
-            
-            summary = await self._get_ic_event_summary(row['source_text'])
             print(f"  IC-Related Events: {summary}")
-            
             print("-" * (len(str(row['id'])) + 24))
 
         if num_samples is not None and len(cluster_data) > num_samples:
-            print(f"Note: Showing {num_samples} of {len(cluster_data)} samples. To see all, use 'show {cluster_id}'.")
+            print(f"\nNote: Showing {num_samples} of {len(cluster_data)} samples. To see all, use 'show {cluster_id}'.")
 
     async def show_samples_for_large_clusters(self, min_size: int = 5):
         """

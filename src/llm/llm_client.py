@@ -161,17 +161,32 @@ class LLMClient:
         
         cleaned_response = self._extract_json_from_response(raw_response)
             
+        # Stage 1: Try the standard and strict JSON parser
         try:
-            # First, try the standard and strict JSON parser
             return json.loads(cleaned_response)
         except json.JSONDecodeError:
-            # If it fails, try the more lenient Python literal evaluator
-            # This can handle single quotes and other minor format variations.
+            # Stage 2: If it fails, try the more lenient Python literal evaluator
             try:
-                return ast.literal_eval(cleaned_response)
-            except (ValueError, SyntaxError, MemoryError, TypeError) as e:
-                # If both fail, log the error and the problematic response
-                print(f"Failed to decode JSON with json.loads and ast.literal_eval: {e}")
-                print(f"Raw response: \n{raw_response}")
-                print(f"Cleaned response attempt: \n{cleaned_response}")
-                return None
+                evaluated = ast.literal_eval(cleaned_response)
+                if isinstance(evaluated, (dict, list)):
+                    return evaluated
+            except (ValueError, SyntaxError, MemoryError, TypeError):
+                # Stage 3: If both fail, attempt manual regex-based list parsing
+                try:
+                    # Check if it looks like a list of unquoted strings
+                    if cleaned_response.strip().startswith('[') and cleaned_response.strip().endswith(']'):
+                        # Extract content within the brackets
+                        content = cleaned_response.strip()[1:-1]
+                        # Split by comma and clean up each item
+                        items = [item.strip().strip("'\"") for item in content.split(',') if item.strip()]
+                        return items
+                except Exception as e:
+                    # If manual parsing also fails, log everything and give up
+                    print(f"Manual parsing also failed: {e}")
+                    pass # Fall through to the final error logging
+
+        # If all parsing attempts fail, log the error and the problematic response
+        print(f"Failed to decode JSON with all methods.")
+        print(f"Raw response: \n{raw_response}")
+        print(f"Cleaned response attempt: \n{cleaned_response}")
+        return None
