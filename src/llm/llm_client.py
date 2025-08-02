@@ -61,46 +61,62 @@ class LLMClient:
         self.provider_clients[provider] = client
         return client
 
-    async def get_raw_response(self, prompt: str, task_type: TaskType) -> str | None:
+    async def get_raw_response(
+        self, 
+        messages: list[dict],
+        task_type: TaskType = None,
+        provider: str = None,
+        model_name: str = None,
+        **kwargs
+    ) -> str | None:
         """
-        Sends a prompt and returns the raw string response from the LLM.
-        This is useful for debugging and prompt tuning.
+        Sends a list of messages and returns the raw string response from the LLM.
+        Allows for overriding config-based settings with direct parameters.
         """
-        model_route = self.config.get('models', {}).get(task_type)
-        if not model_route:
-            raise ValueError(f"No model route defined for task_type '{task_type}' in config.yaml.")
-            
-        provider = model_route.get('provider')
-        model_name = model_route.get('name')
+        api_params = {}
         
-        if not provider or not model_name:
-            raise ValueError(f"Incomplete model route for '{task_type}'. 'provider' and 'name' are required.")
+        # Load from config if task_type is provided
+        if task_type:
+            model_route = self.config.get('models', {}).get(task_type, {})
+            api_params.update(model_route)
+        
+        # Override with direct parameters if provided
+        if provider:
+            api_params['provider'] = provider
+        if model_name:
+            api_params['name'] = model_name
+        
+        # Update with any other keyword arguments
+        api_params.update(kwargs)
 
-        print(f"Routing task '{task_type}' to provider '{provider}' using model '{model_name}'...")
+        final_provider = api_params.get('provider')
+        final_model_name = api_params.get('name')
 
-        # Prepare the parameters for the API call
-        api_params = {
-            "model": model_name,
-            "messages": [
-                {"role": "system", "content": "You are a helpful assistant designed to output JSON. Please ensure your entire response is a single, valid JSON object, without any markdown formatting like ```json."},
-                {"role": "user", "content": prompt}
-            ]
+        if not final_provider or not final_model_name:
+            raise ValueError("Could not determine provider and model_name. "
+                             "Provide a valid task_type or specify provider and model_name directly.")
+
+        print(f"Routing task to provider '{final_provider}' using model '{final_model_name}'...")
+
+        # Prepare the final parameters for the API call
+        call_params = {
+            "model": final_model_name,
+            "messages": messages
         }
-
-        # Add optional parameters from config if they exist
+        
+        # Add optional parameters from the resolved config/kwargs
         optional_params = ["temperature", "top_p", "max_tokens", "frequency_penalty", "presence_penalty"]
         for param in optional_params:
-            if param in model_route:
-                api_params[param] = model_route[param]
+            if param in api_params:
+                call_params[param] = api_params[param]
 
         try:
-            client = self._get_client_for_provider(provider)
-            
-            response = await client.chat.completions.create(**api_params)
+            client = self._get_client_for_provider(final_provider)
+            response = await client.chat.completions.create(**call_params)
             return response.choices[0].message.content
             
         except APIError as e:
-            print(f"An API error occurred with provider '{provider}': {e}")
+            print(f"An API error occurred with provider '{final_provider}': {e}")
             return None
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
@@ -111,32 +127,29 @@ class LLMClient:
     def _extract_json_from_response(self, text: str) -> str:
         """
         Extracts a JSON string from a text that might contain markdown code blocks.
+        Handles both dicts and lists.
         """
-        # Pattern to find JSON within ```json ... ```
-        match = re.search(r'```json\s*(\{.*?\})\s*```', text, re.DOTALL)
+        # Pattern to find JSON object or array within ```json ... ```
+        match = re.search(r'```json\s*([\[\{].*?[\]\}])\s*```', text, re.DOTALL)
         if match:
             return match.group(1)
-        # Fallback for ```{...}```
-        match = re.search(r'```\s*(\{.*?\})\s*```', text, re.DOTALL)
+        # Fallback for ```{...}``` or ```[...]```
+        match = re.search(r'```\s*([\[\{].*?[\]\}])\s*```', text, re.DOTALL)
         if match:
             return match.group(1)
         # If no markdown, assume the whole string is JSON
         return text
 
-    async def get_json_response(self, prompt: str, task_type: TaskType) -> Dict[str, Any] | None:
+    async def get_json_response(
+        self, 
+        messages: list[dict],
+        task_type: TaskType = None,
+        **kwargs
+    ) -> Dict[str, Any] | list | None:
         """
-        Sends a prompt and returns a parsed JSON dictionary, handling markdown formatting.
+        Sends messages and returns a parsed JSON object (dict or list).
         """
-        raw_response = await self.get_raw_response(prompt, task_type)
-        if not raw_response:
-            return None
-        
-        cleaned_response = self._extract_json_from_response(raw_response)
-            
-        try:
-            return json.loads(cleaned_response)
-        except json.JSONDecodeError as e:
-            print(f"Failed to decode JSON from LLM response: {e}")
-            print(f"Raw response: \n{raw_response}")
-            print(f"Cleaned response attempt: \n{cleaned_response}")
-            return None
+        # Construct default system message if not provided
+        has_system_message = any(msg.get("role") == "system" for msg in messages)
+        if not has_system_message:
+            messages.insert(0, {"role": "system", "content": "You are a helpful assistant designed to output JSON. Please ensure your entire response is a single, valid JSON object or array, without any markdown formatting like ```json."})

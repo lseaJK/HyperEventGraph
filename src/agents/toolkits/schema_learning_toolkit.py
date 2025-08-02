@@ -212,39 +212,39 @@ class SchemaLearningToolkit:
         """
         Uses an LLM to summarize IC-related events from a given text.
         """
-        system_prompt = """你是集成电路领域的专家，请你根据所给的输出，以列表的形式输出包含的所有与集成电路领域相关的事件概述。每个事件概述在20个字以内。
-
-输出形式：
-[事件1，事件2，...]
-如果没有 G任何与集成电路领域相关的事件则输出[]。
-注意请你严格输出json的列表形式。"""
-        
-        user_prompt = f"Text: {text}"
+        messages = [
+            {
+                "role": "system",
+                "content": "你是集成电路领域的专家，请你根据所给的输出，以列表的形式输出包含的所有与集成电路领域相关的事件概述。每个事件概述在20个字以内。\n\n输出形式：\n[事件1，事件2，...]\n如果没有任何与集成电路领域相关的事件则输出[]。\n注意请你严格输出json的列表形式。"
+            },
+            {
+                "role": "user",
+                "content": f"Text: {text}"
+            }
+        ]
 
         try:
+            # Note: provider is inferred from the model name if it's a standard one,
+            # but we specify it for clarity and robustness.
             response = await self.llm_client.get_json_response(
-                prompt=user_prompt,
-                system_prompt=system_prompt,
+                messages=messages,
+                provider="siliconflow",
                 model_name="Qwen/Qwen3-30B-A3B-Instruct-2507",
                 temperature=0.3,
                 top_p=0.9
             )
+            
             if isinstance(response, list):
                 return response
             else:
-                # Attempt to handle cases where the model returns a string representation of a list
-                try:
-                    parsed_response = json.loads(response)
-                    if isinstance(parsed_response, list):
-                        return parsed_response
-                except (json.JSONDecodeError, TypeError):
-                    pass # Fall through to the error below
-                
-                print(f"[Warning] LLM returned non-list summary: {response}")
+                print(f"[Warning] LLM returned a non-list summary: {response}")
                 return ["LLM response was not a valid JSON list."]
 
         except Exception as e:
             print(f"[Warning] LLM call for summary failed: {e}")
+            # Extract the root cause if it's a TypeError from the client
+            if "unexpected keyword argument" in str(e):
+                 print("[Hint] This might be due to an outdated method signature in LLMClient.")
             return ["Error during summary generation."]
 
     def merge_clusters(self, id1: int, id2: int):
@@ -271,12 +271,24 @@ class SchemaLearningToolkit:
 
         num_samples = min(num_samples, len(cluster_data))
         samples = np.random.choice(cluster_data['source_text'], size=num_samples, replace=False).tolist()
-        prompt = self._build_schema_generation_prompt(samples)
         
+        # Build the user prompt content
+        user_prompt_content = self._build_schema_generation_prompt(samples)
+        
+        # Construct the messages list
+        messages = [
+            # System prompt is now handled by get_json_response if not provided
+            {"role": "user", "content": user_prompt_content}
+        ]
+
         if not silent: print(f"Generating schema from {num_samples} samples in cluster {cluster_id}...")
         
         try:
-            generated_json = await self.llm_client.get_json_response(prompt, task_type="schema_generation")
+            # Call the refactored LLM client method
+            generated_json = await self.llm_client.get_json_response(
+                messages=messages,
+                task_type="schema_generation" # Use task_type to get model/provider from config
+            )
             
             if generated_json and isinstance(generated_json, dict) and all(k in generated_json for k in ["schema_name", "description", "properties"]):
                 self.generated_schemas[cluster_id] = generated_json
