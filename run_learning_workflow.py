@@ -89,9 +89,8 @@ async def main_loop(db_path: str):
     
     toolkit = None
     try:
-        # Initialization is now split into synchronous and asynchronous parts
+        # Initialization is handled by the constructor.
         toolkit = SchemaLearningToolkit(db_path)
-        await toolkit.load_data_and_prepare()
     except Exception as e:
         print(f"Error initializing toolkit: {e}")
         traceback.print_exc()
@@ -134,7 +133,7 @@ async def main_loop(db_path: str):
 
         elif command == "reload":
             print("Reloading data from database...")
-            await toolkit.load_data_and_prepare()
+            toolkit.reload_data()
             print("Data reloaded.")
 
         elif command.startswith("generate"): # generate_schema -> generate

@@ -64,6 +64,10 @@ class SchemaLearningToolkit:
             traceback.print_exc()
             self.embedding_model = None
 
+    def reload_data(self):
+        """Reloads data from the database."""
+        self._load_data_from_db()
+
     def run_clustering(self):
         """
         Performs semantic vectorization and HDBSCAN clustering.
