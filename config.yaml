@@ -96,3 +96,8 @@ storage:
     password: "neo123456" # IMPORTANT: Please change this to your actual Neo4j password.
   chroma:
     path: "./chroma_db"
+
+# --- Relationship Analysis Workflow Configuration ---
+relationship_analysis:
+  # Path for logging processed event IDs to support resumability.
+  log_file: "output/logs/relationship_analysis.log"

@@ -19,13 +19,17 @@ from src.llm.llm_client import LLMClient
 
 def load_processed_event_ids(log_file):
     """加载已处理的事件ID"""
-    if not os.path.exists(log_file):
+    if not log_file or not os.path.exists(log_file):
         return set()
     with open(log_file, 'r', encoding='utf-8') as f:
         return {line.strip() for line in f}
 
 def log_processed_event(event_id, log_file):
     """记录单个已处理的事件ID"""
+    if not log_file:
+        return
+    # Ensure directory exists
+    Path(log_file).parent.mkdir(parents=True, exist_ok=True)
     with open(log_file, 'a', encoding='utf-8') as f:
         f.write(event_id + '\n')
 
@@ -53,10 +57,7 @@ async def main_workflow():
     llm_client = LLMClient()
     
     try:
-        # 正确初始化 RelationshipAnalysisAgent
-        analysis_agent = RelationshipAnalysisAgent(llm_client, "relationship_analysis")
-
-        # 从config中读取数据库配置并正确初始化 StorageAgent
+        # 调整初始化顺序
         storage_config = config.get('storage', {})
         neo4j_config = storage_config.get('neo4j', {})
         chroma_config = storage_config.get('chroma', {})
@@ -68,7 +69,9 @@ async def main_workflow():
             chroma_db_path=chroma_config.get('path')
         )
         
-        retriever_agent = HybridRetrieverAgent()
+        analysis_agent = RelationshipAnalysisAgent(llm_client, "relationship_analysis")
+        # 正确注入依赖
+        retriever_agent = HybridRetrieverAgent(storage_agent)
 
     except Exception as e:
         print(f"初始化Agent时发生严重错误: {e}")
@@ -83,7 +86,7 @@ async def main_workflow():
     
     if events_to_process_df.empty:
         print("没有需要进行关系分析的新事件。")
-        await retriever_agent.close()
+        storage_agent.close()
         return
 
     events_to_process = [
@@ -93,7 +96,7 @@ async def main_workflow():
 
     if not events_to_process:
         print("所有待处理的事件都已经被处理过。")
-        await retriever_agent.close()
+        storage_agent.close()
         return
 
     print(f"发现 {len(events_to_process)} 个新事件需要进行关系分析。")
@@ -105,16 +108,16 @@ async def main_workflow():
         print(f"\n--- 正在处理故事 {i+1}/{total_groups}: {story_id} ---")
         
         if story_id == 'unassigned':
-            print("警告：该组事件没有分配事ID，将独立处理。")
+            print("警告：该组事件没有分配故事ID，将独立处理。")
         
         source_context = " ".join(list(set([e.get('text', '') for e in events_in_story])))
         
-        # 2.1. 使用混合检索获取背景摘要
+        # 2.1. 使用混合检索获取背景摘要 (同步调用)
         print("正在检索相关上下文...")
-        context_summary = await retriever_agent.retrieve_context(source_context)
+        context_summary = retriever_agent.retrieve_context(source_context)
         print("上下文检索完成。")
 
-        # 2.2. 将背景摘要传入关系分析
+        # 2.2. 将背景摘要传入关系分析 (异步调用)
         relationships = await analysis_agent.analyze_relationships(events_in_story, source_context, context_summary)
         
         if not relationships:
@@ -127,18 +130,17 @@ async def main_workflow():
         for event in events_in_story:
             event_id = event['id']
             
-            # 再次检查，以防万一
             if event_id in processed_event_ids:
                 continue
 
-            # 找到与当前事件相关的所有关系
             related_relationships = [
                 rel for rel in relationships 
                 if rel.get('source_event_id') == event_id or rel.get('target_event_id') == event_id
             ]
             
             try:
-                storage_agent.store_event_and_relationships(event, related_relationships)
+                # 注意：这里的event是dict，需要调整以匹配store_event_and_relationships的预期
+                storage_agent.store_event_and_relationships(event_id, event, related_relationships)
                 log_processed_event(event_id, log_file)
                 db_manager.update_status(event_id, "completed", f"Successfully stored event and {len(related_relationships)} relationships.")
             except Exception as e:
@@ -147,7 +149,7 @@ async def main_workflow():
 
         print(f"--- 故事 {story_id} 处理完成 ---")
 
-    await retriever_agent.close()
+    storage_agent.close()
     print("\n--- 工作流全部处理完成 ---")
 
 def main():

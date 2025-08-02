@@ -159,15 +159,16 @@ class ChromaDBRetriever:
     """ChromaDB向量检索器"""
     
     def __init__(self, collection_name: str = "events", 
-                 persist_directory: str = "./chroma_db"):
+                 persist_directory: str = "./chroma_db",
+                 client=None, embedder=None):
         if chromadb is None:
             raise ImportError("ChromaDB未安装，请运行: pip install chromadb")
             
         self.collection_name = collection_name
         self.persist_directory = persist_directory
-        self.client = None
+        self.client = client
         self.collection = None
-        self.embedder = BGEEmbedder()
+        self.embedder = embedder or BGEEmbedder()
         self.logger = logging.getLogger(__name__)
         
         self._initialize_client()
@@ -319,11 +320,14 @@ class Neo4jGraphRetriever:
     """Neo4j图结构检索器"""
     
     def __init__(self, uri: str = "bolt://localhost:7687", 
-                 user: str = "neo4j", password: str = "password"):
+                 user: str = "neo4j", password: str = "password", driver=None):
         if GraphDatabase is None:
             raise ImportError("Neo4j驱动未安装，请运行: pip install neo4j")
-            
-        self.driver = GraphDatabase.driver(uri, auth=(user, password))
+        
+        if driver:
+            self.driver = driver
+        else:
+            self.driver = GraphDatabase.driver(uri, auth=(user, password))
         self.logger = logging.getLogger(__name__)
     
     def close(self):
@@ -416,14 +420,31 @@ class HybridRetriever:
     """混合检索器主类"""
     
     def __init__(self, 
+                 neo4j_driver=None,
+                 chroma_client=None,
+                 embedding_model=None,
                  chroma_collection: str = "events",
                  chroma_persist_dir: str = "./chroma_db",
                  neo4j_uri: str = "bolt://localhost:7687",
                  neo4j_user: str = "neo4j",
                  neo4j_password: str = "neo123456"):
         
-        self.chroma_retriever = ChromaDBRetriever(chroma_collection, chroma_persist_dir)
-        self.neo4j_retriever = Neo4jGraphRetriever(neo4j_uri, neo4j_user, neo4j_password)
+        self.chroma_retriever = ChromaDBRetriever(
+            collection_name=chroma_collection, 
+            persist_directory=chroma_persist_dir,
+            client=chroma_client, # Pass the client if available
+            embedder=BGEEmbedder() if embedding_model is None else None # Create embedder only if model not provided
+        )
+        # If model is provided, use it
+        if embedding_model:
+            self.chroma_retriever.embedder.model = embedding_model
+
+        self.neo4j_retriever = Neo4jGraphRetriever(
+            uri=neo4j_uri, 
+            user=neo4j_user, 
+            password=neo4j_password,
+            driver=neo4j_driver # Pass the driver if available
+        )
         self.logger = logging.getLogger(__name__)
     
     def search(self, query_event: Event, 
