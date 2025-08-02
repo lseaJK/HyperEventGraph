@@ -4,22 +4,20 @@ This script provides an interactive command-line interface for the schema learni
 It allows a human expert to guide the system in discovering and defining new event schemas
 from data that was previously classified as 'unknown'.
 
-Workflow:
-1.  Connects to the master state database.
-2.  Queries for all items with the status 'pending_learning'.
-3.  Initializes the SchemaLearningToolkit with this data.
-4.  Enters a command loop where the user can:
-    - List clusters of similar texts.
-    - Show samples from a specific cluster.
-    - Merge clusters.
-    - Generate a new schema from a cluster.
-    - Save the new schema and update the status of related items in the database.
+New Workflow:
+1.  User runs the 'cluster' command.
+2.  The system performs clustering and automatically displays samples from all clusters.
+3.  The user enters a "merge mode" to review and merge clusters as needed.
+4.  Once satisfied, the user runs 'continue'.
+5.  The system automatically runs parallel schema generation for all final clusters.
+6.  The user can then save the desired schemas.
 """
 
 import argparse
 from pathlib import Path
 import sys
 import traceback
+import asyncio
 
 # Add project root to sys.path
 project_root = Path(__file__).resolve().parent
@@ -27,6 +25,69 @@ sys.path.insert(0, str(project_root))
 
 from src.agents.toolkits.schema_learning_toolkit import SchemaLearningToolkit
 from src.core.config_loader import load_config, get_config
+
+async def review_and_merge_loop(toolkit: SchemaLearningToolkit):
+    """A sub-loop for reviewing and merging clusters before schema generation."""
+    print("\n--- Entering Review & Merge Mode ---")
+    
+    # 1. Automatically show samples from all clusters
+    cluster_ids = toolkit.get_cluster_ids()
+    if not cluster_ids:
+        print("No clusters to review.")
+        return
+
+    print("Displaying initial samples for all clusters...")
+    for cid in cluster_ids:
+        toolkit.show_samples(cid, num_samples=3)
+
+    # 2. Enter merge sub-loop
+    while True:
+        print("\nReview the clusters above. You can now merge, list, or show more samples.")
+        command_str = input("merge_mode> ").strip().lower()
+        parts = command_str.split()
+        if not parts:
+            continue
+        
+        command = parts[0]
+        args = parts[1:]
+
+        if command == "continue":
+            print("Finished merging. Proceeding to generate all schemas...")
+            await toolkit.generate_all_schemas()
+            break
+        elif command == "help":
+            print("\n--- Merge Mode Commands ---")
+            print("  merge <id1> <id2> - Merge cluster <id2> into <id1>.")
+            print("  list              - List current clusters after merges.")
+            print("  show <id> [n]     - Show [n] samples for a cluster.")
+            print("  continue          - Exit merge mode and generate all schemas.")
+            print("  exit              - Abort the entire learning workflow.")
+        elif command == "exit":
+            raise InterruptedError("Workflow aborted by user.")
+        elif command == "merge":
+            if len(args) < 2:
+                print("Usage: merge <id1> <id2>")
+                continue
+            try:
+                typed_args = [int(arg) for arg in args]
+                toolkit.merge_clusters(*typed_args)
+                print("Merge successful. Run 'list' to see changes.")
+            except ValueError:
+                print("Invalid arguments. Cluster IDs must be integers.")
+        elif command == "list":
+            toolkit.list_clusters()
+        elif command == "show":
+            if not args:
+                print("Usage: show <id> [n]")
+                continue
+            try:
+                typed_args = [int(arg) for arg in args]
+                toolkit.show_samples(*typed_args)
+            except ValueError:
+                print("Invalid arguments. Cluster ID and num_samples must be integers.")
+        else:
+            print(f"Unknown command '{command}'. Type 'help' for available commands.")
+
 
 async def main_loop(db_path: str):
     """The main interactive command loop for the learning workflow."""
@@ -54,13 +115,25 @@ async def main_loop(db_path: str):
             break
         elif command == "help":
             print("\nAvailable Commands:")
-            print("  cluster                - (Re)run the clustering algorithm on all pending items.")
-            print("  list_clusters          - Display current clusters of unknown texts.")
+            print("  cluster                - Run the full workflow: cluster -> review/merge -> generate all schemas.")
+            print("  list_clusters          - Display clusters and summaries of any generated schemas.")
             print("  show_samples <id> [n]  - Show [n] (default 5) text samples from a specific cluster.")
-            print("  merge <id1> <id2>      - Merge two clusters into one.")
-            print("  generate_schema <id> [n]- Generate a new event schema from [n] (default 10) samples in a cluster.")
-            print("  save_schema <id>       - Save the generated schema for the cluster and reset item statuses in DB.")
+            print("  generate_schema <id> [n]- (Manual) Generate a schema for a single cluster.")
+            print("  save_schema <id>       - Save a generated schema and update items in DB.")
             print("  exit                   - Exit the interactive session.\n")
+
+        elif command == "cluster":
+            try:
+                if toolkit.run_clustering():
+                    await review_and_merge_loop(toolkit)
+                else:
+                    print("Clustering did not produce any clusters. Aborting review step.")
+            except InterruptedError:
+                print("\nWorkflow aborted. Returning to main prompt.")
+            except Exception as e:
+                print(f"An error occurred during the cluster workflow: {e}")
+                traceback.print_exc()
+
         elif command == "generate_schema":
             if not args:
                 print("Usage: generate_schema <cluster_id> [num_samples]")
@@ -74,6 +147,7 @@ async def main_loop(db_path: str):
             except Exception as e:
                 print(f"An error occurred: {e}")
                 traceback.print_exc()
+
         elif command == "save_schema":
             if not args:
                 print("Usage: save_schema <cluster_id>")
@@ -86,21 +160,25 @@ async def main_loop(db_path: str):
             except Exception as e:
                 print(f"An error occurred: {e}")
                 traceback.print_exc()
-        else:
-            # Handle synchronous commands
+        
+        # Synchronous commands that can be run anytime
+        elif command == "list_clusters":
+            toolkit.list_clusters()
+        elif command == "show_samples":
+            if not args:
+                print("Usage: show_samples <cluster_id> [num_samples]")
+                continue
             try:
-                if command in ["list_clusters", "cluster"]:
-                    toolkit.execute_command(command)
-                elif command in ["show_samples", "merge"]:
-                    typed_args = [int(arg) for arg in args]
-                    toolkit.execute_command(command, *typed_args)
-                else:
-                    print(f"Unknown command: '{command}'. Type 'help' for a list of commands.")
+                typed_args = [int(arg) for arg in args]
+                toolkit.show_samples(*typed_args)
             except ValueError:
                 print(f"Invalid arguments for command '{command}'. Ensure IDs are integers.")
             except Exception as e:
                 print(f"An error occurred while executing command '{command}': {e}")
                 traceback.print_exc()
+        else:
+            print(f"Unknown command: '{command}'. Type 'help' for a list of commands.")
+
 
 def main():
     parser = argparse.ArgumentParser(

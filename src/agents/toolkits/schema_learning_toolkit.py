@@ -6,10 +6,12 @@ It handles data clustering, sample inspection, and schema generation based on us
 
 import pandas as pd
 from pathlib import Path
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.cluster import AgglomerativeClustering
+from sentence_transformers import SentenceTransformer
+import hdbscan
 import numpy as np
 import json
+import asyncio
+import traceback
 
 # Add project root to sys.path
 project_root = Path(__file__).resolve().parents[2]
@@ -28,9 +30,11 @@ class SchemaLearningToolkit:
         self.llm_client = LLMClient()
         self.data_frame = pd.DataFrame()
         self.generated_schemas = {}
+        self.embedding_model = None
 
         print("SchemaLearningToolkit initialized.")
         self._load_data_from_db()
+        self._load_embedding_model()
 
     def _load_data_from_db(self):
         print("Loading data for learning from database...")
@@ -40,49 +44,81 @@ class SchemaLearningToolkit:
         else:
             print("No items are currently pending learning.")
 
+    def _load_embedding_model(self):
+        model_name = self.config.get('embedding_model', 'all-MiniLM-L6-v2')
+        print(f"Loading embedding model: {model_name}...")
+        try:
+            self.embedding_model = SentenceTransformer(model_name)
+            print("Embedding model loaded successfully.")
+        except Exception as e:
+            print(f"Error loading embedding model: {e}")
+            self.embedding_model = None
+
     def run_clustering(self):
         """
-        Performs TF-IDF vectorization and Agglomerative Clustering on the data.
+        Performs semantic vectorization and HDBSCAN clustering.
         """
-        if self.data_frame.empty:
-            print("No data to cluster.")
+        if self.data_frame.empty or self.embedding_model is None:
+            print("No data to cluster or embedding model not loaded.")
             return
 
-        print("Running clustering...")
-        vectorizer = TfidfVectorizer(max_df=0.95, min_df=2, stop_words='english')
-        tfidf_matrix = vectorizer.fit_transform(self.data_frame['source_text'])
-
-        distance_threshold = self.config.get('cluster_distance_threshold', 1.4)
-        clustering = AgglomerativeClustering(n_clusters=None, distance_threshold=distance_threshold)
-        clustering.fit(tfidf_matrix.toarray())
-
-        self.data_frame['cluster_id'] = clustering.labels_
+        print("Running clustering with SentenceTransformer and HDBSCAN...")
         
-        num_clusters = len(set(clustering.labels_))
-        # Correctly handle noise points if they exist
-        if -1 in clustering.labels_:
-            num_clusters -= 1
+        # Generate embeddings
+        texts = self.data_frame['source_text'].tolist()
+        embeddings = self.embedding_model.encode(texts, show_progress_bar=True)
+
+        # Perform clustering
+        min_cluster_size = self.config.get('min_cluster_size', 5)
+        clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size, gen_min_span_tree=True)
+        clusterer.fit(embeddings)
+
+        self.data_frame['cluster_id'] = clusterer.labels_
+        
+        # -1 label is for noise points
+        num_clusters = len(set(clusterer.labels_)) - (1 if -1 in clusterer.labels_ else 0)
         
         print(f"Clustering complete. Found {num_clusters} potential clusters.")
-        print("Run 'list_clusters' to see the results.")
+        print("Run 'list_clusters' to see the results or 'generate_all' to create all schemas in parallel.")
 
     def list_clusters(self):
         if 'cluster_id' not in self.data_frame.columns:
             print("Data has not been clustered yet. Run 'cluster' first.")
             return
         
-        # Exclude noise points (cluster_id = -1) from the summary
-        cluster_summary = self.data_frame[self.data_frame['cluster_id'] != -1]['cluster_id'].value_counts().reset_index()
+        # Exclude noise points (cluster_id = -1)
+        valid_clusters = self.data_frame[self.data_frame['cluster_id'] != -1]
+        if valid_clusters.empty:
+            print("No valid clusters were formed. All items might have been considered noise.")
+            print("Try adjusting 'min_cluster_size' in your config for different sensitivity.")
+            return
+
+        cluster_summary = valid_clusters['cluster_id'].value_counts().reset_index()
         cluster_summary.columns = ['Cluster ID', 'Number of Items']
         
-        if cluster_summary.empty:
-            print("No valid clusters were formed. All items might have been considered noise or unique.")
-            print("Try adjusting the 'cluster_distance_threshold' in your config for different sensitivity.")
-            return
+        # Add generated schema info if available
+        def get_schema_info(cid):
+            schema = self.generated_schemas.get(cid)
+            if schema:
+                return f"{schema.get('schema_name', 'N/A')}: {schema.get('description', 'No description')}"
+            return "Not generated"
+
+        cluster_summary['Generated Schema'] = cluster_summary['Cluster ID'].apply(get_schema_info)
             
         print("\n--- Cluster Summary ---")
         print(cluster_summary.to_string(index=False))
-        print("\nNext steps: Use 'show_samples <id>' to inspect a cluster, or 'generate_schema <id>' to create a schema.")
+        print("\nNext steps: Use 'show_samples <id>', 'generate_schema <id>', or 'generate_all' to process clusters.")
+
+    def get_cluster_ids(self) -> list[int]:
+        """Returns a sorted list of unique cluster IDs, excluding noise."""
+        if 'cluster_id' not in self.data_frame.columns:
+            return []
+        
+        valid_clusters = self.data_frame[self.data_frame['cluster_id'] != -1]
+        if valid_clusters.empty:
+            return []
+            
+        return sorted(valid_clusters['cluster_id'].unique().tolist())
 
     def show_samples(self, cluster_id: int, num_samples: int = 5):
         if 'cluster_id' not in self.data_frame.columns:
@@ -114,37 +150,62 @@ class SchemaLearningToolkit:
         sample_block = "\n".join([f"- \"{s}\"" for s in samples])
         return prompt_manager.get_prompt("schema_generation", sample_block=sample_block)
 
-    async def generate_schema_from_cluster(self, cluster_id: int, num_samples: int = 10):
+    async def generate_schema_from_cluster(self, cluster_id: int, num_samples: int = 10, silent=False):
         if 'cluster_id' not in self.data_frame.columns:
-            print("Data not clustered. Run 'cluster' first.")
+            if not silent: print("Data not clustered. Run 'cluster' first.")
             return
         cluster_data = self.data_frame[self.data_frame['cluster_id'] == cluster_id]
         if cluster_data.empty:
-            print(f"No cluster with ID: {cluster_id}")
+            if not silent: print(f"No cluster with ID: {cluster_id}")
             return
 
         num_samples = min(num_samples, len(cluster_data))
         samples = np.random.choice(cluster_data['source_text'], size=num_samples, replace=False).tolist()
         prompt = self._build_schema_generation_prompt(samples)
         
-        print(f"Generating schema from {num_samples} samples in cluster {cluster_id}...")
+        if not silent: print(f"Generating schema from {num_samples} samples in cluster {cluster_id}...")
         
-        generated_json = await self.llm_client.get_json_response(prompt, task_type="schema_generation")
+        try:
+            generated_json = await self.llm_client.get_json_response(prompt, task_type="schema_generation")
+            
+            if generated_json and isinstance(generated_json, dict) and all(k in generated_json for k in ["schema_name", "description", "properties"]):
+                self.generated_schemas[cluster_id] = generated_json
+                if not silent:
+                    print("\n--- Schema Draft Generated Successfully ---")
+                    print(json.dumps(generated_json, indent=2, ensure_ascii=False))
+                    print(f"\nNext step: Review the schema. If it looks good, use 'save_schema {cluster_id}' to save it.")
+            else:
+                if not silent:
+                    print("\n--- Schema Generation Failed ---")
+                    if generated_json:
+                        print("Received invalid response:\n", json.dumps(generated_json, indent=2, ensure_ascii=False))
+                    print("\nNext step: You can try 'generate_schema' again, perhaps with more samples, or inspect other clusters.")
+        except Exception as e:
+            if not silent:
+                print(f"An error occurred during schema generation for cluster {cluster_id}: {e}")
+                traceback.print_exc()
+
+    async def generate_all_schemas(self, num_samples: int = 10):
+        if 'cluster_id' not in self.data_frame.columns:
+            print("Data not clustered. Run 'cluster' first.")
+            return
+
+        cluster_ids = self.data_frame[self.data_frame['cluster_id'] != -1]['cluster_id'].unique()
+        if len(cluster_ids) == 0:
+            print("No clusters to generate schemas for.")
+            return
+
+        print(f"Starting parallel schema generation for {len(cluster_ids)} clusters...")
         
-        if generated_json and isinstance(generated_json, dict) and all(k in generated_json for k in ["schema_name", "description", "properties"]):
-            self.generated_schemas[cluster_id] = generated_json
-            print("\n--- Schema Draft Generated Successfully ---")
-            print(json.dumps(generated_json, indent=2, ensure_ascii=False))
-            print(f"\nNext step: Review the schema. If it looks good, use 'save_schema {cluster_id}' to save it.")
-        else:
-            print("\n--- Schema Generation Failed ---")
-            if generated_json:
-                print("Received invalid response:\n", json.dumps(generated_json, indent=2, ensure_ascii=False))
-            print("\nNext step: You can try 'generate_schema' again, perhaps with more samples, or inspect other clusters.")
+        tasks = [self.generate_schema_from_cluster(cid, num_samples, silent=True) for cid in cluster_ids]
+        await asyncio.gather(*tasks)
+        
+        print("\n--- Parallel Schema Generation Complete ---")
+        print("Run 'list_clusters' to see a summary of the generated schemas.")
 
     def save_schema(self, cluster_id: int):
         if cluster_id not in self.generated_schemas:
-            print("No schema generated for this cluster. Use 'generate_schema' first.")
+            print("No schema generated for this cluster. Use 'generate_schema' or 'generate_all' first.")
             return
             
         schema_to_save = self.generated_schemas[cluster_id]
