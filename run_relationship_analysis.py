@@ -72,15 +72,116 @@ def run_special_test(analysis_agent, retriever_agent):
     for e in test_events:
         print(f"  - {e['_id']}: {e['description']}")
     
-    # 获取背景摘要
-    context_summary = retriever_agent.retrieve_context(test_source_text)
-    print(context_summary)
+    async def test_main():
+        # 获取背景摘要
+        context_summary = await retriever_agent.retrieve_context(test_source_text)
+        print(context_summary)
 
-    relationships = analysis_agent.analyze_relationships(test_events, test_source_text, context_summary)
+        relationships = await analysis_agent.analyze_relationships(test_events, test_source_text, context_summary)
+        
+        print("\n--- 【测试结果】分析出的关系 ---")
+        print(json.dumps(relationships, indent=2, ensure_ascii=False))
+        print("\n--- !!! 关系抽取专项测试结束 !!! ---\n\n")
+
+    asyncio.run(test_main())
+
+
+async def main_workflow():
+    """工作流主函数"""
+    print("--- 开始关系分析与知识存储工作流 (V4 - 知识闭环版) ---")
+
+    # --- 加载配置和Agents ---
+    load_config("config.yaml")
+    config = get_config()
     
-    print("\n--- 【测试结果】分析出的关系 ---")
-    print(json.dumps(relationships, indent=2, ensure_ascii=False))
-    print("\n--- !!! 关系抽取专项测试结束 !!! ---\n\n")
+    db_manager = DatabaseManager(config.get('database', {}).get('path'))
+    llm_client = LLMClient()
+    
+    try:
+        # 使用新的Agent初始化方式
+        analysis_agent = RelationshipAnalysisAgent(llm_client, "relationship_analysis")
+        storage_agent = StorageAgent(db_manager)
+        retriever_agent = HybridRetrieverAgent() # 初始化混合检索Agent
+    except Exception as e:
+        print(f"初始化Agent时发生严重错误: {e}")
+        return
+
+    # --- 专项测试开关 ---
+    if config.get('relationship_analysis', {}).get('run_special_test', False):
+        run_special_test(analysis_agent, retriever_agent)
+        await retriever_agent.close()
+        return
+
+    # --- 主工作流 ---
+    log_file = config.get('relationship_analysis', {}).get('log_file')
+    processed_event_ids = load_processed_event_ids(log_file)
+    print(f"发现 {len(processed_event_ids)} 个已处理的事件。")
+
+    events_to_process_df = db_manager.get_records_by_status_as_df('pending_relationship_analysis')
+    
+    events_to_process = [
+        row.to_dict() for _, row in events_to_process_df.iterrows() 
+        if row['id'] not in processed_event_ids
+    ]
+
+    if not events_to_process:
+        print("没有需要进行关系分析的新事件。")
+        storage_agent.close()
+        await retriever_agent.close()
+        return
+
+    print(f"发现 {len(events_to_process)} 个新事件需要进行关系分析。")
+
+    event_groups = group_events_by_source(events_to_process)
+    total_groups = len(event_groups)
+
+    for i, (group_id, events_in_group) in enumerate(event_groups.items()):
+        print(f"\n--- 正在处理组 {i+1}/{total_groups}: {group_id} ---")
+        
+        # 假设同一组事件共享一个源文本上下文
+        source_context = " ".join(list(set([e.get('text', '') for e in events_in_group])))
+        
+        # 1. [新增] 使用混合检索获取背景摘要
+        print("正在检索相关上下文...")
+        context_summary = await retriever_agent.retrieve_context(source_context)
+        print("上下文检索完成。")
+
+        # 2. 将背景摘要传入关系分析
+        relationships = await analysis_agent.analyze_relationships(events_in_group, source_context, context_summary)
+        
+        # 3. 迭代存储
+        print(f"开始为组 '{group_id}' 的 {len(events_in_group)} 个事件进行存储...")
+        for event in events_in_group:
+            event_id = event['id']
+            
+            if event_id in processed_event_ids:
+                continue
+
+            print(f"正在处理事件: {event_id}")
+            related_relationships = [
+                rel for rel in relationships 
+                if rel.get('source_event_id') == event_id or rel.get('target_event_id') == event_id
+            ]
+            
+            try:
+                storage_agent.store_event_and_relationships(event, related_relationships)
+                log_processed_event(event_id, log_file)
+                db_manager.update_status(event_id, "completed_relationship_analysis", "Successfully stored event and relationships.")
+            except Exception as e:
+                print(f"处理事件 {event_id} 时发生错误: {e}。")
+                db_manager.update_status(event_id, "failed_relationship_analysis", str(e))
+
+        print(f"--- 组 {group_id} 处理完成 ---")
+
+    storage_agent.close()
+    await retriever_agent.close()
+    print("\n--- 工作流全部处理完成 ---")
+
+def main():
+    asyncio.run(main_workflow())
+
+if __name__ == "__main__":
+    main()
 
 def main():
     """工作流主函数"""
@@ -94,7 +195,8 @@ def main():
     llm_client = LLMClient()
     
     try:
-        analysis_agent = RelationshipAnalysisAgent(llm_client)
+        relationship_prompt = prompt_manager.get_prompt("relationship_analysis")
+        analysis_agent = RelationshipAnalysisAgent(llm_client, relationship_prompt)
         storage_agent = StorageAgent(db_manager)
         retriever_agent = HybridRetrieverAgent() # 初始化混合检索Agent
     except Exception as e:

@@ -627,7 +627,7 @@
         "description": "修改 `run_extraction_workflow.py`，在脚本末尾添加 `check_and_trigger_cortex` 函数，实现基于阈值的自动调用。",
         "details": "",
         "testStrategy": "",
-        "status": "done",
+        "status": "pending",
         "dependencies": [],
         "priority": "low",
         "subtasks": []
@@ -660,7 +660,7 @@
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-07-31T17:19:10.850Z",
+      "updated": "2025-08-02T08:41:21.881Z",
       "description": "Tasks for master context"
     }
   }

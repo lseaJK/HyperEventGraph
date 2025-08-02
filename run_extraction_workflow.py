@@ -11,6 +11,8 @@ import json
 import uuid
 from pathlib import Path
 import sys
+import subprocess
+import os
 from tqdm.asyncio import tqdm_asyncio
 
 # Add project root to sys.path
@@ -24,6 +26,35 @@ from src.core.prompt_manager import prompt_manager
 
 # Concurrency limit adjusted to respect typical API rate limits (TPM is often the bottleneck)
 CONCURRENCY_LIMIT = 5
+
+def check_and_trigger_cortex(db_manager: DatabaseManager):
+    """检查待聚类事件数量，如果达到阈值则触发Cortex工作流。"""
+    config = get_config()
+    threshold = config.get('cortex_workflow', {}).get('trigger_threshold', 100)
+    
+    pending_count = db_manager.get_record_count_by_status('pending_clustering')
+    print(f"检查Cortex触发器: {pending_count} 个事件待聚类 (阈值: {threshold})")
+
+    if pending_count >= threshold:
+        print(f"事件数量达到阈值，正在后台触发Cortex工作流...")
+        
+        # 确保我们使用的是与当前环境相同的Python解释器
+        python_executable = sys.executable
+        cortex_script_path = project_root / "run_cortex_workflow.py"
+        
+        if not cortex_script_path.exists():
+            print(f"错误: Cortex脚本未找到于 {cortex_script_path}")
+            return
+
+        try:
+            # 使用 Popen 在后台启动新进程，不阻塞当前工作流
+            subprocess.Popen([python_executable, str(cortex_script_path)],
+                             stdout=open('cortex_workflow.log', 'a'),
+                             stderr=subprocess.STDOUT,
+                             cwd=str(project_root))
+            print("Cortex工作流已在后台成功启动。日志将写入 cortex_workflow.log")
+        except Exception as e:
+            print(f"启动Cortex工作流失败: {e}")
 
 def load_processed_ids(file_path: Path) -> set:
     """Reads the output file to get the IDs of already processed records."""
@@ -110,6 +141,8 @@ async def run_extraction_workflow():
 
     if df_to_extract.empty:
         print("No items found with status 'pending_extraction'.")
+        # Even if there's nothing to extract, we should check if Cortex needs to run
+        check_and_trigger_cortex(db_manager)
         return
 
     original_count = len(df_to_extract)
@@ -120,6 +153,8 @@ async def run_extraction_workflow():
 
     if df_to_extract.empty:
         print("All pending records have already been processed.")
+        # Still check for Cortex trigger
+        check_and_trigger_cortex(db_manager)
         return
 
     total_records = len(df_to_extract)
@@ -135,6 +170,9 @@ async def run_extraction_workflow():
     success_count = sum(1 for r in results if r['status'] == 'success')
     print(f"\n--- Event Extraction Workflow Finished ---")
     print(f"Successfully processed: {success_count}/{total_records}")
+
+    # --- Trigger Cortex Workflow ---
+    check_and_trigger_cortex(db_manager)
 
 def main():
     load_config("config.yaml")
