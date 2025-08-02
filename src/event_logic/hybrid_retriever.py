@@ -176,10 +176,12 @@ class ChromaDBRetriever:
     def _initialize_client(self):
         """初始化ChromaDB客户端"""
         try:
-            self.client = chromadb.PersistentClient(
-                path=self.persist_directory,
-                settings=Settings(anonymized_telemetry=False)
-            )
+            if self.client is None:
+                self.client = chromadb.PersistentClient(
+                    path=self.persist_directory,
+                    settings=Settings(anonymized_telemetry=False)
+                )
+            
             self.collection = self.client.get_or_create_collection(
                 name=self.collection_name,
                 metadata={"hnsw:space": "cosine"}

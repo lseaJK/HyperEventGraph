@@ -59,8 +59,24 @@ class StorageAgent:
                 "MERGE (e:Event {id: $id}) SET e.type = $type, e.description = $desc",
                 id=event_id, type=event_data.get('event_type'), desc=event_data.get('description')
             )
-            for entity in event_data.get('involved_entities', []):
-                entity_name = entity.get('entity_name')
+            
+            entities = event_data.get('involved_entities', [])
+            # The entities might be a JSON string, a list of strings, or a list of dicts.
+            # We need to handle all cases.
+            if isinstance(entities, str):
+                try:
+                    entities = json.loads(entities)
+                except json.JSONDecodeError:
+                    print(f"Warning: Could not parse entities JSON string for event {event_id}. Skipping entity storage.")
+                    entities = []
+
+            for entity in entities:
+                entity_name = None
+                if isinstance(entity, dict):
+                    entity_name = entity.get('entity_name')
+                elif isinstance(entity, str):
+                    entity_name = entity
+                
                 if entity_name:
                     session.run(
                         """
@@ -70,6 +86,7 @@ class StorageAgent:
                         """,
                         name=entity_name, event_id=event_id
                     )
+
             for rel in relationships:
                 if rel.get('source_event_id') == event_id or rel.get('target_event_id') == event_id:
                     session.run(

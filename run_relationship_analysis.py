@@ -142,10 +142,12 @@ async def main_workflow():
                 # 注意：这里的event是dict，需要调整以匹配store_event_and_relationships的预期
                 storage_agent.store_event_and_relationships(event_id, event, related_relationships)
                 log_processed_event(event_id, log_file)
-                db_manager.update_status(event_id, "completed", f"Successfully stored event and {len(related_relationships)} relationships.")
+                # 使用正确的方法名
+                db_manager.update_status_and_schema(event_id, "completed", "", f"Successfully stored event and {len(related_relationships)} relationships.")
             except Exception as e:
                 print(f"处理事件 {event_id} 时发生错误: {e}。")
-                db_manager.update_status(event_id, "failed_relationship_analysis", str(e))
+                # 使用正确的方法名
+                db_manager.update_status_and_schema(event_id, "failed_relationship_analysis", "", str(e))
 
         print(f"--- 故事 {story_id} 处理完成 ---")
 
