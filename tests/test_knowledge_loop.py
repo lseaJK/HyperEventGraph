@@ -78,30 +78,25 @@ class TestKnowledgeLoop(unittest.TestCase):
 
     @patch('src.agents.toolkits.schema_learning_toolkit.SentenceTransformer')
     @patch('src.agents.toolkits.schema_learning_toolkit.hdbscan.HDBSCAN')
-    @patch('src.agents.toolkits.schema_learning_toolkit.LLMClient', new_callable=AsyncMock)
+    @patch('src.agents.toolkits.schema_learning_toolkit.LLMClient')
     def test_knowledge_loop_resets_status(self, MockLLMClient, MockHDBSCAN, MockSentenceTransformer):
         """
         End-to-end test to verify that after learning, event statuses are reset to 'pending_triage'.
         """
         # --- Arrange ---
-        # Mock the embedding model to avoid downloading it
-        mock_embedding_model = MockSentenceTransformer.return_value
-        mock_embedding_model.encode.return_value = [[0.1, 0.2], [0.1, 0.21], [0.8, 0.9], [0.11, 0.2]]
-
-        # Mock the clustering algorithm to return predictable clusters
-        mock_clusterer = MockHDBSCAN.return_value
-        mock_clusterer.labels_ = [0, 0, 1, 0] # doc1, doc2, doc4 are in cluster 0
-
-        # Mock the LLM to return a valid schema and summaries
+        # Mock the LLMClient's instance methods to be async
         mock_llm_instance = MockLLMClient.return_value
-        mock_llm_instance.get_json_response.side_effect = [
-            # First call for summaries (doc1)
+        
+        # Correctly configure the side_effect for the async method
+        async def async_side_effect(*args, **kwargs):
+            # This function will be awaited, and it will return the next value from the iterator.
+            return next(side_effect_values)
+
+        side_effect_values = iter([
+            # Calls for summaries
             ["Event A summary"],
-            # doc2
             ["Event C summary"],
-            # doc3
             ["Unrelated summary"],
-            # doc4
             ["Event A details summary"],
             # Call for schema generation
             {
@@ -109,7 +104,16 @@ class TestKnowledgeLoop(unittest.TestCase):
                 "description": "A schema learned from testing.",
                 "properties": {"detail": "A learned detail."}
             }
-        ]
+        ])
+        mock_llm_instance.get_json_response.side_effect = async_side_effect
+
+        # Mock the embedding model
+        mock_embedding_model = MockSentenceTransformer.return_value
+        mock_embedding_model.encode.return_value = [[0.1, 0.2], [0.1, 0.21], [0.8, 0.9], [0.11, 0.2]]
+
+        # Mock the clustering algorithm
+        mock_clusterer = MockHDBSCAN.return_value
+        mock_clusterer.labels_ = [0, 0, 1, 0] # docs 1, 2, 4 in cluster 0
 
         # Initialize the toolkit - it will use the real DB
         toolkit = SchemaLearningToolkit(db_path=str(self.db_path))
@@ -118,9 +122,10 @@ class TestKnowledgeLoop(unittest.TestCase):
         # Run the full learning pipeline programmatically
         async def run_test_flow():
             await toolkit.run_clustering()
-            # In the mocked clustering, docs 1, 2, 4 are in cluster 0
             target_cluster_id = 0
-            await toolkit.generate_schema_from_cluster(target_cluster_id, silent=True)
+            # The generate call should now succeed
+            await toolkit.generate_schema_from_cluster(target_cluster_id, num_samples=3, silent=True)
+            # The save call should now find a schema and update the DB
             await toolkit.save_schema(target_cluster_id)
 
         asyncio.run(run_test_flow())
@@ -130,17 +135,17 @@ class TestKnowledgeLoop(unittest.TestCase):
         df = self.db_manager.get_records_by_status_as_df('pending_triage')
         
         # Check that the correct documents were updated
-        self.assertEqual(len(df), 3)
+        self.assertEqual(len(df), 3, "Should be 3 records reset to 'pending_triage'")
         updated_ids = set(df['id'].tolist())
         self.assertEqual(updated_ids, {'doc1', 'doc2', 'doc4'})
 
-        # Check that the notes were updated correctly for one of the records
+        # Check that the notes were updated correctly
         record_doc1 = df[df['id'] == 'doc1'].iloc[0]
         self.assertIn("Schema 'Learned:EventTypeA' was learned", record_doc1['notes'])
         
         # Check that the unrelated document remains untouched
         df_unrelated = self.db_manager.get_records_by_status_as_df('pending_learning')
-        self.assertEqual(len(df_unrelated), 1)
+        self.assertEqual(len(df_unrelated), 1, "Should be 1 record remaining in 'pending_learning'")
         self.assertEqual(df_unrelated.iloc[0]['id'], 'doc3')
 
 if __name__ == '__main__':

@@ -169,16 +169,69 @@ class SchemaLearningToolkit:
 
     def get_cluster_ids(self) -> list[int]:
         """Returns a sorted list of unique cluster IDs, excluding noise."""
-        if 'cluster_id' not in self.data_frame.columns:
+        if self.event_df.empty or 'cluster_id' not in self.event_df.columns:
             return []
         
-        valid_clusters = self.data_frame[self.data_frame['cluster_id'] != -1]
+        valid_clusters = self.event_df[self.event_df['cluster_id'] != -1]
         if valid_clusters.empty:
             return []
             
         return sorted(valid_clusters['cluster_id'].unique().tolist())
 
-    async def show_samples(self, cluster_id: int):        if self.event_df.empty or 'cluster_id' not in self.event_df.columns:            print("Data not clustered. Run 'cluster' first.")            return                cluster_events = self.event_df[self.event_df['cluster_id'] == cluster_id]        if cluster_events.empty:            print(f"No cluster with ID: {cluster_id}")            return        # --- Aggregated Summary View ---        unique_summaries = cluster_events['event_summary'].unique().tolist()        print(f"\n--- Cluster {cluster_id}: Aggregated Event Summaries ({len(unique_summaries)} unique) ---")        for i, summary in enumerate(unique_summaries):            print(f"  - {summary}")        # --- Source Document Traceability ---        unique_docs = cluster_events.drop_duplicates(subset='source_id')        print(f"\n--- Source Documents ({len(unique_docs)} unique) ---")        for index, doc in unique_docs.iterrows():            print(f"  - ID: {doc['source_id']}")            print(f"    Text: {doc['source_text']}")            # Show which events from this doc belong to the current cluster            doc_events_in_cluster = cluster_events[cluster_events['source_id'] == doc['source_id']]['event_summary'].tolist()            print(f"    Events in this cluster: {doc_events_in_cluster}")        print("-" * 40)    async def show_samples_for_large_clusters(self, min_size: int = 5):        """        Shows samples for all event clusters containing at least a minimum number of events.        """        if self.event_df.empty or 'cluster_id' not in self.event_df.columns:            print("Data has not been clustered yet. Run 'cluster' first.")            return        cluster_counts = self.event_df['cluster_id'].value_counts()        large_clusters = cluster_counts[cluster_counts >= min_size].index.tolist()                if -1 in large_clusters:            large_clusters.remove(-1)        if not large_clusters:            print(f"No clusters found with at least {min_size} events.")            return        print(f"\n--- Showing samples for all clusters with >= {min_size} events ---")        for cluster_id in sorted(large_clusters):            await self.show_samples(cluster_id)
+    async def show_samples(self, cluster_id: int):
+        """
+        展示指定 cluster_id 的事件摘要和来源文档。
+        """
+        if self.event_df.empty or 'cluster_id' not in self.event_df.columns:
+            print("Data not clustered. Run 'cluster' first.")
+            return
+
+        cluster_events = self.event_df[self.event_df['cluster_id'] == cluster_id]
+        if cluster_events.empty:
+            print(f"No cluster with ID: {cluster_id}")
+            return
+
+        # --- Aggregated Summary View ---
+        unique_summaries = cluster_events['event_summary'].unique().tolist()
+        print(f"\n--- Cluster {cluster_id}: Aggregated Event Summaries ({len(unique_summaries)} unique) ---")
+        for i, summary in enumerate(unique_summaries):
+            print(f"  - {summary}")
+
+        # --- Source Document Traceability ---
+        unique_docs = cluster_events.drop_duplicates(subset='source_id')
+        print(f"\n--- Source Documents ({len(unique_docs)} unique) ---")
+        for index, doc in unique_docs.iterrows():
+            print(f"  - ID: {doc['source_id']}")
+            print(f"    Text: {doc['source_text']}")
+            doc_events_in_cluster = cluster_events[
+                cluster_events['source_id'] == doc['source_id']
+            ]['event_summary'].tolist()
+            print(f"    Events in this cluster: {doc_events_in_cluster}")
+            print("-" * 40)
+
+
+    async def show_samples_for_large_clusters(self, min_size: int = 5):
+        """
+        展示所有事件数不少于 min_size 的聚类摘要。
+        """
+        if self.event_df.empty or 'cluster_id' not in self.event_df.columns:
+            print("Data has not been clustered yet. Run 'cluster' first.")
+            return
+
+        cluster_counts = self.event_df['cluster_id'].value_counts()
+        large_clusters = cluster_counts[cluster_counts >= min_size].index.tolist()
+
+        # 忽略噪声簇 (-1)
+        if -1 in large_clusters:
+            large_clusters.remove(-1)
+
+        if not large_clusters:
+            print(f"No clusters found with at least {min_size} events.")
+            return
+
+        print(f"\n--- Showing samples for all clusters with >= {min_size} events ---")
+        for cluster_id in sorted(large_clusters):
+            await self.show_samples(cluster_id)
 
     async def _get_ic_event_summary(self, text: str) -> list[str]:
         """
@@ -263,16 +316,19 @@ class SchemaLearningToolkit:
         return prompt_manager.get_prompt("schema_generation", sample_block=sample_block)
 
     async def generate_schema_from_cluster(self, cluster_id: int, num_samples: int = 10, silent=False):
-        if 'cluster_id' not in self.data_frame.columns:
+        if self.event_df.empty or 'cluster_id' not in self.event_df.columns:
             if not silent: print("Data not clustered. Run 'cluster' first.")
             return
-        cluster_data = self.data_frame[self.data_frame['cluster_id'] == cluster_id]
-        if cluster_data.empty:
+        
+        cluster_events = self.event_df[self.event_df['cluster_id'] == cluster_id]
+        if cluster_events.empty:
             if not silent: print(f"No cluster with ID: {cluster_id}")
             return
 
-        num_samples = min(num_samples, len(cluster_data))
-        samples = np.random.choice(cluster_data['source_text'], size=num_samples, replace=False).tolist()
+        # Sample from unique source texts within the cluster
+        unique_texts = cluster_events['source_text'].unique()
+        num_samples = min(num_samples, len(unique_texts))
+        samples = np.random.choice(unique_texts, size=num_samples, replace=False).tolist()
         
         # Build the user prompt content
         user_prompt_content = self._build_schema_generation_prompt(samples)
@@ -352,12 +408,12 @@ class SchemaLearningToolkit:
             print(f"Error saving schema file: {e}")
             return
 
-        # --- 2. Reset the status of all items in the cluster to 'pending_triage' ---
-        records_to_process = self.doc_df[self.doc_df['cluster_id'] == cluster_id]
-        ids_to_update = records_to_process['id'].tolist()
+        # --- 2. Reset the status of all documents in the cluster to 'pending_triage' ---
+        cluster_events = self.event_df[self.event_df['cluster_id'] == cluster_id]
+        ids_to_update = cluster_events['source_id'].unique().tolist()
 
         if ids_to_update:
-            print(f"\nResetting status for {len(ids_to_update)} records in cluster {cluster_id} to 'pending_triage'...")
+            print(f"\nResetting status for {len(ids_to_update)} documents in cluster {cluster_id} to 'pending_triage'...")
             notes = f"Schema '{schema_name}' was learned from this cluster. Resetting for re-triage with new knowledge."
             self.db_manager.update_statuses_for_ids(
                 record_ids=ids_to_update,
@@ -366,10 +422,12 @@ class SchemaLearningToolkit:
             )
             print("  Database status update complete.")
         else:
-            print(f"\nNo records found for cluster {cluster_id} in the original document dataframe. Skipping status update.")
+            print(f"\nNo documents found for cluster {cluster_id}. Skipping status update.")
 
         # --- 3. Clean up the internal state ---
-        self.doc_df = self.doc_df[self.doc_df['cluster_id'] != cluster_id]
+        # Remove the processed events and documents from the internal dataframes
+        self.event_df = self.event_df[self.event_df['cluster_id'] != cluster_id]
+        self.doc_df = self.doc_df[~self.doc_df['id'].isin(ids_to_update)]
         if cluster_id in self.generated_schemas:
             del self.generated_schemas[cluster_id]
         
