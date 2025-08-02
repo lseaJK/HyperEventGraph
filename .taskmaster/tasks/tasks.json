@@ -680,11 +680,22 @@
         ],
         "priority": "medium",
         "subtasks": []
+      },
+      {
+        "id": 33,
+        "title": "Architectural Refactoring: Implement Event-Centric Learning Workflow",
+        "description": "Implement the new event-centric architecture for the interactive learning workflow. This involves changing the core clustering logic from document-level to event-level, updating all interactive commands (list, show, merge) to operate on event clusters, and creating a regrouping mechanism to map event clusters back to document clusters for schema generation and saving.",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [],
+        "priority": "medium",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-08-02T11:17:58.759Z",
+      "updated": "2025-08-02T16:28:26.667Z",
       "description": "Tasks for master context"
     }
   }

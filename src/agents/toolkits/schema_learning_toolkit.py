@@ -28,10 +28,17 @@ class SchemaLearningToolkit:
         self.db_manager = DatabaseManager(db_path)
         self.config = get_config().get('learning_workflow', {})
         self.llm_client = LLMClient()
-        self.data_frame = pd.DataFrame()
+        
+        # Original document data
+        self.doc_df = pd.DataFrame()
+        # New event-centric data for clustering
+        self.event_df = pd.DataFrame()
+        # Cache for LLM summaries <source_text, summary_list>
+        self.summary_cache = {}
+        # Cache for generated schemas <cluster_id, schema>
         self.generated_schemas = {}
+        # Embedding model
         self.embedding_model = None
-        self.summary_cache = {}  # Add a cache for summaries
 
         print("SchemaLearningToolkit initialized.")
         self._load_data_from_db()
@@ -39,9 +46,9 @@ class SchemaLearningToolkit:
 
     def _load_data_from_db(self):
         print("Loading data for learning from database...")
-        self.data_frame = self.db_manager.get_records_by_status_as_df('pending_learning')
-        if not self.data_frame.empty:
-            print(f"Loaded {len(self.data_frame)} items for learning.")
+        self.doc_df = self.db_manager.get_records_by_status_as_df('pending_learning')
+        if not self.doc_df.empty:
+            print(f"Loaded {len(self.doc_df)} items for learning.")
         else:
             print("No items are currently pending learning.")
 
@@ -66,74 +73,98 @@ class SchemaLearningToolkit:
             self.embedding_model = None
 
     def reload_data(self):
-        """Reloads data from the database and clears the summary cache."""
+        """Reloads data from the database and clears caches."""
         self._load_data_from_db()
         self.summary_cache.clear()
-        print("Summary cache has been cleared.")
+        self.event_df = pd.DataFrame() # Clear the event dataframe as well
+        print("Summary cache and event data have been cleared.")
 
     async def run_clustering(self):
         """
-        Performs semantic vectorization and HDBSCAN clustering based on a fusion of 
-        AI-generated event summaries and the original text.
+        Performs event-centric clustering.
+        1. Flattens documents into a list of individual events.
+        2. Clusters the events based on their summary embeddings.
         """
-        if self.data_frame.empty or self.embedding_model is None:
+        if self.doc_df.empty or self.embedding_model is None:
             print("No data to cluster or embedding model not loaded.")
             return False
 
-        print("Generating event summaries for clustering via LLM (concurrently)...")
-        
-        texts_to_process = self.data_frame['source_text'].tolist()
+        print("Generating event summaries for all documents (concurrently)...")
+        texts_to_process = self.doc_df['source_text'].tolist()
         tasks = [self._get_ic_event_summary(text) for text in texts_to_process]
-        all_summaries = await asyncio.gather(*tasks)
-        
-        # Populate the cache and create fused text for embedding
-        fused_texts = []
-        for i, text in enumerate(texts_to_process):
-            summary = all_summaries[i]
-            self.summary_cache[text] = summary  # Populate the cache
-            summary_str = " ".join(summary)
-            fused_texts.append(f"{summary_str} {text}")
-        
-        print("Running clustering on fused (summary + text) embeddings...")
-        
-        embeddings = self.embedding_model.encode(fused_texts, show_progress_bar=True)
+        all_summaries_list = await asyncio.gather(*tasks)
 
+        # --- Create the event-centric DataFrame (Data Flattening) ---
+        print("Flattening documents into an event-centric dataset...")
+        event_data = []
+        for (doc_index, doc_row), summary_list in zip(self.doc_df.iterrows(), all_summaries_list):
+            # Also populate the cache here
+            self.summary_cache[doc_row['source_text']] = summary_list
+            for summary in summary_list:
+                event_data.append({
+                    'event_summary': summary,
+                    'source_text': doc_row['source_text'],
+                    'source_id': doc_row['id']
+                })
+        
+        if not event_data:
+            print("No events were summarized from the documents. Cannot proceed with clustering.")
+            return False
+            
+        self.event_df = pd.DataFrame(event_data)
+        print(f"Created a dataset of {len(self.event_df)} individual events.")
+
+        print("Running clustering on individual event summaries...")
+        
+        # Generate embeddings from the event summaries
+        embeddings = self.embedding_model.encode(self.event_df['event_summary'].tolist(), show_progress_bar=True)
+
+        # Perform clustering
         min_cluster_size = self.config.get('min_cluster_size', 3)
         clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size, gen_min_span_tree=True)
         clusterer.fit(embeddings)
 
-        self.data_frame['cluster_id'] = clusterer.labels_
+        self.event_df['cluster_id'] = clusterer.labels_
         
         num_clusters = len(set(clusterer.labels_)) - (1 if -1 in clusterer.labels_ else 0)
         
-        print(f"Clustering complete. Found {num_clusters} potential clusters based on fused embeddings.")
+        print(f"Clustering complete. Found {num_clusters} potential event clusters.")
         return num_clusters > 0
 
     def list_clusters(self):
-        if 'cluster_id' not in self.data_frame.columns:
+        if self.event_df.empty or 'cluster_id' not in self.event_df.columns:
             print("Data has not been clustered yet. Run 'cluster' first.")
             return
         
-        # Exclude noise points (cluster_id = -1)
-        valid_clusters = self.data_frame[self.data_frame['cluster_id'] != -1]
+        valid_clusters = self.event_df[self.event_df['cluster_id'] != -1]
         if valid_clusters.empty:
             print("No valid clusters were formed. All items might have been considered noise.")
-            print("Try adjusting 'min_cluster_size' in your config for different sensitivity.")
             return
 
-        cluster_summary = valid_clusters['cluster_id'].value_counts().reset_index()
-        cluster_summary.columns = ['Cluster ID', 'Number of Items']
+        # Group by cluster_id and aggregate information
+        cluster_summary = valid_clusters.groupby('cluster_id').agg(
+            num_events=('event_summary', 'size'),
+            num_docs=('source_id', 'nunique')
+        ).reset_index()
         
+        cluster_summary.columns = ['Cluster ID', 'Number of Events', 'Number of Docs']
+        
+        # Add a sample event summary for a quick preview
+        def get_preview(cid):
+            return valid_clusters[valid_clusters['cluster_id'] == cid]['event_summary'].iloc[0]
+        
+        cluster_summary['Sample Event'] = cluster_summary['Cluster ID'].apply(get_preview)
+
         # Add generated schema info if available
         def get_schema_info(cid):
             schema = self.generated_schemas.get(cid)
             if schema:
-                return f"{schema.get('schema_name', 'N/A')}: {schema.get('description', 'No description')}"
+                return f"{schema.get('schema_name', 'N/A')}"
             return "Not generated"
 
         cluster_summary['Generated Schema'] = cluster_summary['Cluster ID'].apply(get_schema_info)
             
-        print("\n--- Cluster Summary ---")
+        print("\n--- Event Cluster Summary ---")
         print(cluster_summary.to_string(index=False))
 
     def get_cluster_ids(self) -> list[int]:
@@ -147,58 +178,7 @@ class SchemaLearningToolkit:
             
         return sorted(valid_clusters['cluster_id'].unique().tolist())
 
-    async def show_samples(self, cluster_id: int, num_samples: int = None):
-        if 'cluster_id' not in self.data_frame.columns:
-            print("Data not clustered. Run 'cluster' first.")
-            return
-        cluster_data = self.data_frame[self.data_frame['cluster_id'] == cluster_id]
-        if cluster_data.empty:
-            print(f"No cluster with ID: {cluster_id}")
-            return
-        
-        if num_samples is None:
-            samples_df = cluster_data
-            print(f"\n--- Showing all {len(samples_df)} Samples from Cluster {cluster_id} ---")
-        else:
-            num_to_show = min(num_samples, len(cluster_data))
-            samples_df = cluster_data.head(num_to_show)
-            print(f"\n--- Showing {num_to_show} Samples from Cluster {cluster_id} ---")
-
-        # Create all summary tasks to be run concurrently
-        tasks = [self._get_ic_event_summary(row['source_text']) for _, row in samples_df.iterrows()]
-        summaries = await asyncio.gather(*tasks)
-
-        # Now display the results
-        for (index, row), summary in zip(samples_df.iterrows(), summaries):
-            print(f"--- Sample (ID: {row['id']}) ---")
-            print(f"  Text: {row['source_text']}")
-            print(f"  IC-Related Events: {summary}")
-            print("-" * (len(str(row['id'])) + 24))
-
-        if num_samples is not None and len(cluster_data) > num_samples:
-            print(f"\nNote: Showing {num_samples} of {len(cluster_data)} samples. To see all, use 'show {cluster_id}'.")
-
-    async def show_samples_for_large_clusters(self, min_size: int = 5):
-        """
-        Shows samples for all clusters containing at least a minimum number of items.
-        """
-        if 'cluster_id' not in self.data_frame.columns:
-            print("Data has not been clustered yet. Run 'cluster' first.")
-            return
-
-        cluster_counts = self.data_frame['cluster_id'].value_counts()
-        large_clusters = cluster_counts[cluster_counts >= min_size].index.tolist()
-        
-        if -1 in large_clusters:
-            large_clusters.remove(-1)  # Exclude noise points
-
-        if not large_clusters:
-            print(f"No clusters found with at least {min_size} samples.")
-            return
-
-        print(f"--- Showing samples for all clusters with >= {min_size} items ---")
-        for cluster_id in sorted(large_clusters):
-            await self.show_samples(cluster_id)  # This will show all samples for the cluster
+    async def show_samples(self, cluster_id: int):        if self.event_df.empty or 'cluster_id' not in self.event_df.columns:            print("Data not clustered. Run 'cluster' first.")            return                cluster_events = self.event_df[self.event_df['cluster_id'] == cluster_id]        if cluster_events.empty:            print(f"No cluster with ID: {cluster_id}")            return        # --- Aggregated Summary View ---        unique_summaries = cluster_events['event_summary'].unique().tolist()        print(f"\n--- Cluster {cluster_id}: Aggregated Event Summaries ({len(unique_summaries)} unique) ---")        for i, summary in enumerate(unique_summaries):            print(f"  - {summary}")        # --- Source Document Traceability ---        unique_docs = cluster_events.drop_duplicates(subset='source_id')        print(f"\n--- Source Documents ({len(unique_docs)} unique) ---")        for index, doc in unique_docs.iterrows():            print(f"  - ID: {doc['source_id']}")            print(f"    Text: {doc['source_text']}")            # Show which events from this doc belong to the current cluster            doc_events_in_cluster = cluster_events[cluster_events['source_id'] == doc['source_id']]['event_summary'].tolist()            print(f"    Events in this cluster: {doc_events_in_cluster}")        print("-" * 40)    async def show_samples_for_large_clusters(self, min_size: int = 5):        """        Shows samples for all event clusters containing at least a minimum number of events.        """        if self.event_df.empty or 'cluster_id' not in self.event_df.columns:            print("Data has not been clustered yet. Run 'cluster' first.")            return        cluster_counts = self.event_df['cluster_id'].value_counts()        large_clusters = cluster_counts[cluster_counts >= min_size].index.tolist()                if -1 in large_clusters:            large_clusters.remove(-1)        if not large_clusters:            print(f"No clusters found with at least {min_size} events.")            return        print(f"\n--- Showing samples for all clusters with >= {min_size} events ---")        for cluster_id in sorted(large_clusters):            await self.show_samples(cluster_id)
 
     async def _get_ic_event_summary(self, text: str) -> list[str]:
         """
@@ -270,13 +250,13 @@ class SchemaLearningToolkit:
             return None
 
     def merge_clusters(self, id1: int, id2: int):
-        if 'cluster_id' not in self.data_frame.columns:
+        if self.event_df.empty or 'cluster_id' not in self.event_df.columns:
             print("Data not clustered. Run 'cluster' first.")
             return
         
-        print(f"Merging cluster {id2} into {id1}...")
-        self.data_frame.loc[self.data_frame['cluster_id'] == id2, 'cluster_id'] = id1
-        print("Merge complete. Run 'list_clusters' to see the updated summary.")
+        print(f"Merging event cluster {id2} into {id1}...")
+        self.event_df.loc[self.event_df['cluster_id'] == id2, 'cluster_id'] = id1
+        print("Merge complete. Run 'list' to see the updated summary.")
 
     def _build_schema_generation_prompt(self, samples: list[str]) -> str:
         sample_block = "\n".join([f"- \"{s}\"" for s in samples])
