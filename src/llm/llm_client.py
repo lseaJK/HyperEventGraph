@@ -111,6 +111,21 @@ class LLMClient:
             if param in api_params:
                 call_params[param] = api_params[param]
 
+        # --- Smart Parameter Handling for DeepSeek/SiliconFlow ---
+        # Models often don't allow both temperature and top_p.
+        # This logic prioritizes top_p unless temperature is set very low (for deterministic output).
+        if 'temperature' in call_params and 'top_p' in call_params:
+            if call_params['temperature'] < 0.1:
+                # If temperature is very low, assume user wants deterministic output.
+                # Remove top_p and keep temperature.
+                del call_params['top_p']
+                print("Notice: Low temperature detected. Using temperature sampling and ignoring top_p.")
+            else:
+                # Otherwise, prioritize top_p as it's generally preferred.
+                # Remove temperature and keep top_p.
+                del call_params['temperature']
+                print("Notice: Both temperature and top_p found. Using top_p sampling and ignoring temperature.")
+
         try:
             client = self._get_client_for_provider(final_provider)
             response = await client.chat.completions.create(**call_params)

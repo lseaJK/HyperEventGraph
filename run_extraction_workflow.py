@@ -25,7 +25,7 @@ from src.llm.llm_client import LLMClient
 from src.core.prompt_manager import prompt_manager
 
 # Concurrency limit adjusted to respect typical API rate limits (TPM is often the bottleneck)
-CONCURRENCY_LIMIT = 5
+CONCURRENCY_LIMIT = 3
 
 def check_and_trigger_cortex(db_manager: DatabaseManager):
     """检查待聚类事件数量，如果达到阈值则触发Cortex工作流。"""
@@ -43,7 +43,7 @@ def check_and_trigger_cortex(db_manager: DatabaseManager):
         cortex_script_path = project_root / "run_cortex_workflow.py"
         
         if not cortex_script_path.exists():
-            print(f"错误: Cortex脚本未找到于 {cortex_script_path}")
+            print(f"错误: Cortex��本未找到于 {cortex_script_path}")
             return
 
         try:
@@ -82,11 +82,14 @@ async def worker(record, db_manager, llm_client, semaphore, file_lock, output_fi
         text = record['source_text']
         
         try:
-            # 1. Get Prompt
-            prompt = prompt_manager.get_prompt("extraction", text_sample=text)
+            # 1. Get Prompt content
+            prompt_content = prompt_manager.get_prompt("extraction", text_sample=text)
             
-            # 2. Call LLM
-            raw_response = await llm_client.get_raw_response(prompt, task_type="extraction")
+            # 2. Format messages for LLM
+            messages = [{"role": "user", "content": prompt_content}]
+
+            # 3. Call LLM
+            raw_response = await llm_client.get_raw_response(messages, task_type="extraction")
             
             if not raw_response:
                 raise ValueError("LLM call failed or returned an empty response.")
