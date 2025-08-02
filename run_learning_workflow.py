@@ -77,13 +77,13 @@ async def review_and_merge_loop(toolkit: SchemaLearningToolkit):
             # User feedback: handle `show samples` to display details for large clusters
             if args[0] == 'samples':
                 min_size = int(args[1]) if len(args) > 1 else 5
-                toolkit.show_samples_for_large_clusters(min_size)
+                await toolkit.show_samples_for_large_clusters(min_size)
                 continue
 
             try:
                 cluster_id = int(args[0])
                 num_samples = int(args[1]) if len(args) > 1 else None
-                toolkit.show_samples(cluster_id, num_samples)
+                await toolkit.show_samples(cluster_id, num_samples)
             except ValueError:
                 print("Invalid arguments. Cluster ID and num_samples must be integers.")
         else:
@@ -128,7 +128,7 @@ async def main_loop(db_path: str):
 
         elif command == "cluster":
             try:
-                if toolkit.run_clustering():
+                if await toolkit.run_clustering():
                     await review_and_merge_loop(toolkit)
                 else:
                     print("Clustering did not produce any clusters. Aborting review step.")
@@ -179,7 +179,7 @@ async def main_loop(db_path: str):
             try:
                 cluster_id = int(args[0])
                 num_samples = int(args[1]) if len(args) > 1 else None
-                toolkit.show_samples(cluster_id, num_samples)
+                await toolkit.show_samples(cluster_id, num_samples)
             except ValueError:
                 print(f"Invalid arguments for command '{command}'. Ensure IDs are integers.")
             except Exception as e:

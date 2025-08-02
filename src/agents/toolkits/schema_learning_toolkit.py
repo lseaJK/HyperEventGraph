@@ -68,31 +68,54 @@ class SchemaLearningToolkit:
         """Reloads data from the database."""
         self._load_data_from_db()
 
-    def run_clustering(self):
+    async def run_clustering(self):
         """
-        Performs semantic vectorization and HDBSCAN clustering.
+        Performs semantic vectorization and HDBSCAN clustering based on AI-generated event summaries.
         """
         if self.data_frame.empty or self.embedding_model is None:
             print("No data to cluster or embedding model not loaded.")
             return False
 
-        print("Running clustering with SentenceTransformer and HDBSCAN...")
+        print("Generating event summaries for clustering via LLM...")
         
-        # Generate embeddings
-        texts = self.data_frame['source_text'].tolist()
-        embeddings = self.embedding_model.encode(texts, show_progress_bar=True)
+        # --- New: Generate summaries for clustering ---
+        # Use a temporary cache to avoid re-calling the LLM for the same text
+        summary_cache = {}
+        tasks = []
+        texts_to_process = self.data_frame['source_text'].tolist()
+
+        for text in texts_to_process:
+            if text not in summary_cache:
+                tasks.append(self._get_ic_event_summary(text))
+        
+        # Run all summary tasks in parallel
+        all_summaries = await asyncio.gather(*tasks)
+        
+        # Populate cache and create the text for embedding
+        summary_texts = []
+        for i, text in enumerate(texts_to_process):
+            if text not in summary_cache:
+                summary_cache[text] = all_summaries.pop(0)
+            # Join the list of events into a single string for embedding
+            summary_texts.append(" ".join(summary_cache[text]))
+        
+        # --- End New ---
+
+        print("Running clustering on event summaries with SentenceTransformer and HDBSCAN...")
+        
+        # Generate embeddings from the summaries
+        embeddings = self.embedding_model.encode(summary_texts, show_progress_bar=True)
 
         # Perform clustering
-        min_cluster_size = self.config.get('min_cluster_size', 3) # Lowered default for better sensitivity
+        min_cluster_size = self.config.get('min_cluster_size', 3)
         clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size, gen_min_span_tree=True)
         clusterer.fit(embeddings)
 
         self.data_frame['cluster_id'] = clusterer.labels_
         
-        # -1 label is for noise points
         num_clusters = len(set(clusterer.labels_)) - (1 if -1 in clusterer.labels_ else 0)
         
-        print(f"Clustering complete. Found {num_clusters} potential clusters.")
+        print(f"Clustering complete. Found {num_clusters} potential clusters based on event summaries.")
         return num_clusters > 0
 
     def list_clusters(self):
@@ -133,7 +156,7 @@ class SchemaLearningToolkit:
             
         return sorted(valid_clusters['cluster_id'].unique().tolist())
 
-    def show_samples(self, cluster_id: int, num_samples: int = None):
+    async def show_samples(self, cluster_id: int, num_samples: int = None):
         if 'cluster_id' not in self.data_frame.columns:
             print("Data not clustered. Run 'cluster' first.")
             return
@@ -155,24 +178,15 @@ class SchemaLearningToolkit:
             print(f"--- Sample (ID: {row['id']}) ---")
             print(f"  Text: {row['source_text']}")
             
-            entities_str = row.get('involved_entities', '{}')
-            try:
-                # Safely load the JSON string
-                entities = json.loads(entities_str) if entities_str and entities_str != '{}' else []
-                if entities:
-                    entity_names = [e.get('entity_name', 'N/A') for e in entities]
-                    print(f"  Involved Entities: {', '.join(entity_names)}")
-                else:
-                    print("  Involved Entities: None")
-            except (json.JSONDecodeError, TypeError):
-                print(f"  Involved Entities: (Could not parse: {entities_str})")
+            summary = await self._get_ic_event_summary(row['source_text'])
+            print(f"  IC-Related Events: {summary}")
+            
             print("-" * (len(str(row['id'])) + 24))
 
         if num_samples is not None and len(cluster_data) > num_samples:
-            print(f"
-Note: Showing {num_samples} of {len(cluster_data)} samples. To see all, use 'show {cluster_id}'.")
+            print(f"Note: Showing {num_samples} of {len(cluster_data)} samples. To see all, use 'show {cluster_id}'.")
 
-    def show_samples_for_large_clusters(self, min_size: int = 5):
+    async def show_samples_for_large_clusters(self, min_size: int = 5):
         """
         Shows samples for all clusters containing at least a minimum number of items.
         """
@@ -190,10 +204,48 @@ Note: Showing {num_samples} of {len(cluster_data)} samples. To see all, use 'sho
             print(f"No clusters found with at least {min_size} samples.")
             return
 
-        print(f"
---- Showing samples for all clusters with >= {min_size} items ---")
+        print(f"--- Showing samples for all clusters with >= {min_size} items ---")
         for cluster_id in sorted(large_clusters):
-            self.show_samples(cluster_id)  # This will show all samples for the cluster
+            await self.show_samples(cluster_id)  # This will show all samples for the cluster
+
+    async def _get_ic_event_summary(self, text: str) -> list[str]:
+        """
+        Uses an LLM to summarize IC-related events from a given text.
+        """
+        system_prompt = """你是集成电路领域的专家，请你根据所给的输出，以列表的形式输出包含的所有与集成电路领域相关的事件概述。每个事件概述在20个字以内。
+
+输出形式：
+[事件1，事件2，...]
+如果没有 G任何与集成电路领域相关的事件则输出[]。
+注意请你严格输出json的列表形式。"""
+        
+        user_prompt = f"Text: {text}"
+
+        try:
+            response = await self.llm_client.get_json_response(
+                prompt=user_prompt,
+                system_prompt=system_prompt,
+                model_name="Qwen/Qwen3-30B-A3B-Instruct-2507",
+                temperature=0.3,
+                top_p=0.9
+            )
+            if isinstance(response, list):
+                return response
+            else:
+                # Attempt to handle cases where the model returns a string representation of a list
+                try:
+                    parsed_response = json.loads(response)
+                    if isinstance(parsed_response, list):
+                        return parsed_response
+                except (json.JSONDecodeError, TypeError):
+                    pass # Fall through to the error below
+                
+                print(f"[Warning] LLM returned non-list summary: {response}")
+                return ["LLM response was not a valid JSON list."]
+
+        except Exception as e:
+            print(f"[Warning] LLM call for summary failed: {e}")
+            return ["Error during summary generation."]
 
     def merge_clusters(self, id1: int, id2: int):
         if 'cluster_id' not in self.data_frame.columns:
