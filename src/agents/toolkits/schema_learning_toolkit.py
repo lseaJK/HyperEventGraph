@@ -19,6 +19,7 @@ sys.path.insert(0, str(project_root))
 from src.core.database_manager import DatabaseManager
 from src.core.config_loader import get_config
 from src.llm.llm_client import LLMClient
+from src.core.prompt_manager import prompt_manager
 
 class SchemaLearningToolkit:
     def __init__(self, db_path: str):
@@ -48,11 +49,9 @@ class SchemaLearningToolkit:
             return
 
         print("Running clustering...")
-        # TF-IDF Vectorization
         vectorizer = TfidfVectorizer(max_df=0.95, min_df=2, stop_words='english')
         tfidf_matrix = vectorizer.fit_transform(self.data_frame['source_text'])
 
-        # Agglomerative Clustering
         distance_threshold = self.config.get('cluster_distance_threshold', 1.4)
         clustering = AgglomerativeClustering(n_clusters=None, distance_threshold=distance_threshold)
         clustering.fit(tfidf_matrix.toarray())
@@ -60,90 +59,62 @@ class SchemaLearningToolkit:
         self.data_frame['cluster_id'] = clustering.labels_
         
         num_clusters = len(set(clustering.labels_))
-        noise_points = (clustering.labels_ == -1).sum() if -1 in clustering.labels_ else 0
-        print(f"Clustering complete. Found {num_clusters} potential clusters and {noise_points} noise points.")
+        # Correctly handle noise points if they exist
+        if -1 in clustering.labels_:
+            num_clusters -= 1
+        
+        print(f"Clustering complete. Found {num_clusters} potential clusters.")
         print("Run 'list_clusters' to see the results.")
-
-    def execute_command(self, command: str, *args):
-        # A simple command dispatcher
-        if command == "cluster":
-            self.run_clustering()
-        elif command == "list_clusters":
-            self.list_clusters()
-        elif command == "show_samples":
-            if not args:
-                print(self._get_usage(command))
-                return
-            self.show_samples(int(args[0]), int(args[1]) if len(args) > 1 else 5)
-        elif command == "merge":
-            if len(args) < 2:
-                print(self._get_usage(command))
-                return
-            self.merge_clusters(int(args[0]), int(args[1]))
-        else:
-            print(f"Unknown command: '{command}'")
-
-    def _get_usage(self, command):
-        usages = {
-            "show_samples": "Usage: show_samples <cluster_id> [num_samples=5]",
-            "merge": "Usage: merge <cluster_id_1> <cluster_id_2>"
-        }
-        return usages.get(command, "Invalid command.")
 
     def list_clusters(self):
         if 'cluster_id' not in self.data_frame.columns:
             print("Data has not been clustered yet. Run 'cluster' first.")
             return
         
-        cluster_summary = self.data_frame['cluster_id'].value_counts().reset_index()
+        # Exclude noise points (cluster_id = -1) from the summary
+        cluster_summary = self.data_frame[self.data_frame['cluster_id'] != -1]['cluster_id'].value_counts().reset_index()
         cluster_summary.columns = ['Cluster ID', 'Number of Items']
         
         if cluster_summary.empty:
-            print("No clusters were formed. All items might have been considered unique.")
+            print("No valid clusters were formed. All items might have been considered noise or unique.")
             print("Try adjusting the 'cluster_distance_threshold' in your config for different sensitivity.")
             return
             
         print("\n--- Cluster Summary ---")
         print(cluster_summary.to_string(index=False))
-        print("\nUse 'show_samples <id>' to inspect a cluster.")
+        print("\nNext steps: Use 'show_samples <id>' to inspect a cluster, or 'generate_schema <id>' to create a schema.")
 
     def show_samples(self, cluster_id: int, num_samples: int = 5):
-        # ... (omitting unchanged method for brevity)
-        pass
+        if 'cluster_id' not in self.data_frame.columns:
+            print("Data not clustered. Run 'cluster' first.")
+            return
+        cluster_data = self.data_frame[self.data_frame['cluster_id'] == cluster_id]
+        if cluster_data.empty:
+            print(f"No cluster with ID: {cluster_id}")
+            return
+        
+        num_samples = min(num_samples, len(cluster_data))
+        samples = cluster_data['source_text'].head(num_samples).tolist()
+        
+        print(f"\n--- Samples from Cluster {cluster_id} ---")
+        for i, sample in enumerate(samples):
+            print(f"[{i+1}] {sample[:200]}...")
+        print("\nNext step: If samples look coherent, use 'generate_schema <id>' to create a schema for this cluster.")
 
     def merge_clusters(self, id1: int, id2: int):
-        # ... (omitting unchanged method for brevity)
-        pass
+        if 'cluster_id' not in self.data_frame.columns:
+            print("Data not clustered. Run 'cluster' first.")
+            return
+        
+        print(f"Merging cluster {id2} into {id1}...")
+        self.data_frame.loc[self.data_frame['cluster_id'] == id2, 'cluster_id'] = id1
+        print("Merge complete. Run 'list_clusters' to see the updated summary.")
 
     def _build_schema_generation_prompt(self, samples: list[str]) -> str:
         sample_block = "\n".join([f"- \"{s}\"" for s in samples])
-        return f"""
-You are an expert data architect. Your task is to analyze text samples describing a specific event type and create a concise JSON schema.
+        return prompt_manager.get_prompt("schema_generation", sample_block=sample_block)
 
-**Instructions:**
-1.  **Analyze Samples:** Understand the common theme.
-2.  **Create Schema:** Generate a JSON object with "schema_name", "description", and "properties".
-    -   `schema_name`: PascalCase:PascalCase format (e.g., "Company:ProductLaunch").
-    -   `description`: A one-sentence explanation.
-    -   `properties`: A dictionary of snake_case keys with brief descriptions.
-3.  **Output:** Your entire output must be a single, valid JSON object.
-
-**Text Samples:**
-{sample_block}
-
-**Example Output:**
-{{
-  "schema_name": "Company:LeadershipChange",
-  "description": "Describes the appointment or departure of a key executive.",
-  "properties": {{
-    "company": "The company involved.",
-    "executive_name": "The name of the executive.",
-    "new_role": "The new position or title."
-  }}
-}}
-"""
-
-    def generate_schema_from_cluster(self, cluster_id: int, num_samples: int = 10):
+    async def generate_schema_from_cluster(self, cluster_id: int, num_samples: int = 10):
         if 'cluster_id' not in self.data_frame.columns:
             print("Data not clustered. Run 'cluster' first.")
             return
@@ -158,18 +129,18 @@ You are an expert data architect. Your task is to analyze text samples describin
         
         print(f"Generating schema from {num_samples} samples in cluster {cluster_id}...")
         
-        # Call the LLM using the correct task_type
-        generated_json = self.llm_client.get_json_response(prompt, task_type="schema_generation")
+        generated_json = await self.llm_client.get_json_response(prompt, task_type="schema_generation")
         
-        if generated_json and all(k in generated_json for k in ["schema_name", "description", "properties"]):
+        if generated_json and isinstance(generated_json, dict) and all(k in generated_json for k in ["schema_name", "description", "properties"]):
             self.generated_schemas[cluster_id] = generated_json
             print("\n--- Schema Draft Generated Successfully ---")
-            print(json.dumps(generated_json, indent=2))
-            print("\nReview the schema. If it looks good, use 'save_schema' to save it.")
+            print(json.dumps(generated_json, indent=2, ensure_ascii=False))
+            print(f"\nNext step: Review the schema. If it looks good, use 'save_schema {cluster_id}' to save it.")
         else:
             print("\n--- Schema Generation Failed ---")
             if generated_json:
-                print("Received invalid response:\n", json.dumps(generated_json, indent=2))
+                print("Received invalid response:\n", json.dumps(generated_json, indent=2, ensure_ascii=False))
+            print("\nNext step: You can try 'generate_schema' again, perhaps with more samples, or inspect other clusters.")
 
     def save_schema(self, cluster_id: int):
         if cluster_id not in self.generated_schemas:
@@ -179,18 +150,18 @@ You are an expert data architect. Your task is to analyze text samples describin
         schema_to_save = self.generated_schemas[cluster_id]
         schema_name = schema_to_save['schema_name']
         
-        schema_file = Path(self.config.get("schema_registry_path", "output/event_schemas.json"))
+        schema_file = Path(self.config.get("schema_registry_path", "output/schemas/event_schemas.json"))
         schema_file.parent.mkdir(exist_ok=True)
         
         print(f"Saving schema '{schema_name}' to '{schema_file}'...")
         try:
             all_schemas = {}
-            if schema_file.exists():
-                with schema_file.open('r') as f:
+            if schema_file.exists() and schema_file.stat().st_size > 0:
+                with schema_file.open('r', encoding='utf-8') as f:
                     all_schemas = json.load(f)
             all_schemas[schema_name] = schema_to_save
-            with schema_file.open('w') as f:
-                json.dump(all_schemas, f, indent=2)
+            with schema_file.open('w', encoding='utf-8') as f:
+                json.dump(all_schemas, f, indent=2, ensure_ascii=False)
         except (IOError, json.JSONDecodeError) as e:
             print(f"Error saving schema file: {e}")
             return
@@ -204,3 +175,4 @@ You are an expert data architect. Your task is to analyze text samples describin
         del self.generated_schemas[cluster_id]
         
         print("Save and update complete.")
+        print("\nNext step: Continue with other clusters or 'exit' the workflow.")

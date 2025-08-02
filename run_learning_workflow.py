@@ -28,7 +28,7 @@ sys.path.insert(0, str(project_root))
 from src.agents.toolkits.schema_learning_toolkit import SchemaLearningToolkit
 from src.core.config_loader import load_config, get_config
 
-def main_loop(db_path: str):
+async def main_loop(db_path: str):
     """The main interactive command loop for the learning workflow."""
     print("\n--- Interactive Learning Workflow ---")
     print("Type 'help' for a list of commands.")
@@ -65,18 +65,30 @@ def main_loop(db_path: str):
             if not args:
                 print("Usage: generate_schema <cluster_id> [num_samples]")
                 continue
-            cluster_id = int(args[0])
-            num_samples = int(args[1]) if len(args) > 1 else 10
-            toolkit.generate_schema_from_cluster(cluster_id, num_samples)
+            try:
+                cluster_id = int(args[0])
+                num_samples = int(args[1]) if len(args) > 1 else 10
+                await toolkit.generate_schema_from_cluster(cluster_id, num_samples)
+            except ValueError:
+                print("Invalid arguments. Cluster ID and num_samples must be integers.")
+            except Exception as e:
+                print(f"An error occurred: {e}")
+                traceback.print_exc()
         elif command == "save_schema":
             if not args:
                 print("Usage: save_schema <cluster_id>")
                 continue
-            cluster_id = int(args[0])
-            toolkit.save_schema(cluster_id)
-        else:
             try:
-                # For commands like list_clusters, show_samples, merge
+                cluster_id = int(args[0])
+                toolkit.save_schema(cluster_id)
+            except ValueError:
+                print("Invalid argument. Cluster ID must be an integer.")
+            except Exception as e:
+                print(f"An error occurred: {e}")
+                traceback.print_exc()
+        else:
+            # Handle synchronous commands
+            try:
                 if command in ["list_clusters", "cluster"]:
                     toolkit.execute_command(command)
                 elif command in ["show_samples", "merge"]:
@@ -84,10 +96,11 @@ def main_loop(db_path: str):
                     toolkit.execute_command(command, *typed_args)
                 else:
                     print(f"Unknown command: '{command}'. Type 'help' for a list of commands.")
+            except ValueError:
+                print(f"Invalid arguments for command '{command}'. Ensure IDs are integers.")
             except Exception as e:
                 print(f"An error occurred while executing command '{command}': {e}")
                 traceback.print_exc()
-
 
 def main():
     parser = argparse.ArgumentParser(
@@ -108,7 +121,7 @@ def main():
         db_path = config.get('database', {}).get('path', 'master_state.db')
         
         print(f"Using database at: {db_path}")
-        main_loop(db_path)
+        asyncio.run(main_loop(db_path))
 
     except FileNotFoundError as e:
         print(f"Error: {e}")
