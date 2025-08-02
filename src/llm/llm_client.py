@@ -8,6 +8,7 @@ and routes requests to the appropriate model based on the task type defined in c
 import os
 import json
 import re
+import ast # Import the ast module
 from openai import AsyncOpenAI, APIError
 from typing import Dict, Any, Literal
 
@@ -153,3 +154,24 @@ class LLMClient:
         has_system_message = any(msg.get("role") == "system" for msg in messages)
         if not has_system_message:
             messages.insert(0, {"role": "system", "content": "You are a helpful assistant designed to output JSON. Please ensure your entire response is a single, valid JSON object or array, without any markdown formatting like ```json."})
+
+        raw_response = await self.get_raw_response(messages=messages, task_type=task_type, **kwargs)
+        if not raw_response:
+            return None
+        
+        cleaned_response = self._extract_json_from_response(raw_response)
+            
+        try:
+            # First, try the standard and strict JSON parser
+            return json.loads(cleaned_response)
+        except json.JSONDecodeError:
+            # If it fails, try the more lenient Python literal evaluator
+            # This can handle single quotes and other minor format variations.
+            try:
+                return ast.literal_eval(cleaned_response)
+            except (ValueError, SyntaxError, MemoryError, TypeError) as e:
+                # If both fail, log the error and the problematic response
+                print(f"Failed to decode JSON with json.loads and ast.literal_eval: {e}")
+                print(f"Raw response: \n{raw_response}")
+                print(f"Cleaned response attempt: \n{cleaned_response}")
+                return None
