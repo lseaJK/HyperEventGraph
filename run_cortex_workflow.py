@@ -45,7 +45,7 @@ def run_cortex_workflow():
     print(f"Found {len(events_to_cluster)} events to process.")
 
     # 3. Perform coarse clustering
-    cluster_assignments = orchestrator.cluster_events(events_to_cluster)
+    cluster_assignments, stats = orchestrator.cluster_events(events_to_cluster)
     
     # Update database with cluster results
     print("Updating database with cluster assignments...")
@@ -100,6 +100,13 @@ def run_cortex_workflow():
         print("Database updated with story information.")
 
     print("\n--- Cortex Workflow Finished ---")
+    print("\n--- Clustering Summary ---")
+    print(f"Total Events Processed: {stats['total_events_processed']}")
+    print(f"  - Entity Parsing Success: {stats['entity_parsing_success']}")
+    print(f"  - Entity Parsing Warnings: {stats['entity_parsing_warnings']}")
+    print(f"Clusters Found: {stats['clusters_found']}")
+    print(f"Noise Points (unclustered): {stats['noise_points']}")
+    print("--------------------------\n")
 
 def main():
     """Entry point of the script."""

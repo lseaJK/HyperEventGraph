@@ -27,23 +27,32 @@ class ClusteringOrchestrator:
         self.entity_weight = clustering_config.get('entity_weight', 0.3)
         print("ClusteringOrchestrator initialized with DBSCAN and entity weighting parameters.")
 
-    def _calculate_jaccard_distance(self, events: list[dict]) -> np.ndarray:
+    def _calculate_jaccard_distance(self, events: list[dict], stats: dict) -> np.ndarray:
         """Calculates the Jaccard distance matrix based on shared entities."""
         num_events = len(events)
         jaccard_dist_matrix = np.zeros((num_events, num_events))
         
-        # Pre-process entities for each event
         entity_sets = []
         for event in events:
             try:
-                # involved_entities might be a JSON string, needs parsing
-                entities_raw = event.get('involved_entities', '[]')
+                entities_raw = event.get('involved_entities')
+                if not entities_raw:
+                    # This handles cases where the key is missing or the value is None/empty string
+                    raise ValueError("involved_entities is missing or empty")
+
                 entities_list = json.loads(entities_raw) if isinstance(entities_raw, str) else entities_raw
-                entity_names = {entity['entity_name'] for entity in entities_list}
+                
+                if not isinstance(entities_list, list):
+                     raise TypeError("Parsed entities are not a list")
+
+                entity_names = {entity['entity_name'] for entity in entities_list if 'entity_name' in entity}
                 entity_sets.append(entity_names)
-            except (json.JSONDecodeError, TypeError, KeyError) as e:
-                print(f"Warning: Could not parse entities for event {event.get('id')}. Error: {e}. Treating as empty set.")
+                stats['entity_parsing_success'] += 1
+            except (json.JSONDecodeError, TypeError, KeyError, ValueError) as e:
+                # All entity parsing errors are caught here
+                stats['entity_parsing_warnings'] += 1
                 entity_sets.append(set())
+
 
         for i in range(num_events):
             for j in range(i, num_events):
@@ -68,12 +77,21 @@ class ClusteringOrchestrator:
                 
         return jaccard_dist_matrix
 
-    def cluster_events(self, events: list[dict]) -> dict[str, int]:
+    def cluster_events(self, events: list[dict]) -> tuple[dict, dict]:
         """
         Performs clustering on a list of events using a combined distance metric.
+        Returns a tuple containing cluster assignments and processing statistics.
         """
+        stats = {
+            'total_events_processed': len(events),
+            'entity_parsing_success': 0,
+            'entity_parsing_warnings': 0,
+            'clusters_found': 0,
+            'noise_points': 0
+        }
+
         if not events:
-            return {}
+            return {}, stats
 
         print(f"Starting clustering for {len(events)} events...")
 
@@ -88,7 +106,7 @@ class ClusteringOrchestrator:
 
         # 3. Calculate Jaccard distance matrix from entities
         print("Calculating Jaccard distance matrix from entities...")
-        jaccard_dist_matrix = self._calculate_jaccard_distance(events)
+        jaccard_dist_matrix = self._calculate_jaccard_distance(events, stats)
 
         # 4. Combine distances with weighting
         print(f"Combining distance matrices with entity_weight={self.entity_weight}...")
@@ -96,16 +114,16 @@ class ClusteringOrchestrator:
 
         # 5. Apply DBSCAN on the precomputed combined distance matrix
         print(f"Applying DBSCAN with eps={self.dbscan_eps} and min_samples={self.dbscan_min_samples}...")
-        # When metric is 'precomputed', the input X is treated as a distance matrix.
         dbscan = DBSCAN(eps=self.dbscan_eps, min_samples=self.dbscan_min_samples, metric='precomputed')
         dbscan.fit(combined_dist_matrix)
         labels = dbscan.labels_
 
-        # 6. Map cluster labels back to event IDs
+        # 6. Map cluster labels back to event IDs and update stats
         cluster_assignments = {event.get('id'): int(labels[i]) for i, event in enumerate(events) if event.get('id')}
-
-        num_clusters = len(set(labels)) - (1 if -1 in labels else 0)
-        num_noise = np.sum(labels == -1)
-        print(f"Clustering complete. Found {num_clusters} clusters and {num_noise} noise points.")
         
-        return cluster_assignments
+        stats['clusters_found'] = len(set(labels)) - (1 if -1 in labels else 0)
+        stats['noise_points'] = np.sum(labels == -1)
+        
+        print(f"Clustering complete. Found {stats['clusters_found']} clusters and {stats['noise_points']} noise points.")
+        
+        return cluster_assignments, stats

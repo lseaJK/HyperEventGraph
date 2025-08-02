@@ -26,7 +26,7 @@ Identify the core narrative, eliminate redundancy, and create a single, coherent
 Summaries to merge:
 {summaries}
 
-Provide the final, merged story summary.
+请将以上摘要融合为一段通顺、连贯的中文叙事性总结，直接输出总结文本即可。
 """
 
 class RefinementAgent:
