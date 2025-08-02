@@ -177,9 +177,13 @@ async def run_extraction_workflow():
     # --- Trigger Cortex Workflow ---
     check_and_trigger_cortex(db_manager)
 
-def main():
+def main_standalone():
+    """Main function for standalone execution."""
+    # Note: The main CLI should handle config loading.
+    # This is for direct script execution.
+    print("Initializing configuration for standalone extraction run...")
     load_config("config.yaml")
     asyncio.run(run_extraction_workflow())
 
 if __name__ == "__main__":
-    main()
+    main_standalone()

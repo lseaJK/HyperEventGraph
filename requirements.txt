@@ -11,3 +11,4 @@ chromadb
 hdbscan
 py2neo
 jieba
+neo4j

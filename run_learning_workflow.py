@@ -189,22 +189,21 @@ async def main_loop(db_path: str):
             print(f"Unknown command: '{command}'. Type 'help' for a list of commands.")
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Run the interactive learning workflow.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
-    parser.add_argument(
-        "--config", 
-        type=Path, 
-        default="config.yaml", 
-        help="Path to the main config.yaml file."
-    )
-    args = parser.parse_args()
-
+def run_learning_workflow(config_path: Path | str = "config.yaml"):
+    """
+    Initializes and runs the interactive learning workflow.
+    This function can be called from the CLI or other scripts.
+    """
     try:
-        load_config(args.config)
-        config = get_config()
+        # The config might already be loaded if called from the main CLI
+        try:
+            config = get_config()
+            print("Using pre-loaded configuration.")
+        except RuntimeError:
+            print(f"Initializing configuration from '{config_path}' for learning workflow...")
+            load_config(config_path)
+            config = get_config()
+
         db_path = config.get('database', {}).get('path', 'master_state.db')
         
         print(f"Using database at: {db_path}")
@@ -219,5 +218,21 @@ def main():
         traceback.print_exc()
 
 
+def main_standalone():
+    """Main function for standalone execution."""
+    parser = argparse.ArgumentParser(
+        description="Run the interactive learning workflow.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument(
+        "--config", 
+        type=Path, 
+        default="config.yaml", 
+        help="Path to the main config.yaml file."
+    )
+    args = parser.parse_args()
+    run_learning_workflow(args.config)
+
+
 if __name__ == "__main__":
-    main()
+    main_standalone()

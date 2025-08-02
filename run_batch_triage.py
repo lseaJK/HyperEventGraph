@@ -94,18 +94,20 @@ async def run_triage_workflow():
     print(f"\nTriage complete. {success_count}/{total_records} records successfully moved to 'pending_review'.")
 
 def main():
-    """Main function to run the script from the command line."""
+    """Main function to run the script from the command line for standalone execution."""
     parser = argparse.ArgumentParser(description="Run the batch triage workflow.")
     parser.add_argument("--config", type=Path, default="config.yaml", help="Path to the config.yaml file.")
     args = parser.parse_args()
 
     try:
+        print("Initializing configuration for standalone triage run...")
         load_config(args.config)
         asyncio.run(run_triage_workflow())
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print(f"An error occurred during standalone triage run: {e}")
         traceback.print_exc()
 
 if __name__ == "__main__":
+    # This allows the script to be run directly for debugging or standalone operation.
     main()
 
