@@ -40,20 +40,72 @@ class SchemaLearningToolkit:
             print("No items are currently pending learning.")
 
     def run_clustering(self):
-        # ... (omitting unchanged method for brevity)
-        pass
+        """
+        Performs TF-IDF vectorization and Agglomerative Clustering on the data.
+        """
+        if self.data_frame.empty:
+            print("No data to cluster.")
+            return
+
+        print("Running clustering...")
+        # TF-IDF Vectorization
+        vectorizer = TfidfVectorizer(max_df=0.95, min_df=2, stop_words='english')
+        tfidf_matrix = vectorizer.fit_transform(self.data_frame['source_text'])
+
+        # Agglomerative Clustering
+        distance_threshold = self.config.get('cluster_distance_threshold', 1.4)
+        clustering = AgglomerativeClustering(n_clusters=None, distance_threshold=distance_threshold)
+        clustering.fit(tfidf_matrix.toarray())
+
+        self.data_frame['cluster_id'] = clustering.labels_
+        
+        num_clusters = len(set(clustering.labels_))
+        noise_points = (clustering.labels_ == -1).sum() if -1 in clustering.labels_ else 0
+        print(f"Clustering complete. Found {num_clusters} potential clusters and {noise_points} noise points.")
+        print("Run 'list_clusters' to see the results.")
 
     def execute_command(self, command: str, *args):
-        # ... (omitting unchanged method for brevity)
-        pass
+        # A simple command dispatcher
+        if command == "cluster":
+            self.run_clustering()
+        elif command == "list_clusters":
+            self.list_clusters()
+        elif command == "show_samples":
+            if not args:
+                print(self._get_usage(command))
+                return
+            self.show_samples(int(args[0]), int(args[1]) if len(args) > 1 else 5)
+        elif command == "merge":
+            if len(args) < 2:
+                print(self._get_usage(command))
+                return
+            self.merge_clusters(int(args[0]), int(args[1]))
+        else:
+            print(f"Unknown command: '{command}'")
 
     def _get_usage(self, command):
-        # ... (omitting unchanged method for brevity)
-        pass
+        usages = {
+            "show_samples": "Usage: show_samples <cluster_id> [num_samples=5]",
+            "merge": "Usage: merge <cluster_id_1> <cluster_id_2>"
+        }
+        return usages.get(command, "Invalid command.")
 
     def list_clusters(self):
-        # ... (omitting unchanged method for brevity)
-        pass
+        if 'cluster_id' not in self.data_frame.columns:
+            print("Data has not been clustered yet. Run 'cluster' first.")
+            return
+        
+        cluster_summary = self.data_frame['cluster_id'].value_counts().reset_index()
+        cluster_summary.columns = ['Cluster ID', 'Number of Items']
+        
+        if cluster_summary.empty:
+            print("No clusters were formed. All items might have been considered unique.")
+            print("Try adjusting the 'cluster_distance_threshold' in your config for different sensitivity.")
+            return
+            
+        print("\n--- Cluster Summary ---")
+        print(cluster_summary.to_string(index=False))
+        print("\nUse 'show_samples <id>' to inspect a cluster.")
 
     def show_samples(self, cluster_id: int, num_samples: int = 5):
         # ... (omitting unchanged method for brevity)

@@ -34,11 +34,7 @@ def seed_learning_data(db_manager, data_path, num_records=50):
     
     with db_manager._get_connection() as conn:
         cursor = conn.cursor()
-        for record in records_to_seed:
-            text = record.get('content', '')
-            if not text:
-                continue
-            
+        for text in records_to_seed:            
             record_id = hashlib.sha256(text.encode('utf-8')).hexdigest()
             
             # Insert or replace the record with the 'pending_learning' status
