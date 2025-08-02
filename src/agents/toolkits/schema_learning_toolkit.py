@@ -45,13 +45,23 @@ class SchemaLearningToolkit:
             print("No items are currently pending learning.")
 
     def _load_embedding_model(self):
-        model_name = self.config.get('embedding_model', 'all-MiniLM-L6-v2')
+        # Using a powerful Chinese-centric model from BAAI as the new default
+        model_name = self.config.get('embedding_model', 'BAAI/bge-large-zh-v1.5')
+        
+        # Get the cache directory from the global config
+        global_config = get_config()
+        cache_dir = global_config.get('model_settings', {}).get('cache_dir')
+
         print(f"Loading embedding model: {model_name}...")
+        if cache_dir:
+            print(f"Using cache directory: {cache_dir}")
+        
         try:
-            self.embedding_model = SentenceTransformer(model_name)
+            self.embedding_model = SentenceTransformer(model_name, cache_folder=cache_dir)
             print("Embedding model loaded successfully.")
         except Exception as e:
             print(f"Error loading embedding model: {e}")
+            traceback.print_exc()
             self.embedding_model = None
 
     def run_clustering(self):
@@ -60,7 +70,7 @@ class SchemaLearningToolkit:
         """
         if self.data_frame.empty or self.embedding_model is None:
             print("No data to cluster or embedding model not loaded.")
-            return
+            return False
 
         print("Running clustering with SentenceTransformer and HDBSCAN...")
         
@@ -69,7 +79,7 @@ class SchemaLearningToolkit:
         embeddings = self.embedding_model.encode(texts, show_progress_bar=True)
 
         # Perform clustering
-        min_cluster_size = self.config.get('min_cluster_size', 5)
+        min_cluster_size = self.config.get('min_cluster_size', 3) # Lowered default for better sensitivity
         clusterer = hdbscan.HDBSCAN(min_cluster_size=min_cluster_size, gen_min_span_tree=True)
         clusterer.fit(embeddings)
 
@@ -79,7 +89,7 @@ class SchemaLearningToolkit:
         num_clusters = len(set(clusterer.labels_)) - (1 if -1 in clusterer.labels_ else 0)
         
         print(f"Clustering complete. Found {num_clusters} potential clusters.")
-        print("Run 'list_clusters' to see the results or 'generate_all' to create all schemas in parallel.")
+        return num_clusters > 0
 
     def list_clusters(self):
         if 'cluster_id' not in self.data_frame.columns:
@@ -120,7 +130,7 @@ class SchemaLearningToolkit:
             
         return sorted(valid_clusters['cluster_id'].unique().tolist())
 
-    def show_samples(self, cluster_id: int, num_samples: int = 5):
+    def show_samples(self, cluster_id: int, num_samples: int = None):
         if 'cluster_id' not in self.data_frame.columns:
             print("Data not clustered. Run 'cluster' first.")
             return
@@ -129,13 +139,21 @@ class SchemaLearningToolkit:
             print(f"No cluster with ID: {cluster_id}")
             return
         
-        num_samples = min(num_samples, len(cluster_data))
-        samples = cluster_data['source_text'].head(num_samples).tolist()
-        
-        print(f"\n--- Samples from Cluster {cluster_id} ---")
+        # If num_samples is not provided, show all samples in the cluster
+        if num_samples is None:
+            num_to_show = len(cluster_data)
+            samples = cluster_data['source_text'].tolist()
+            print(f"\n--- Showing all {num_to_show} Samples from Cluster {cluster_id} ---")
+        else:
+            num_to_show = min(num_samples, len(cluster_data))
+            samples = cluster_data['source_text'].head(num_to_show).tolist()
+            print(f"\n--- Showing {num_to_show} Samples from Cluster {cluster_id} ---")
+
         for i, sample in enumerate(samples):
-            print(f"[{i+1}] {sample[:200]}...")
-        print("\nNext step: If samples look coherent, use 'generate_schema <id>' to create a schema for this cluster.")
+            print(f"[{i+1}] {sample}") # Removed truncation
+        
+        if num_samples is not None:
+            print("\nNote: To see all samples for this cluster, use 'show <id>'.")
 
     def merge_clusters(self, id1: int, id2: int):
         if 'cluster_id' not in self.data_frame.columns:

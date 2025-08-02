@@ -7,6 +7,7 @@ and routes requests to the appropriate model based on the task type defined in c
 
 import os
 import json
+import re
 from openai import AsyncOpenAI, APIError
 from typing import Dict, Any, Literal
 
@@ -19,7 +20,7 @@ sys.path.insert(0, str(project_root))
 from src.core.config_loader import get_config
 
 # Define valid task types for type hinting and validation
-TaskType = Literal["triage", "schema_generation", "extraction"]
+TaskType = Literal["triage", "schema_generation", "extraction", "relationship_analysis"]
 
 class LLMClient:
     """
@@ -45,10 +46,13 @@ class LLMClient:
         provider_config = self.config['providers'][provider]
         api_key_env_var = f"{provider.upper()}_API_KEY"
         
-        api_key = os.getenv(api_key_env_var, provider_config.get('api_key'))
+        # Use a more specific key from config if available, e.g., SILICONFLOW_API_KEY
+        config_key_name = provider_config.get('api_key_name', 'api_key')
+
+        api_key = os.getenv(api_key_env_var, provider_config.get(config_key_name))
         if not api_key:
             raise ValueError(f"API key for provider '{provider}' not found. "
-                             f"Please set the {api_key_env_var} environment variable.")
+                             f"Please set the {api_key_env_var} environment variable or add '{config_key_name}' to the provider config.")
         
         client = AsyncOpenAI(
             api_key=api_key,
@@ -78,7 +82,7 @@ class LLMClient:
         api_params = {
             "model": model_name,
             "messages": [
-                {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
+                {"role": "system", "content": "You are a helpful assistant designed to output JSON. Please ensure your entire response is a single, valid JSON object, without any markdown formatting like ```json."},
                 {"role": "user", "content": prompt}
             ]
         }
@@ -104,17 +108,35 @@ class LLMClient:
             traceback.print_exc()
             return None
 
+    def _extract_json_from_response(self, text: str) -> str:
+        """
+        Extracts a JSON string from a text that might contain markdown code blocks.
+        """
+        # Pattern to find JSON within ```json ... ```
+        match = re.search(r'```json\s*(\{.*?\})\s*```', text, re.DOTALL)
+        if match:
+            return match.group(1)
+        # Fallback for ```{...}```
+        match = re.search(r'```\s*(\{.*?\})\s*```', text, re.DOTALL)
+        if match:
+            return match.group(1)
+        # If no markdown, assume the whole string is JSON
+        return text
+
     async def get_json_response(self, prompt: str, task_type: TaskType) -> Dict[str, Any] | None:
         """
-        Sends a prompt and returns a parsed JSON dictionary.
+        Sends a prompt and returns a parsed JSON dictionary, handling markdown formatting.
         """
         raw_response = await self.get_raw_response(prompt, task_type)
         if not raw_response:
             return None
+        
+        cleaned_response = self._extract_json_from_response(raw_response)
             
         try:
-            return json.loads(raw_response)
+            return json.loads(cleaned_response)
         except json.JSONDecodeError as e:
             print(f"Failed to decode JSON from LLM response: {e}")
-            print(f"Raw response: {raw_response}")
+            print(f"Raw response: \n{raw_response}")
+            print(f"Cleaned response attempt: \n{cleaned_response}")
             return None

@@ -30,19 +30,23 @@ async def review_and_merge_loop(toolkit: SchemaLearningToolkit):
     """A sub-loop for reviewing and merging clusters before schema generation."""
     print("\n--- Entering Review & Merge Mode ---")
     
-    # 1. Automatically show samples from all clusters
+    # 1. Display the cluster summary table with keywords first
+    toolkit.list_clusters()
+    
+    # 2. Automatically show samples from all clusters
     cluster_ids = toolkit.get_cluster_ids()
     if not cluster_ids:
         print("No clusters to review.")
         return
 
-    print("Displaying initial samples for all clusters...")
+    print("\nDisplaying initial samples for all clusters for detailed review...")
     for cid in cluster_ids:
-        toolkit.show_samples(cid, num_samples=3)
+        # Show all samples for each cluster by default
+        toolkit.show_samples(cid)
 
-    # 2. Enter merge sub-loop
+    # 3. Enter merge sub-loop
     while True:
-        print("\nReview the clusters above. You can now merge, list, or show more samples.")
+        print("\nReview the clusters and keywords above. You can now merge, list, or show more samples.")
         command_str = input("merge_mode> ").strip().lower()
         parts = command_str.split()
         if not parts:
@@ -58,7 +62,7 @@ async def review_and_merge_loop(toolkit: SchemaLearningToolkit):
         elif command == "help":
             print("\n--- Merge Mode Commands ---")
             print("  merge <id1> <id2> - Merge cluster <id2> into <id1>.")
-            print("  list              - List current clusters after merges.")
+            print("  list              - List current clusters after merges (with updated keywords).")
             print("  show <id> [n]     - Show [n] samples for a cluster.")
             print("  continue          - Exit merge mode and generate all schemas.")
             print("  exit              - Abort the entire learning workflow.")
