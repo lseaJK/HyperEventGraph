@@ -656,11 +656,35 @@
         "dependencies": [],
         "priority": "medium",
         "subtasks": []
+      },
+      {
+        "id": 31,
+        "title": "Task #31: 验证并完善知识迭代闭环",
+        "description": "此任务旨在将我们在需求文档V4.0（4.7节）中定义的“知识迭代闭环”策略在代码层面完全实现并进行端到端验证。核心是确保系统在学会新知识后，能够自动将相关数据重新纳入处理流程，实现知识的自我增强。",
+        "details": "1. **检查 `run_learning_workflow.py`**: 审查并确保该脚本在成功学习并保存新Schema后，会自动将所有相关的 `pending_learning` 事件状态重置为 `pending_triage`。\n2. **准备测试数据**: 从主数据集中选取或构造一小批（约50-100条）代表了某种新事件模式的“未知事件”，并手动将它们的状态在数据库中设置为 `pending_learning`。\n3. **执行学习工作流**: 运行 `run_learning_workflow.py`，与系统交互，完成新Schema的定义和保存。\n4. **验证状态重置**: 学习完成后，检查数据库，确认之前用于学习的事件状态是否已全部变回 `pending_triage`。\n5. **执行初筛工作流**: 运行 `run_batch_triage.py`，验证 `TriageAgent` 现在是否能够利用新学会的Schema，成功地将这些事件分类，并将其状态更新为 `pending_extraction`。\n6. **编写总结报告**: 将整个验证过程、结果和发现的问题记录在一份简短的Markdown报告中。",
+        "testStrategy": "1. 单元测试：为 `run_learning_workflow.py` 中负责重置状态的函数编写单元测试。\n2. 集成测试：创建一个小型的测试数据库，模拟完整的“学习 -> 状态重置 -> 重新初筛”流程。\n3. 端到端验证：按照“实施细节”中的步骤进行完整的手动测试，并记录结果。",
+        "status": "pending",
+        "dependencies": [],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 32,
+        "title": "Task #32: 构建统一的系统管理CLI",
+        "description": "当前系统由多个独立的Python脚本驱动，操作流程分散，对用户不友好。此任务旨在创建一个统一的命令行接口（CLI），将所有核心工作流（如初筛、学习、抽取、Cortex、关系分析）封装成子命令，提供一个单一的、专业的系统管理入口。",
+        "details": "1. **选择CLI框架**: 采用 `argparse` 或更高级的库（如 `click` 或 `typer`）来构建CLI应用。\n2. **创建主入口脚本**: 创建一个新的主脚本，例如 `main.py` 或 `manage.py`。\n3. **封装工作流**: 将 `run_batch_triage.py`, `run_learning_workflow.py`, `run_extraction_workflow.py`, `run_cortex_workflow.py`, `run_relationship_analysis.py` 的核心逻辑封装成可以被主脚本调用的函数。\n4. **设计子命令**:\n   - `main.py triage`: 运行批量初筛工作流。\n   - `main.py learn`: 运行交互式学习工作流。\n   - `main.py extract`: 运行事件抽取工作流。\n   - `main.py cortex`: 手动触发Cortex故事发现工作流。\n   - `main.py analyze`: 运行关系分析与存储工作流。\n   - `main.py run-all`: 按正确顺序自动依次执行所有工作流。\n5. **添加辅助功能**: 在CLI中加入 `--help` 说明，并为每个子命令提供清晰的文档。\n6. **更新项目文档**: 更新 `README.md` 或创建一个新的 `CLI_GUIDE.md`，说明如何使用这个新的管理工具。",
+        "testStrategy": "1. 为每个子命令编写独立的集成测试，验证其是否能成功调用正确的工作流。\n2. 手动测试所有CLI命令及其组合，确保其行为符合预期。\n3. 检查 `--help` 输出的清晰度和准确性。",
+        "status": "pending",
+        "dependencies": [
+          31
+        ],
+        "priority": "medium",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-08-02T08:41:21.881Z",
+      "updated": "2025-08-02T11:17:58.759Z",
       "description": "Tasks for master context"
     }
   }

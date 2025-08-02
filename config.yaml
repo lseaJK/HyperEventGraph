@@ -103,3 +103,5 @@ relationship_analysis:
   log_file: "output/logs/relationship_analysis.log"
   # Max number of events to send to the LLM in a single prompt.
   chunk_size: 100
+  # Path for the JSONL file to store raw LLM outputs for traceability.
+  raw_output_file: "output/extraction/relationships_raw.jsonl"

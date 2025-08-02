@@ -54,16 +54,36 @@ def main_loop(db_path: str):
             break
         elif command == "help":
             print("\nAvailable Commands:")
-            print("  cluster                - (Re)run the clustering algorithm.")
+            print("  cluster                - (Re)run the clustering algorithm on all pending items.")
             print("  list_clusters          - Display current clusters of unknown texts.")
-            print("  show_samples <id>      - Show text samples from a specific cluster.")
+            print("  show_samples <id> [n]  - Show [n] (default 5) text samples from a specific cluster.")
             print("  merge <id1> <id2>      - Merge two clusters into one.")
-            print("  generate_schema <id>   - Generate a new event schema from a cluster (Not Implemented).")
-            print("  save_schema <id>       - Save the generated schema and update DB (Not Implemented).")
+            print("  generate_schema <id> [n]- Generate a new event schema from [n] (default 10) samples in a cluster.")
+            print("  save_schema <id>       - Save the generated schema for the cluster and reset item statuses in DB.")
             print("  exit                   - Exit the interactive session.\n")
+        elif command == "generate_schema":
+            if not args:
+                print("Usage: generate_schema <cluster_id> [num_samples]")
+                continue
+            cluster_id = int(args[0])
+            num_samples = int(args[1]) if len(args) > 1 else 10
+            toolkit.generate_schema_from_cluster(cluster_id, num_samples)
+        elif command == "save_schema":
+            if not args:
+                print("Usage: save_schema <cluster_id>")
+                continue
+            cluster_id = int(args[0])
+            toolkit.save_schema(cluster_id)
         else:
             try:
-                toolkit.execute_command(command, *args)
+                # For commands like list_clusters, show_samples, merge
+                if command in ["list_clusters", "cluster"]:
+                    toolkit.execute_command(command)
+                elif command in ["show_samples", "merge"]:
+                    typed_args = [int(arg) for arg in args]
+                    toolkit.execute_command(command, *typed_args)
+                else:
+                    print(f"Unknown command: '{command}'. Type 'help' for a list of commands.")
             except Exception as e:
                 print(f"An error occurred while executing command '{command}': {e}")
                 traceback.print_exc()

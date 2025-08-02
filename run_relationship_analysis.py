@@ -5,6 +5,7 @@ import os
 import asyncio
 from pathlib import Path
 import sys
+from datetime import datetime
 
 # Add project root to sys.path
 project_root = Path(__file__).resolve().parent
@@ -119,14 +120,28 @@ async def main_workflow():
         print("上下文检索完成。")
 
         # 2.2. 将背景摘要传入关系分析 (异步调用)
-        relationships = await analysis_agent.analyze_relationships(events_in_story, source_context, context_summary)
+        raw_outputs, relationships = await analysis_agent.analyze_relationships(events_in_story, source_context, context_summary)
         
+        # 2.3. [新增] 将原始输出写入日志文件
+        raw_output_file = config.get('relationship_analysis', {}).get('raw_output_file')
+        if raw_output_file and raw_outputs is not None:
+            log_entry = {
+                "story_id": story_id,
+                "timestamp": datetime.now().isoformat(),
+                "event_ids_in_story": [e['id'] for e in events_in_story],
+                "llm_raw_output": raw_outputs,
+                "parsed_relationships": relationships
+            }
+            Path(raw_output_file).parent.mkdir(parents=True, exist_ok=True)
+            with open(raw_output_file, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
+
         if not relationships:
             print("未能分析出任何关系。")
         else:
             print(f"分析出 {len(relationships)} 条关系。")
 
-        # 2.3. 迭代存储事件和关系
+        # 2.4. 迭代存储事件和关系
         print(f"开始为故事 '{story_id}' 的 {len(events_in_story)} 个事件进行存储...")
         for event in events_in_story:
             event_id = event['id']
@@ -140,7 +155,6 @@ async def main_workflow():
             ]
             
             try:
-                # 注意：这里的event是dict，需要调整以匹配store_event_and_relationships的预期
                 storage_agent.store_event_and_relationships(event_id, event, related_relationships)
                 log_processed_event(event_id, log_file)
                 # 使用正确的方法名

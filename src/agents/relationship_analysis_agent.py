@@ -24,7 +24,7 @@ class RelationshipAnalysisAgent:
         self.chunk_size = chunk_size
 
     async def _analyze_chunk(self, event_chunk, source_text, context_summary):
-        """分析单个事件块的关系。"""
+        """分析单个事件块的关系，并返回原始输出和解析结果。"""
         event_descriptions = ""
         for i, event in enumerate(event_chunk):
             event_id = event.get('id') or event.get('_id')
@@ -39,28 +39,30 @@ class RelationshipAnalysisAgent:
             event_descriptions=event_descriptions
         )
         
+        raw_output = None
         try:
             raw_output = await self.llm_client.get_raw_response(prompt, task_type="relationship_analysis")
             if not raw_output:
                 raise ValueError("LLM call failed or returned an empty response.")
             parsed_result = json.loads(raw_output)
-            return parsed_result.get("relationships", [])
+            return raw_output, parsed_result.get("relationships", [])
         except (json.JSONDecodeError, ValueError) as e:
             print(f"  - 分析块时出错: {e}")
-            return []
+            return raw_output, []
         except Exception as e:
             print(f"  - 分析块时发生未知错误: {e}")
-            return []
+            return raw_output, []
 
     async def analyze_relationships(self, events, source_text, context_summary=""):
         """
         分析给定事件列表之间的关系。如果事件数量超过阈值，则分块处理。
+        返回 (原始LLM输出, 解析后的关系列表) 的元组。
         """
         num_events = len(events)
         print(f"正在为 {num_events} 个事件分析关系...")
         if num_events < 2:
             print("事件数量少于2，无需进行关系分析。")
-            return []
+            return None, []
 
         if num_events <= self.chunk_size:
             # 如果事件数量在限制内，直接处理
@@ -69,17 +71,20 @@ class RelationshipAnalysisAgent:
         # 如果事件数量超限，则进行分块处理
         print(f"事件数量超过阈值 {self.chunk_size}，将分块处理...")
         all_relationships = []
+        all_raw_outputs = []
         
-        # 创建事件块
         chunks = [events[i:i + self.chunk_size] for i in range(0, num_events, self.chunk_size)]
         
         for i, chunk in enumerate(chunks):
             print(f"正在分析块 {i+1}/{len(chunks)} (包含 {len(chunk)} 个事件)...")
-            # 为了提供更广的上下文，我们将整个源文本和摘要传给每个块
-            chunk_relationships = await self._analyze_chunk(chunk, source_text, context_summary)
+            raw_output, chunk_relationships = await self._analyze_chunk(chunk, source_text, context_summary)
+            
+            if raw_output:
+                all_raw_outputs.append(raw_output)
             if chunk_relationships:
                 all_relationships.extend(chunk_relationships)
         
         print(f"所有块分析完成，共发现 {len(all_relationships)} 条关系。")
-        return all_relationships
+        # 对于分块处理，我们将所有原始输出打包成一个列表
+        return all_raw_outputs, all_relationships
 

@@ -1,47 +1,73 @@
 # temp_seed_learning_data.py
-import sqlite3
-from datetime import datetime
+"""
+This is a one-off utility script to seed the database with a small amount
+of data specifically for testing the learning workflow (Task #31).
 
-def seed_data(db_path="master_state.db"):
-    """Adds sample data to the master_state table for testing the learning workflow."""
+It reads the first 50 records from the main filtered data file and inserts
+them into the master_state.db with the status 'pending_learning'.
+"""
+
+import json
+import hashlib
+from pathlib import Path
+import sys
+
+# Add project root to sys.path
+project_root = Path(__file__).resolve().parent
+sys.path.insert(0, str(project_root))
+
+from src.core.database_manager import DatabaseManager
+from src.core.config_loader import load_config, get_config
+
+def seed_learning_data(db_manager, data_path, num_records=50):
+    """Seeds the database with records for the learning workflow."""
+    print(f"Seeding database with {num_records} records for learning workflow...")
     
-    sample_data = [
-        ("learn_01", "Apple announces new M4 chip with advanced AI capabilities.", "pending_learning", 0.4),
-        ("learn_02", "Analysts predict the new Apple M4 chip will revolutionize the market.", "pending_learning", 0.45),
-        ("learn_03", "Sources say the upcoming Apple chip focuses heavily on neural processing.", "pending_learning", 0.5),
-        ("learn_04", "Nvidia reports record earnings from its data center division.", "pending_learning", 0.3),
-        ("learn_05", "Strong demand for Nvidia's H100 GPUs continues to drive revenue.", "pending_learning", 0.35),
-        ("learn_06", "Tesla recalls 50,000 vehicles due to a software bug in the autopilot system.", "pending_learning", 0.6),
-        ("learn_07", "A software update will fix the issue in the recalled Tesla cars.", "pending_learning", 0.55),
-        ("learn_08", "Intel launches new server processors to compete with AMD.", "pending_learning", 0.7),
-        ("learn_09", "Microsoft and Google are partnering on a new open-source AI project.", "pending_learning", 0.65),
-    ]
-
     try:
-        with sqlite3.connect(db_path) as conn:
-            cursor = conn.cursor()
-            # Ensure table exists
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS master_state (
-                    id TEXT PRIMARY KEY,
-                    source_text TEXT NOT NULL,
-                    current_status TEXT NOT NULL,
-                    triage_confidence REAL,
-                    assigned_event_type TEXT,
-                    notes TEXT,
-                    last_updated TIMESTAMP
-                )
-            """)
-            
-            cursor.executemany(
-                "INSERT OR REPLACE INTO master_state (id, source_text, current_status, triage_confidence, last_updated) VALUES (?, ?, ?, ?, ?)",
-                [(d[0], d[1], d[2], d[3], datetime.now().isoformat()) for d in sample_data]
-            )
-            conn.commit()
-            print(f"Successfully seeded {len(sample_data)} records for learning into '{db_path}'.")
+        with open(data_path, 'r', encoding='utf-8') as f:
+            all_data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Error reading data file at {data_path}: {e}")
+        return
 
-    except sqlite3.Error as e:
-        print(f"Database error: {e}")
+    records_to_seed = all_data[:num_records]
+    
+    with db_manager._get_connection() as conn:
+        cursor = conn.cursor()
+        for record in records_to_seed:
+            text = record.get('content', '')
+            if not text:
+                continue
+            
+            record_id = hashlib.sha256(text.encode('utf-8')).hexdigest()
+            
+            # Insert or replace the record with the 'pending_learning' status
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO master_state 
+                (id, source_text, current_status, notes) 
+                VALUES (?, ?, ?, ?)
+                """,
+                (record_id, text, 'pending_learning', 'Seeded for Task #31 validation')
+            )
+        conn.commit()
+        
+    print(f"Successfully seeded {len(records_to_seed)} records with status 'pending_learning'.")
+
+def main():
+    """Main function to run the seeding process."""
+    load_config("config.yaml")
+    config = get_config()
+    
+    db_path = config.get('database', {}).get('path')
+    data_path = "IC_data/filtered_data.json" # As per project structure
+    
+    if not db_path:
+        print("Database path not found in configuration.")
+        return
+        
+    db_manager = DatabaseManager(db_path)
+    seed_learning_data(db_manager, data_path)
 
 if __name__ == "__main__":
-    seed_data()
+    main()
