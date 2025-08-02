@@ -196,6 +196,36 @@ class DatabaseManager:
         except sqlite3.Error as e:
             print(f"Error updating record '{record_id}' with structured event: {e}")
 
+    def update_statuses_for_ids(self, record_ids: list[str], new_status: str, notes: str = ""):
+        """
+        Updates the status and notes for a batch of records identified by their IDs.
+
+        Args:
+            record_ids: A list of unique IDs of the records to update.
+            new_status: The new status to set for all specified records.
+            notes: An optional note to add to all specified records.
+        """
+        if not record_ids:
+            return
+
+        query = """
+            UPDATE master_state
+            SET current_status = ?, notes = ?, last_updated = ?
+            WHERE id IN ({})
+        """.format(','.join('?' for _ in record_ids))
+
+        params = [new_status, notes, datetime.now().isoformat()] + record_ids
+
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, params)
+                conn.commit()
+                if cursor.rowcount != len(record_ids):
+                    print(f"Warning: Expected to update {len(record_ids)} records, but updated {cursor.rowcount}.")
+        except sqlite3.Error as e:
+            print(f"Error bulk updating status for records: {e}")
+
 # It can also be useful to have a standalone function for one-off initialization
 def initialize_database(db_path: str | Path):
     """

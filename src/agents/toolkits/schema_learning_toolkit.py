@@ -352,38 +352,27 @@ class SchemaLearningToolkit:
             print(f"Error saving schema file: {e}")
             return
 
-        # --- 2. Re-process all items in the cluster with the new schema ---
-        records_to_process = self.data_frame[self.data_frame['cluster_id'] == cluster_id]
-        print(f"\nRe-processing {len(records_to_process)} records in cluster {cluster_id} with new schema '{schema_name}'...")
+        # --- 2. Reset the status of all items in the cluster to 'pending_triage' ---
+        records_to_process = self.doc_df[self.doc_df['cluster_id'] == cluster_id]
+        ids_to_update = records_to_process['id'].tolist()
 
-        for index, record in records_to_process.iterrows():
-            record_id = record['id']
-            source_text = record['source_text']
-            
-            # Perform the extraction
-            structured_data = await self._perform_single_extraction(source_text, schema_to_save)
-            
-            if structured_data:
-                # Update DB with the structured data and set status to 'processed'
-                self.db_manager.update_record_with_structured_event(
-                    record_id=record_id,
-                    new_status='processed',
-                    schema_name=schema_name,
-                    structured_data_json=json.dumps(structured_data, ensure_ascii=False),
-                    notes=f"Successfully re-processed with newly learned schema '{schema_name}'."
-                )
-                print(f"  Successfully processed and stored event for record {record_id}.")
-            else:
-                # If extraction fails, mark it for review
-                self.db_manager.update_status_and_schema(
-                    record_id, "pending_review", schema_name, 
-                    f"Schema '{schema_name}' was learned, but immediate re-extraction failed."
-                )
-                print(f"  [Warning] Failed to re-process record {record_id}. Marked for review.")
+        if ids_to_update:
+            print(f"\nResetting status for {len(ids_to_update)} records in cluster {cluster_id} to 'pending_triage'...")
+            notes = f"Schema '{schema_name}' was learned from this cluster. Resetting for re-triage with new knowledge."
+            self.db_manager.update_statuses_for_ids(
+                record_ids=ids_to_update,
+                new_status='pending_triage',
+                notes=notes
+            )
+            print("  Database status update complete.")
+        else:
+            print(f"\nNo records found for cluster {cluster_id} in the original document dataframe. Skipping status update.")
 
         # --- 3. Clean up the internal state ---
-        self.data_frame = self.data_frame[self.data_frame['cluster_id'] != cluster_id]
-        del self.generated_schemas[cluster_id]
+        self.doc_df = self.doc_df[self.doc_df['cluster_id'] != cluster_id]
+        if cluster_id in self.generated_schemas:
+            del self.generated_schemas[cluster_id]
         
-        print(f"\nSave and re-processing for cluster {cluster_id} complete.")
+        print(f"\nSave and status reset for cluster {cluster_id} complete.")
+        print("The associated events will be re-evaluated by the TriageAgent in the next cycle.")
         print("Next step: Continue with other clusters or 'exit' the workflow.")
