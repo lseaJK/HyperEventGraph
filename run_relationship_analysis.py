@@ -69,7 +69,8 @@ async def main_workflow():
             chroma_db_path=chroma_config.get('path')
         )
         
-        analysis_agent = RelationshipAnalysisAgent(llm_client, "relationship_analysis")
+        analysis_chunk_size = config.get('relationship_analysis', {}).get('chunk_size', 100)
+        analysis_agent = RelationshipAnalysisAgent(llm_client, "relationship_analysis", chunk_size=analysis_chunk_size)
         # 正确注入依赖
         retriever_agent = HybridRetrieverAgent(storage_agent)
 

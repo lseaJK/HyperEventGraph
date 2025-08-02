@@ -80,14 +80,33 @@ class HybridSearchResult:
 class BGEEmbedder:
     """BGE嵌入向量化器"""
     
-    def __init__(self, ollama_url: str = "http://localhost:11434", 
+    def __init__(self, embedding_model=None, ollama_url: str = "http://localhost:11434", 
                  model_name: str = "smartcreation/bge-large-zh-v1.5:latest"):
+        self.embedding_model = embedding_model
         self.ollama_url = ollama_url
         self.model_name = model_name
         self.logger = logging.getLogger(__name__)
-    
+        if self.embedding_model:
+            self.logger.info("BGEEmbedder is using a pre-loaded local SentenceTransformer model.")
+        else:
+            self.logger.info(f"BGEEmbedder is configured to use Ollama service at {ollama_url}.")
+
     def embed_text(self, text: str) -> BGEEmbedding:
         """对单个文本进行向量化"""
+        # 优先使用本地模型
+        if self.embedding_model:
+            try:
+                embedding_vector = self.embedding_model.encode([text])[0].tolist()
+                return BGEEmbedding(
+                    vector=embedding_vector,
+                    dimension=len(embedding_vector),
+                    model_name="local_bge" # Use a generic name
+                )
+            except Exception as e:
+                self.logger.error(f"Local embedding failed: {e}")
+                return BGEEmbedding(vector=[0.0] * 1024, dimension=1024)
+
+        # 如果没有本地模型，则回退到Ollama服务
         try:
             response = requests.post(
                 f"{self.ollama_url}/api/embeddings",
@@ -110,20 +129,10 @@ class BGEEmbedder:
             
         except requests.exceptions.RequestException as e:
             self.logger.error(f"无法连接到BGE嵌入服务 at {self.ollama_url}. 请确保服务正在运行. 错误: {e}")
-            # 返回零向量作为fallback
-            return BGEEmbedding(
-                vector=[0.0] * 1024,  # BGE-large默认维度
-                dimension=1024,
-                model_name=self.model_name
-            )
+            return BGEEmbedding(vector=[0.0] * 1024, dimension=1024)
         except Exception as e:
             self.logger.error(f"BGE嵌入向量化失败: {e}")
-            # 返回零向量作为fallback
-            return BGEEmbedding(
-                vector=[0.0] * 1024,  # BGE-large默认维度
-                dimension=1024,
-                model_name=self.model_name
-            )
+            return BGEEmbedding(vector=[0.0] * 1024, dimension=1024)
     
     def embed_batch(self, texts: List[str]) -> List[BGEEmbedding]:
         """批量文本向量化"""
@@ -160,7 +169,7 @@ class ChromaDBRetriever:
     
     def __init__(self, collection_name: str = "events", 
                  persist_directory: str = "./chroma_db",
-                 client=None, embedder=None):
+                 client=None, embedding_model=None):
         if chromadb is None:
             raise ImportError("ChromaDB未安装，请运行: pip install chromadb")
             
@@ -168,7 +177,7 @@ class ChromaDBRetriever:
         self.persist_directory = persist_directory
         self.client = client
         self.collection = None
-        self.embedder = embedder or BGEEmbedder()
+        self.embedder = BGEEmbedder(embedding_model=embedding_model) # Pass model to embedder
         self.logger = logging.getLogger(__name__)
         
         self._initialize_client()
@@ -434,18 +443,15 @@ class HybridRetriever:
         self.chroma_retriever = ChromaDBRetriever(
             collection_name=chroma_collection, 
             persist_directory=chroma_persist_dir,
-            client=chroma_client, # Pass the client if available
-            embedder=BGEEmbedder() if embedding_model is None else None # Create embedder only if model not provided
+            client=chroma_client,
+            embedding_model=embedding_model # Pass model down
         )
-        # If model is provided, use it
-        if embedding_model:
-            self.chroma_retriever.embedder.model = embedding_model
-
+        
         self.neo4j_retriever = Neo4jGraphRetriever(
             uri=neo4j_uri, 
             user=neo4j_user, 
             password=neo4j_password,
-            driver=neo4j_driver # Pass the driver if available
+            driver=neo4j_driver
         )
         self.logger = logging.getLogger(__name__)
     

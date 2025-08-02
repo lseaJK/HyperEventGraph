@@ -101,3 +101,5 @@ storage:
 relationship_analysis:
   # Path for logging processed event IDs to support resumability.
   log_file: "output/logs/relationship_analysis.log"
+  # Max number of events to send to the LLM in a single prompt.
+  chunk_size: 100
