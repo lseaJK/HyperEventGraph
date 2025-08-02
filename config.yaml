@@ -87,3 +87,12 @@ cortex:
     dbscan_eps: 0.8
     # DBSCAN `min_samples` parameter: The number of samples in a neighborhood for a point to be considered as a core point.
     dbscan_min_samples: 2
+
+# --- Storage Configuration ---
+storage:
+  neo4j:
+    uri: "bolt://localhost:7687"
+    user: "neo4j"
+    password: "neo123456" # IMPORTANT: Please change this to your actual Neo4j password.
+  chroma:
+    path: "./chroma_db"
