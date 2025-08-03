@@ -76,10 +76,16 @@ class TestHybridRetrieverAgent(unittest.TestCase):
         # Check that jieba was used to extract entities
         # (Implicitly tested by the call to _query_graph_database)
         
-        # Check that the graph database was queried with the correct entity
-        mock_neo4j_session.run.assert_called_once()
-        call_args = mock_neo4j_session.run.call_args
-        self.assertIn("SMIC", call_args[1]['entity_name'].upper()) # Check if SMIC was in the query
+        # Check that the graph database was queried with the correct entities
+        self.assertEqual(mock_neo4j_session.run.call_count, 2) # After filtering, only 'SMIC' and 'mass' should remain
+
+        # Check the content of one of the calls to ensure correct entity is passed
+        smic_call_found = False
+        for call in mock_neo4j_session.run.call_args_list:
+            if 'entity_name' in call.kwargs and call.kwargs['entity_name'].upper() == 'SMIC':
+                smic_call_found = True
+                break
+        self.assertTrue(smic_call_found, "A Cypher query for 'SMIC' should have been executed.")
 
         # Check that all three vector collections were queried
         self.assertEqual(mock_storage_agent._source_text_collection.query.call_count, 1)

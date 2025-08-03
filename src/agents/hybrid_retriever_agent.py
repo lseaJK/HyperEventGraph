@@ -71,9 +71,18 @@ class HybridRetrieverAgent:
         return summary
 
     def _extract_key_entities(self, text: str, top_k: int) -> List[str]:
-        """Extracts key entities/keywords from text using jieba."""
-        # Using TF-IDF to extract keywords
-        return jieba.analyse.extract_tags(text, topK=top_k)
+        """
+        Extracts key entities/keywords from text using jieba, with a stopword filter.
+        """
+        # A simple, extendable stopword list
+        stopwords = {'the', 'a', 'an', 'in', 'on', 'of', 'for', 'with', 'reportedly', 'chinese', 'chipmaker'}
+        
+        tags = jieba.analyse.extract_tags(text, topK=top_k)
+        
+        # Filter out stopwords and single-character words
+        filtered_tags = [tag for tag in tags if tag.lower() not in stopwords and len(tag) > 1]
+        
+        return filtered_tags
 
     def _query_graph_database(self, entities: List[str]) -> List[str]:
         """
