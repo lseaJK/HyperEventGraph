@@ -104,16 +104,22 @@ class TestRelationshipAnalysisAndStorage(unittest.TestCase):
         # --- Act ---
         async def run_flow():
             raw_output, relationships = await analysis_agent.analyze_relationships(story_events, "Full context", "Retrieved context")
+            
+            # 1. Store event nodes
             for event in story_events:
-                storage_agent.store_event_and_relationships(event['id'], event, relationships)
+                storage_agent.store_event(event['id'], event)
+            
+            # 2. Store relationships
+            storage_agent.store_relationships(relationships)
         
         asyncio.run(run_flow())
 
         # --- Assert ---
         # Verify Neo4j calls
-        self.assertEqual(mock_neo4j_session.execute_write.call_count, 3) # 2 for events, 1 for relationships
+        # 2 calls for creating event nodes + 1 call for creating relationships
+        self.assertEqual(mock_neo4j_session.execute_write.call_count, 3)
 
-        # Verify ChromaDB calls
+        # Verify ChromaDB calls (only called during store_event)
         self.assertEqual(mock_chroma_collection.add.call_count, 6) # 2 events * 3 vector types
 
 if __name__ == '__main__':

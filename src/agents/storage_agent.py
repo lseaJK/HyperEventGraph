@@ -62,31 +62,42 @@ class StorageAgent:
             self._neo4j_driver.close()
             print("Neo4j connection closed.")
 
-    def store_event_and_relationships(self, event_id: str, event_data: Dict[str, Any], relationships: List[Dict[str, Any]]):
+    def store_event(self, event_id: str, event_data: Dict[str, Any]):
         """
-        Stores a single event and its relationships in both Neo4j and ChromaDB.
-        This is the primary entry point for this agent.
-        (Implementation of storage logic is pending)
+        Stores a single event and its entities in Neo4j and ChromaDB.
         """
-        print(f"--- Storing event {event_id} and {len(relationships)} relationships ---")
+        print(f"--- Storing event {event_id} ---")
         
-        # 1. Store in Neo4j (Logic to be implemented)
-        self._store_in_neo4j(event_id, event_data, relationships)
+        # 1. Store in Neo4j
+        self._store_event_node_in_neo4j(event_id, event_data)
 
-        # 2. Store in ChromaDB (Logic to be implemented)
+        # 2. Store in ChromaDB
         self._store_in_chromadb(event_id, event_data)
 
         print(f"--- Successfully stored event {event_id} ---")
 
-    def _store_in_neo4j(self, event_id: str, event_data: Dict[str, Any], relationships: List[Dict[str, Any]]):
+    def store_relationships(self, relationships: List[Dict[str, Any]]):
         """
-        Stores event and entity nodes, and their relationships, in Neo4j.
+        Stores a list of relationships in Neo4j.
+        """
+        if not relationships:
+            return
+            
+        print(f"--- Storing {len(relationships)} relationships in Neo4j ---")
+        try:
+            with self._neo4j_driver.session() as session:
+                session.execute_write(self._create_event_relationships_tx, relationships)
+            print("  (Neo4j) Successfully stored relationships.")
+        except Exception as e:
+            print(f"  (Neo4j) Error storing relationships: {e}")
+
+    def _store_event_node_in_neo4j(self, event_id: str, event_data: Dict[str, Any]):
+        """
+        Helper to store just the event and entity nodes in Neo4j.
         """
         try:
             with self._neo4j_driver.session() as session:
                 session.execute_write(self._create_event_and_entities_tx, event_id, event_data)
-                if relationships:
-                    session.execute_write(self._create_event_relationships_tx, relationships)
             print(f"  (Neo4j) Successfully stored event node {event_id} and its entity links.")
         except Exception as e:
             print(f"  (Neo4j) Error storing event {event_id}: {e}")

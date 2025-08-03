@@ -146,28 +146,36 @@ async def run_relationship_analysis_workflow():
         else:
             print(f"分析出 {len(relationships)} 条关系。")
 
-        # 2.4. 迭代存储事件和关系
-        print(f"开始为故事 '{story_id}' 的 {len(events_in_story)} 个事件进行存储...")
+        # 2.4. Store all event nodes first
+        print(f"开始为故事 '{story_id}' 的 {len(events_in_story)} 个事件节点进行存储...")
         for event in events_in_story:
             event_id = event['id']
-            
             if event_id in processed_event_ids:
                 continue
-
-            related_relationships = [
-                rel for rel in relationships 
-                if rel.get('source_event_id') == event_id or rel.get('target_event_id') == event_id
-            ]
-            
             try:
-                storage_agent.store_event_and_relationships(event_id, event, related_relationships)
+                storage_agent.store_event(event_id, event)
+                # We still log after the node is stored. If relationship storage fails,
+                # the node won't be re-processed, but relationships can be re-inferred.
                 log_processed_event(event_id, log_file)
-                # 使用正确的方法名
-                db_manager.update_status_and_schema(event_id, "completed", "", f"Successfully stored event and {len(related_relationships)} relationships.")
+                db_manager.update_status_and_schema(event_id, "completed_nodes_stored", "", "Successfully stored event and entity nodes.")
             except Exception as e:
-                print(f"处理事件 {event_id} 时发生错误: {e}。")
-                # 使用正确的方法名
-                db_manager.update_status_and_schema(event_id, "failed_relationship_analysis", "", str(e))
+                print(f"存储事件节点 {event_id} 时发生错误: {e}。")
+                db_manager.update_status_and_schema(event_id, "failed_storage", "", str(e))
+
+        # 2.5. Store all relationships in a single batch
+        if relationships:
+            print(f"开始为故事 '{story_id}' 的 {len(relationships)} 条关系进行存储...")
+            try:
+                storage_agent.store_relationships(relationships)
+                # Update status for all involved events
+                all_event_ids_in_story = [e['id'] for e in events_in_story]
+                for event_id in all_event_ids_in_story:
+                     db_manager.update_status_and_schema(event_id, "completed", "", f"Successfully stored event, entities, and {len(relationships)} relationships.")
+            except Exception as e:
+                 print(f"存储关系时发生错误: {e}。")
+                 all_event_ids_in_story = [e['id'] for e in events_in_story]
+                 for event_id in all_event_ids_in_story:
+                    db_manager.update_status_and_schema(event_id, "failed_relationship_storage", "", str(e))
 
         print(f"--- 故事 {story_id} 处理完成 ---")
 
