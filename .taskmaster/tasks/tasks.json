@@ -627,7 +627,7 @@
         "description": "修改 `run_extraction_workflow.py`，在脚本末尾添加 `check_and_trigger_cortex` 函数，实现基于阈值的自动调用。",
         "details": "",
         "testStrategy": "",
-        "status": "pending",
+        "status": "done",
         "dependencies": [],
         "priority": "low",
         "subtasks": []
@@ -674,7 +674,7 @@
         "description": "当前系统由多个独立的Python脚本驱动，操作流程分散，对用户不友好。此任务旨在创建一个统一的命令行接口（CLI），将所有核心工作流（如初筛、学习、抽取、Cortex、关系分析）封装成子命令，提供一个单一的、专业的系统管理入口。",
         "details": "1. **选择CLI框架**: 采用 `argparse` 或更高级的库（如 `click` 或 `typer`）来构建CLI应用。\n2. **创建主入口脚本**: 创建一个新的主脚本，例如 `main.py` 或 `manage.py`。\n3. **封装工作流**: 将 `run_batch_triage.py`, `run_learning_workflow.py`, `run_extraction_workflow.py`, `run_cortex_workflow.py`, `run_relationship_analysis.py` 的核心逻辑封装成可以被主脚本调用的函数。\n4. **设计子命令**:\n   - `main.py triage`: 运行批量初筛工作流。\n   - `main.py learn`: 运行交互式学习工作流。\n   - `main.py extract`: 运行事件抽取工作流。\n   - `main.py cortex`: 手动触发Cortex故事发现工作流。\n   - `main.py analyze`: 运行关系分析与存储工作流。\n   - `main.py run-all`: 按正确顺序自动依次执行所有工作流。\n5. **添加辅助功能**: 在CLI中加入 `--help` 说明，并为每个子命令提供清晰的文档。\n6. **更新项目文档**: 更新 `README.md` 或创建一个新的 `CLI_GUIDE.md`，说明如何使用这个新的管理工具。",
         "testStrategy": "1. 为每个子命令编写独立的集成测试，验证其是否能成功调用正确的工作流。\n2. 手动测试所有CLI命令及其组合，确保其行为符合预期。\n3. 检查 `--help` 输出的清晰度和准确性。",
-        "status": "in-progress",
+        "status": "done",
         "dependencies": [
           31
         ],
@@ -687,7 +687,7 @@
         "description": "Implement the new event-centric architecture for the interactive learning workflow. This involves changing the core clustering logic from document-level to event-level, updating all interactive commands (list, show, merge) to operate on event clusters, and creating a regrouping mechanism to map event clusters back to document clusters for schema generation and saving.",
         "details": "",
         "testStrategy": "",
-        "status": "pending",
+        "status": "done",
         "dependencies": [],
         "priority": "medium",
         "subtasks": []
@@ -698,7 +698,7 @@
         "description": "根据需求文档V4.0 (4.3.1节) 的定义，实现关系分析与知识存储层。此任务是构建知识图谱的核心。",
         "details": "1. **开发 `RelationshipAnalysisToolkit`**: 实现一个能够分析同一来源的事件组之间逻辑关系（因果、时序、子事件等）的工具包。2. **开发 `GraphStorageAgent`**: 将分析出的事件、实体和关系，分别作为节点和边，存入 Neo4j 图数据库。3. **开发 `VectorStorageAgent`**: 采用分层向量化策略，将原文、事件描述和实体中心上下文分别向量化，并存入 ChromaDB，以支持多维度的语义搜索。",
         "testStrategy": "1. 单元测试：为关系类型判断、节点/边生成、向量化策略等核心函数编写单元测试。2. 集成测试：创建一个小型的测试数据库和事件列表，验证从关系分析到双数据库存储的完整流程。3. 端到端验证：使用 `structured_events.jsonl` 的一个子集作为输入，手动运行工作流，并检查 Neo4j 和 ChromaDB 中的数据是否符合预期。",
-        "status": "pending",
+        "status": "in-progress",
         "dependencies": [
           30
         ],
@@ -721,7 +721,7 @@
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-08-02T17:26:16.210Z",
+      "updated": "2025-08-03T02:57:31.450Z",
       "description": "Tasks for master context"
     }
   }
