@@ -1,0 +1,43 @@
+# Task ID: 36
+# Title: Task #36: [Epic] 构建Web可视化界面
+# Status: pending
+# Dependencies: None
+# Priority: high
+# Description: 开发一个基于Web的图形用户界面（GUI），作为HyperEventGraph系统的控制面板和知识浏览器。该界面将提供文件上传、工作流监控和结果可视化功能。
+# Details:
+此任务是一个高级“史诗”任务，涵盖了从API开发到前端实现的所有方面。具体的子任务将详细说明每个模块的开发。技术栈将采用FastAPI（后端API）和React（前端）。
+
+# Test Strategy:
+
+
+# Subtasks:
+## 1. Task #36.1: 开发FastAPI后端服务 [pending]
+### Dependencies: None
+### Description: 使用FastAPI创建一个新的Python后端服务，作为Web前端和现有工作流之间的API层。
+### Details:
+1. 设置FastAPI项目结构。2. 创建一个 `/status` 端点，用于从 `master_state.db` 查询并返回各类事件的数量。3. 为每个核心工作流（triage, extract等）创建 `/workflow/{workflow_name}/start` 端点，用于通过子进程调用相应的脚本。4. 实现WebSocket端点，用于从正在运行的工作流中广播实时进度更新。
+
+## 2. Task #36.2: 搭建React前端框架 [pending]
+### Dependencies: 36.1
+### Description: 搭建React前端项目的基本框架和结构。
+### Details:
+1. 使用 `create-react-app` 或 `vite` 初始化一个新的React项目。2. 安装并配置核心依赖：Material-UI (MUI), Recharts, react-force-graph, 和用于WebSocket通信的库。3. 创建一个基本的应用布局，包括一个固定的侧边导航栏和一个主内容区域。
+
+## 3. Task #36.3: 实现Dashboard概览页面 [pending]
+### Dependencies: 36.2
+### Description: 开发Dashboard主页，用于展示系统概览。
+### Details:
+1. 创建Dashboard页面组件。2. 调用后端的 `/status` 端点获取数据。3. 使用Recharts的PieChart组件将数据状态可视化。4. 使用MUI的Card组件展示关键性能指标（KPIs）。
+
+## 4. Task #36.4: 实现工作流控制中心 [pending]
+### Dependencies: 36.2
+### Description: 开发工作流控制中心页面。
+### Details:
+1. 创建Workflow页面组件。2. 为每个工作流设计一个控制卡片，包含状态显示和“Run”按钮。3. 将“Run”按钮连接到后端的 `/workflow/{workflow_name}/start` 端点。4. 实现一个日志面板，连接到WebSocket端点，以实时显示来自后端脚本的进度和输出。
+
+## 5. Task #36.5: 实现知识浏览器 [pending]
+### Dependencies: 36.2
+### Description: 开发知识浏览器，用于可视化和查询结果。
+### Details:
+1. 创建Knowledge Explorer页面，包含两个可切换的视图（Table/Graph）。2. **Table View**: 实现一个API端点，用于分页、排序和过滤 `structured_events.jsonl` 的内容。在前端使用MUI的DataTable组件展示数据。3. **Graph View**: 实现一个API端点，用于从Neo4j中查询事件、实体和关系，并将其格式化为图形数据（nodes and links）。在前端使用 `react-force-graph` 将数据可视化。4. 添加一个搜索框，允许用户通过实体名称在图中高亮显示相关节点。
+

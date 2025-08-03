@@ -711,17 +711,204 @@
         "description": "根据需求文档V4.0 (4.3.2节) 的定义，开发混合检索器并闭合知识循环。此任务是实现系统“智能”的关键。",
         "details": "1. **开发 `HybridRetrieverAgent`**: 创建一个核心 Agent，其职责是在处理新信息前，从双数据库中检索相关的历史背景。2. **实现混合检索策略**: 对新文本进行实体识别，然后并行地从图数据库进行结构化事实查询，并从向量数据库进行语义相似案例查询。3. **实现知识闭环**: 将检索到的图谱事实和相似案例整合成“背景摘要”，并将其注入到关系分析任务的 Prompt 中，为 LLM 提供决策参考，实现知识增强。",
         "testStrategy": "1. 单元测试：为混合检索策略中的图查询和向量查询部分编写单元测试。2. 集成测试：构建一个包含少量知识的测试数据库，验证 `HybridRetrieverAgent` 是否能根据新输入正确检索并生成“背景摘要”。3. 端到端验证：在关系分析工作流中激活该 Agent，对比启用和禁用知识反哺时，LLM 对同一组复杂事件关系判断的准确性差异。",
-        "status": "in-progress",
+        "status": "done",
         "dependencies": [
           34
         ],
         "priority": "high",
         "subtasks": []
+      },
+      {
+        "id": 36,
+        "title": "Task #36: [Epic] 构建Web可视化界面",
+        "description": "开发一个基于Web的图形用户界面（GUI），作为HyperEventGraph系统的控制面板和知识浏览器。该界面将提供文件上传、工作流监控和结果可视化功能。",
+        "details": "此任务是一个高级“史诗”任务，涵盖了从API开发到前端实现的所有方面。具体的子任务将详细说明每个模块的开发。技术栈将采用FastAPI（后端API）和React（前端）。",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [],
+        "priority": "high",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Task #36.1: 开发FastAPI后端服务",
+            "description": "使用FastAPI创建一个新的Python后端服务，作为Web前端和现有工作流之间的API层。",
+            "details": "1. 设置FastAPI项目结构。2. 创建一个 `/status` 端点，用于从 `master_state.db` 查询并返回各类事件的数量。3. 为每个核心工作流（triage, extract等）创建 `/workflow/{workflow_name}/start` 端点，用于通过子进程调用相应的脚本。4. 实现WebSocket端点，用于从正在运行的工作流中广播实时进度更新。",
+            "status": "in-progress",
+            "dependencies": [],
+            "parentTaskId": 36
+          },
+          {
+            "id": 2,
+            "title": "Task #36.2: 搭建React前端框架",
+            "description": "搭建React前端项目的基本框架和结构。",
+            "details": "1. 使用 `create-react-app` 或 `vite` 初始化一个新的React项目。2. 安装并配置核心依赖：Material-UI (MUI), Recharts, react-force-graph, 和用于WebSocket通信的库。3. 创建一个基本的应用布局，包括一个固定的侧边导航栏和一个主内容区域。",
+            "status": "pending",
+            "dependencies": [
+              "36.1"
+            ],
+            "parentTaskId": 36
+          },
+          {
+            "id": 3,
+            "title": "Task #36.3: 实现Dashboard概览页面",
+            "description": "开发Dashboard主页，用于展示系统概览。",
+            "details": "1. 创建Dashboard页面组件。2. 调用后端的 `/status` 端点获取数据。3. 使用Recharts的PieChart组件将数据状态可视化。4. 使用MUI的Card组件展示关键性能指标（KPIs）。",
+            "status": "pending",
+            "dependencies": [
+              "36.2"
+            ],
+            "parentTaskId": 36
+          },
+          {
+            "id": 4,
+            "title": "Task #36.4: 实现工作流控制中心",
+            "description": "开发工作流控制中心页面。",
+            "details": "1. 创建Workflow页面组件。2. 为每个工作流设计一个控制卡片，包含状态显示和“Run”按钮。3. 将“Run”按钮连接到后端的 `/workflow/{workflow_name}/start` 端点。4. 实现一个日志面板，连接到WebSocket端点，以实时显示来自后端脚本的进度和输出。",
+            "status": "pending",
+            "dependencies": [
+              "36.2"
+            ],
+            "parentTaskId": 36
+          },
+          {
+            "id": 5,
+            "title": "Task #36.5: 实现知识浏览器",
+            "description": "开发知识浏览器，用于可视化和查询结果。",
+            "details": "1. 创建Knowledge Explorer页面，包含两个可切换的视图（Table/Graph）。2. **Table View**: 实现一个API端点，用于分页、排序和过滤 `structured_events.jsonl` 的内容。在前端使用MUI的DataTable组件展示数据。3. **Graph View**: 实现一个API端点，用于从Neo4j中查询事件、实体和关系，并将其格式化为图形数据（nodes and links）。在前端使用 `react-force-graph` 将数据可视化。4. 添加一个搜索框，允许用户通过实体名称在图中高亮显示相关节点。",
+            "status": "pending",
+            "dependencies": [
+              "36.2"
+            ],
+            "parentTaskId": 36
+          }
+        ]
+      },
+      {
+        "id": 37,
+        "title": "V1-Task1: 开发 FastAPI 后端服务",
+        "description": "搭建 FastAPI 后端服务的基础框架。实现所有 V1 设计中定义的 RESTful API 端点（如 /api/status, /api/events, /api/graph）和用于实时日志推送的 WebSocket 端点。此任务是前后端通信的基石，必须最先完成。",
+        "details": "1. 初始化 FastAPI 项目。\n2. 实现 `GET /api/status`，用于从 master_state.db 读取全局状态。\n3. 实现 `POST /api/workflow/{workflow_name}/start`，用于通过 `subprocess` 启动后端脚本。\n4. 实现 `GET /api/events`，用于分页读取 `structured_events.jsonl`。\n5. 实现 `GET /api/graph`，用于从 Neo4j 查询图数据。\n6. 实现 `/ws/logs` WebSocket 端点，用于实时推送日志。\n7. 编写基础的 API 文档 (Swagger/OpenAPI)。",
+        "testStrategy": "使用 FastAPI 的测试客户端编写单元测试，验证每个 API 端点的响应是否符合预期。\n模拟工作流脚本的启动和日志输出，测试 WebSocket 的实时推送功能。",
+        "status": "pending",
+        "dependencies": [],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 38,
+        "title": "V1-Task2: 搭建 React 前端框架与基础布局",
+        "description": "初始化 React 前端项目，并集成核心的 UI 和可视化库。构建应用的基础布局，包括顶部导航栏、侧边菜单和主内容区域，为后续功能页面的开发提供一个稳定的容器。",
+        "details": "1. 使用 `create-react-app` 或类似工具初始化项目。\n2. 安装并配置 Material-UI (MUI) 作为核心组件库。\n3. 安装并配置 `react-force-graph` 用于知识图谱可视化。\n4. 安装 `socket.io-client` 用于 WebSocket 通信。\n5. 设计并实现应用的主体布局（App Layout），包括 Header, Sidebar, 和 Content Area。\n6. 设置前端路由（如 `react-router-dom`）。",
+        "testStrategy": "在 Storybook 中为基础布局组件（如 Header, Sidebar）编写单元故事。\n运行应用，确保基础布局在不同屏幕尺寸下能正确响应。",
+        "status": "pending",
+        "dependencies": [
+          37
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 39,
+        "title": "V1-Task3: 实现 Dashboard 概览页面",
+        "description": "开发前端的 Dashboard 概览页面。该页面作为用户进入系统的首页，需要通过调用后端 API，将系统的宏观健康状态和数据统计信息以直观的图表和卡片形式展示出来。",
+        "details": "1. 创建 Dashboard 页面组件。\n2. 在页面加载时，调用 `GET /api/status` API。\n3. 使用 MUI 的 Card 和 Chart 组件（或集成一个轻量级图表库）来展示数据。\n4. 设计并实现“全局状态概览”饼图或统计卡片。\n5. 设计并实现“工作流实时状态”的展示区域。\n6. 将 Dashboard 页面集成到主应用路由中。",
+        "testStrategy": "使用 mock 数据对 Dashboard 组件进行单元测试。\n与真实的后端 API 对接，进行端到端测试，确保数据能正确获取和渲染。",
+        "status": "pending",
+        "dependencies": [
+          37,
+          38
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 40,
+        "title": "V1-Task4: 实现工作流控制中心",
+        "description": "开发工作流控制中心页面。用户应能在此页面看到所有核心工作流的列表，并能手动触发任何一个工作流的执行。页面还需要包含一个实时日志窗口，通过 WebSocket 连接后端，动态显示当前正在运行的工作流的输出。",
+        "details": "1. 创建 Workflow Control Center 页面组件。\n2. 遍历工作流列表，为每个工作流创建一个控制卡片，包含“启动”按钮。\n3. 实现点击“启动”按钮时，调用 `POST /api/workflow/{workflow_name}/start` API。\n4. 实现一个实时日志显示组件（Log Console）。\n5. 在组件加载时，建立到 `/ws/logs` 的 WebSocket 连接。\n6. 监听 WebSocket 消息，并将接收到的日志行追加到 Log Console 中。\n7. 处理 WebSocket 的连接、断开和错误状态。",
+        "testStrategy": "对“启动”按钮的 API 调用进行单元测试。\n对 Log Console 组件进行单元测试，验证其能正确接收和渲染日志行。\n进行端到端测试，实际启动一个后端脚本，观察日志是否能被实时、完整地推送到前端。",
+        "status": "pending",
+        "dependencies": [
+          37,
+          38
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 41,
+        "title": "V1-Task5: 实现知识浏览器 (事件表格与图谱)",
+        "description": "开发知识浏览器页面。此页面是系统核心价值的出口，包含两部分：一个用于展示和检索所有结构化事件的数据表格，以及一个用于可视化事件与实体关系的交互式知识图谱。",
+        "details": "1. 创建 Knowledge Browser 页面组件，并设计 Tab 布局（表格/图谱）。\n2. **数据表格部分**:\n   - 使用 MUI 的 `DataGrid` 组件。\n   - 实现调用 `GET /api/events` API 来获取数据。\n   - 实现分页、排序和搜索功能。\n3. **知识图谱部分**:\n   - 使用 `react-force-graph` 组件。\n   - 实现调用 `GET /api/graph` API 来获取图数据（节点和边）。\n   - 实现图谱的缩放、平移和节点点击交互（如高亮、显示详情）。\n   - 添加一个搜索框，用于在图谱中快速定位节点。",
+        "testStrategy": "使用 mock 数据分别对数据表格和知识图谱组件进行单元测试。\n与真实后端 API 对接进行端到端测试，确保事件数据和图数据能被正确加载和渲染。\n测试图谱的交互性能，确保在千个节点规模下依然流畅。",
+        "status": "pending",
+        "dependencies": [
+          37,
+          38
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 42,
+        "title": "V2-Task1: 实现过程干预能力 (停止/暂停/恢复)",
+        "description": "实现对正在运行的工作流进行生命周期管理的高级控制功能。这需要扩展 FastAPI 后端和前端控制中心，允许用户停止、暂停和恢复一个工作流进程。",
+        "details": "1. **后端**:\n   - 维护一个进程注册表（如一个全局字典），存储 `workflow_name` 到 `subprocess.Popen` 对象的映射。\n   - 实现 `POST /api/workflow/{workflow_name}/stop` API，通过发送 `SIGTERM` 信号终止进程。\n   - (可选) 实现 `pause` 和 `resume` API，通过发送 `SIGSTOP` 和 `SIGCONT` 信号。\n2. **前端**:\n   - 在工作流控制中心，当一个任务正在运行时，将“启动”按钮变为“停止”、“暂停”等按钮组。\n   - 实现点击这些按钮时调用对应的 V2 API。\n   - 更新UI状态以反映任务的暂停或终止。",
+        "testStrategy": "后端单元测试：验证调用 stop API 后，目标子进程确实被终止。\n前端单元测试：验证按钮状态在任务运行时会正确切换。\n端到端测试：启动一个长时间运行的脚本（如 `sleep 30`)，然后通过UI点击停止按钮，确认脚本提前终止。",
+        "status": "pending",
+        "dependencies": [
+          37,
+          40
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": 43,
+        "title": "V2-Task2: 实现动态配置能力",
+        "description": "允许用户在启动工作流前，通过 UI 动态调整该工作流的关键参数，而无需修改后端的配置文件。这极大地提升了系统的灵活性和易用性。",
+        "details": "1. **后端**:\n   - 修改 `POST /api/workflow/{workflow_name}/start` API，使其可以接受一个可选的配置参数（JSON body）。\n   - 修改 FastAPI 服务逻辑，在启动子进程时，将接收到的配置通过命令行参数（如 `--model-name glm-4.5-air`）或环境变量的方式传递给脚本。\n   - 后端工作流脚本需要修改为能够解析这些传入的参数，并覆盖默认配置。\n2. **前端**:\n   - 在工作流控制中心，点击“启动”按钮时，弹出一个配置对话框（Modal）。\n   - 在对话框中，根据工作流类型动态生成配置表单（如模型选择下拉框、批处理大小输入框）。\n   - 用户确认后，将表单数据作为请求体发送给 `start` API。",
+        "testStrategy": "后端单元测试：验证使用不同配置参数调用 start API 时，子进程能接收到正确的命令行参数。\n前端单元测试：验证配置对话框能正确生成和提交表单数据。\n端到端测试：通过UI修改一个参数（如输出文件名），启动工作流，然后检查后端生成的文件名是否与UI中指定的一致。",
+        "status": "pending",
+        "dependencies": [
+          37,
+          40
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": 44,
+        "title": "V2-Task3: 实现错误处理与恢复机制",
+        "description": "增强系统的容错能力。当工作流执行失败时，为用户提供清晰的错误报告，并提供方便的恢复机制，如一键重试或从断点继续。",
+        "details": "1. **后端**:\n   - 工作流脚本需要实现更健壮的 `try...except` 块，并将详细的错误信息（包括堆栈跟踪）结构化地写入数据库或专门的日志文件。\n   - 实现一个新的 API `GET /api/workflow/{workflow_name}/error_report`，用于读取和返回格式化的错误信息。\n   - 修改工作流脚本以支持断点续传（例如，通过记录已处理的批次ID）。\n2. **前端**:\n   - 在工作流控制中心，当任务状态为 `Failed` 时，显示一个“查看错误”按钮。\n   - 点击按钮时，调用 error_report API 并将错误信息显示在对话框中。\n   - 在错误报告对话框中，提供“一键重试”按钮，该按钮再次调用 `start` API。",
+        "testStrategy": "后端测试：故意在工作流脚本中引入一个错误，运行后检查错误是否被正确捕获并记录。验证 error_report API 能返回该错误。\n前端测试：Mock 一个失败的任务状态和错误报告，验证UI能正确展示。\n端到端测试：触发一个会失败的任务���通过UI查看错误报告，然后点击重试，验证任务是否能重新执行。",
+        "status": "pending",
+        "dependencies": [
+          37,
+          40
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": 45,
+        "title": "V2-Task4: 实现数据与版本管理",
+        "description": "对输入数据和输出结果进行版本化管理，以支持回溯和对比分析。这需要对数据模型和API进行扩展，引入“批次”或“快照”的概念。",
+        "details": "1. **后端 (数据模型)**:\n   - 扩展数据库模式，引入 `Batch` 或 `Snapshot` 表。\n   - 所有核心数据表（如 `MasterState`, `StructuredEvents`）增加一个 `batch_id` 外键。\n2. **后端 (API)**:\n   - 修改所有数据查询 API（如 `GET /api/events`, `GET /api/graph`），增加一个可选的 `batch_id` 参数，用于查询特定版本的数据。\n   - 实现一个新的 API `GET /api/batches`，用于获取所有可用的数据批次列表。\n3. **前端**:\n   - 在知识浏览器等页面，添加一个下拉菜单，允许用户选择要查看的数据批次。\n   - 当用户切换批次时，重新调用数据获取 API 并传入所��的 `batch_id`。",
+        "testStrategy": "后端测试：验证使用 `batch_id` 参数调用 API 时，返回的数据被正确过滤。\n前端测试：验证批次下拉菜单能正确加载和切换。\n端到端测试：创建两个不同的数据批次，通过UI切换，验证页面内容（表格和图谱）相应地更新。",
+        "status": "pending",
+        "dependencies": [
+          37,
+          41
+        ],
+        "priority": "low",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-08-03T03:09:29.710Z",
+      "updated": "2025-08-03T03:54:04.388Z",
       "description": "Tasks for master context"
     }
   }

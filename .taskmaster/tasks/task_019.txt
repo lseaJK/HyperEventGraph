@@ -1,6 +1,6 @@
 # Task ID: 19
 # Title: Task #19: 开发混合检索器并闭合知识循环
-# Status: pending
+# Status: done
 # Dependencies: 18
 # Priority: high
 # Description: 开发一个能够同时查询图数据库和向量数据库的混合检索器（HybridRetrieverAgent），并将其集成到现有的抽取和分析工作流中，通过为LLM提供丰富的历史上下文来增强其处理精度，从而闭合知识反馈循环。
@@ -11,7 +11,7 @@
 
 
 # Subtasks:
-## 1. V4.0详细设计规划 - 混合检索与知识闭环 [pending]
+## 1. V4.0详细设计规划 - 混合检索与知识闭环 [done]
 ### Dependencies: None
 ### Description: 根据架构师与管理者的讨论，Task #19的具体实现细节如下：1. **触发时机**: 优先在`run_relationship_analysis.py`工作流中引入混合检索。2. **核心Agent**: 实现`HybridRetrieverAgent`作为“情报分析师”。3. **检索策略**: Agent需对新文本进行初步实体识别，然后**并行**查询双数据库：a) **图数据库**: 基于核心实体进行精确的、结构化的关系与事件查询。b) **向量数据库**: 基于全文向量进行模糊的、语义相似的事件案例查询。4. **上下文整合与Prompt增强**: Agent将检索到的图谱事实和相似案例整合成一段简洁的“背景摘要”，并将其注入到关系分析任务的Prompt中，为LLM提供决策参考，实现知识闭环。
 ### Details:

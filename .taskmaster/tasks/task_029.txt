@@ -1,6 +1,6 @@
 # Task ID: 29
 # Title: Task #21.6: 整合并测试端到端 Cortex 工作流
-# Status: pending
+# Status: done
 # Dependencies: 25, 27
 # Priority: high
 # Description: 将所有组件整合到 `run_cortex_workflow.py` 中，并进行完整的端到端测试，确保从事件输入到生成“故事单元”状态的流程完全通畅。依赖粗聚类和精炼功能的完成。

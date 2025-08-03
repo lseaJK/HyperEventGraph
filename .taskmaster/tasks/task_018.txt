@@ -1,6 +1,6 @@
 # Task ID: 18
 # Title: Task #18: 实现关系分析与知识存储层
-# Status: pending
+# Status: done
 # Dependencies: 17
 # Priority: high
 # Description: 实现一个全新的处理层，负责分析已抽取事件之间的逻辑关系，并将事件节点和关系边持久化地存储到双数据库（图数据库和向量数据库）中，为构建知识图谱奠定基础。
@@ -11,7 +11,7 @@
 
 
 # Subtasks:
-## 1. V4.0详细设计规划 - 关系分析与知识存储 [pending]
+## 1. V4.0详细设计规划 - 关系分析与知识存储 [done]
 ### Dependencies: None
 ### Description: 根据架构师与管理者的讨论，Task #18的具体实现细节如下：1. **新工作流**: 创建`run_relationship_analysis.py`作为抽取后的新阶段。2. **关系分析**: `RelationshipAnalysisToolkit`将使用LLM分析事件间的关系，关系类型体系定义为：`Causal` (因果), `Temporal` (时序), `Sub-event` (从属), `Elaboration` (阐述), `Contradiction` (矛盾), `Influence` (影响), `Related` (相关)。3. **图存储**: `GraphStorageAgent`负责将事件、实体节点和关系边写入图数据库。4. **向量存储**: `VectorStorageAgent`负责实现分层向量化策略，对`_source_text` (原文), `event.description` (事件描述), 和构造的`entity_centric_context` (实体中心上下文) 分别进行向量化并存入ChromaDB。
 ### Details:

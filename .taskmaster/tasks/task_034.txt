@@ -1,0 +1,11 @@
+# Task ID: 34
+# Title: Task #18: 实现关系分析与知识存储层
+# Status: done
+# Dependencies: 30
+# Priority: high
+# Description: 根据需求文档V4.0 (4.3.1节) 的定义，实现关系分析与知识存储层。此任务是构建知识图谱的核心。
+# Details:
+1. **开发 `RelationshipAnalysisToolkit`**: 实现一个能够分析同一来源的事件组之间逻辑关系（因果、时序、子事件等）的工具包。2. **开发 `GraphStorageAgent`**: 将分析出的事件、实体和关系，分别作为节点和边，存入 Neo4j 图数据库。3. **开发 `VectorStorageAgent`**: 采用分层向量化策略，将原文、事件描述和实体中心上下文分别向量化，并存入 ChromaDB，以支持多维度的语义搜索。
+
+# Test Strategy:
+1. 单元测试：为关系类型判断、节点/边生成、向量化策略等核心函数编写单元测试。2. 集成测试：创建一个小型的测试数据库和事件列表，验证从关系分析到双数据库存储的完整流程。3. 端到端验证：使用 `structured_events.jsonl` 的一个子集作为输入，手动运行工作流，并检查 Neo4j 和 ChromaDB 中的数据是否符合预期。

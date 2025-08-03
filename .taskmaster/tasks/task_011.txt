@@ -1,6 +1,6 @@
 # Task ID: 11
 # Title: Task #4: 价值实现 - 批量抽取
-# Status: pending
+# Status: done
 # Dependencies: 9
 # Priority: medium
 # Description: 开发 run_extraction_workflow.py。该脚本读取高质量的 final_known_events.jsonl，对所有已知事件进行批量化、结构化的信息抽取，产出可直接用于图谱构建的 structured_events.jsonl。

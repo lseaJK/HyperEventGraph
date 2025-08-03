@@ -1,0 +1,24 @@
+# Task ID: 32
+# Title: Task #32: 构建统一的系统管理CLI
+# Status: done
+# Dependencies: 31
+# Priority: medium
+# Description: 当前系统由多个独立的Python脚本驱动，操作流程分散，对用户不友好。此任务旨在创建一个统一的命令行接口（CLI），将所有核心工作流（如初筛、学习、抽取、Cortex、关系分析）封装成子命令，提供一个单一的、专业的系统管理入口。
+# Details:
+1. **选择CLI框架**: 采用 `argparse` 或更高级的库（如 `click` 或 `typer`）来构建CLI应用。
+2. **创建主入口脚本**: 创建一个新的主脚本，例如 `main.py` 或 `manage.py`。
+3. **封装工作流**: 将 `run_batch_triage.py`, `run_learning_workflow.py`, `run_extraction_workflow.py`, `run_cortex_workflow.py`, `run_relationship_analysis.py` 的核心逻辑封装成可以被主脚本调用的函数。
+4. **设计子命令**:
+   - `main.py triage`: 运行批量初筛工作流。
+   - `main.py learn`: 运行交互式学习工作流。
+   - `main.py extract`: 运行事件抽取工作流。
+   - `main.py cortex`: 手动触发Cortex故事发现工作流。
+   - `main.py analyze`: 运行关系分析与存储工作流。
+   - `main.py run-all`: 按正确顺序自动依次执行所有工作流。
+5. **添加辅助功能**: 在CLI中加入 `--help` 说明，并为每个子命令提供清晰的文档。
+6. **更新项目文档**: 更新 `README.md` 或创建一个新的 `CLI_GUIDE.md`，说明如何使用这个新的管理工具。
+
+# Test Strategy:
+1. 为每个子命令编写独立的集成测试，验证其是否能成功调用正确的工作流。
+2. 手动测试所有CLI命令及其组合，确保其行为符合预期。
+3. 检查 `--help` 输出的清晰度和准确性。

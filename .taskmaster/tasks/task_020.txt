@@ -1,6 +1,6 @@
 # Task ID: 20
 # Title: Task #20: 并行执行全量数据的初步事件抽取
-# Status: pending
+# Status: done
 # Dependencies: 19
 # Priority: medium
 # Description: 为了提高项目效率，在V4.0的关系分析与知识图谱功能开发的同时，并行地对全量数据（来自IC_data/filtered_data.json）执行初步的事件抽取。此任务的目标是生成一个临时的、包含所有原子事件的structured_events.jsonl文件，为后续的知识图谱构建提供原材料，并提前暴露Prompt在多样化数据上的表现。

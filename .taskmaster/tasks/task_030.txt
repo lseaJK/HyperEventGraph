@@ -1,0 +1,11 @@
+# Task ID: 30
+# Title: 执行全量数据事件抽取并监控完成情况
+# Status: in-progress
+# Dependencies: None
+# Priority: medium
+# Description: 此任务用于追踪 `run_extraction_workflow.py` 在全量数据集上的执行过程。主要工作是监控其进度，确保其顺利完成，并处理在运行过程中可能出现的任何问题。
+# Details:
+
+
+# Test Strategy:
+

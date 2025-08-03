@@ -1,6 +1,6 @@
 # Task ID: 27
 # Title: Task #21.4: 实现 RefinementAgent 的大簇处理策略
-# Status: pending
+# Status: done
 # Dependencies: 26
 # Priority: medium
 # Description: 实现“摘要-检索-扩展”的迭代逻辑，以处理规模超过预设阈值的“粗簇”。依赖 RefinementAgent 的基础功能。

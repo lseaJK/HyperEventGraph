@@ -1,6 +1,6 @@
 # Task ID: 28
 # Title: Task #21.5: 实现 Cortex 的批处理触发机制
-# Status: pending
+# Status: done
 # Dependencies: None
 # Priority: low
 # Description: 修改 `run_extraction_workflow.py`，在脚本末尾添加 `check_and_trigger_cortex` 函数，实现基于阈值的自动调用。

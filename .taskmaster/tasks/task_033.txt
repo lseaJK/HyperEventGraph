@@ -1,0 +1,11 @@
+# Task ID: 33
+# Title: Architectural Refactoring: Implement Event-Centric Learning Workflow
+# Status: done
+# Dependencies: None
+# Priority: medium
+# Description: Implement the new event-centric architecture for the interactive learning workflow. This involves changing the core clustering logic from document-level to event-level, updating all interactive commands (list, show, merge) to operate on event clusters, and creating a regrouping mechanism to map event clusters back to document clusters for schema generation and saving.
+# Details:
+
+
+# Test Strategy:
+
