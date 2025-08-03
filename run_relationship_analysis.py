@@ -119,12 +119,13 @@ async def run_relationship_analysis_workflow():
         
         source_context = " ".join(list(set([e.get('text', '') for e in events_in_story])))
         
-        # 2.1. 使用混合检索获取背景摘要 (同步调用)
-        print("正在检索相关上下文...")
+        # 2.1. Use the Hybrid Retriever to get a context summary
+        print("Retrieving relevant context...")
+        # The retriever agent is now initialized and ready to be used.
         context_summary = retriever_agent.retrieve_context(source_context)
-        print("上下文检索完成。")
+        print("Context retrieval complete.")
 
-        # 2.2. 将背景摘要传入关系分析 (异步调用)
+        # 2.2. Pass the context summary into the relationship analysis
         raw_outputs, relationships = await analysis_agent.analyze_relationships(events_in_story, source_context, context_summary)
         
         # 2.3. [新增] 将原始输出写入日志文件
