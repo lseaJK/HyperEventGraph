@@ -733,7 +733,7 @@
             "title": "Task #36.1: 开发FastAPI后端服务",
             "description": "使用FastAPI创建一个新的Python后端服务，作为Web前端和现有工作流之间的API层。",
             "details": "1. 设置FastAPI项目结构。2. 创建一个 `/status` 端点，用于从 `master_state.db` 查询并返回各类事件的数量。3. 为每个核心工作流（triage, extract等）创建 `/workflow/{workflow_name}/start` 端点，用于通过子进程调用相应的脚本。4. 实现WebSocket端点，用于从正在运行的工作流中广播实时进度更新。",
-            "status": "in-progress",
+            "status": "done",
             "dependencies": [],
             "parentTaskId": 36
           },
@@ -742,7 +742,7 @@
             "title": "Task #36.2: 搭建React前端框架",
             "description": "搭建React前端项目的基本框架和结构。",
             "details": "1. 使用 `create-react-app` 或 `vite` 初始化一个新的React项目。2. 安装并配置核心依赖：Material-UI (MUI), Recharts, react-force-graph, 和用于WebSocket通信的库。3. 创建一个基本的应用布局，包括一个固定的侧边导航栏和一个主内容区域。",
-            "status": "pending",
+            "status": "done",
             "dependencies": [
               "36.1"
             ],
@@ -908,7 +908,7 @@
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-08-03T03:54:04.388Z",
+      "updated": "2025-08-06T16:00:27.867Z",
       "description": "Tasks for master context"
     }
   }

@@ -74,6 +74,27 @@ class DatabaseManager:
             print(f"Adding missing column '{column_name}' to master_state table.")
             cursor.execute(f"ALTER TABLE master_state ADD COLUMN {column_name} {column_type}")
 
+    def get_status_summary(self) -> dict[str, int]:
+        """
+        Calculates the count of records for each status.
+
+        Returns:
+            A dictionary mapping each status to its record count.
+        """
+        query = "SELECT current_status, COUNT(*) FROM master_state GROUP BY current_status"
+        summary = {}
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(query)
+                rows = cursor.fetchall()
+                for row in rows:
+                    summary[row[0]] = row[1]
+        except sqlite3.Error as e:
+            print(f"Error getting status summary: {e}")
+            return {} # Return empty dict on error
+        return summary
+
     def get_records_by_status_as_df(self, status: str) -> pd.DataFrame:
         """
         Retrieves all records with a specific status and returns them as a DataFrame.

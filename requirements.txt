@@ -16,3 +16,8 @@ hdbscan
 py2neo
 jieba
 neo4j
+requests
+networkx 
+ollama
+
+pandas
