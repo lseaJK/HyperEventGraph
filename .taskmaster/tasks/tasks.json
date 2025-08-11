@@ -904,11 +904,95 @@
         ],
         "priority": "low",
         "subtasks": []
+      },
+      {
+        "id": 46,
+        "title": "FE-Task1: 创建API服务层",
+        "description": "根据V1设计文档，在 `frontend/src` 下创建 `services/api.ts` 模块。使用axios或fetch配置一个集中的API客户端实例，并为所有后端端点（如 /api/status, /api/events, /api/graph, /api/workflow/{name}/start）创建对应的请求函数。这是连接所有前端组件与后端的桥梁。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          37
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 47,
+        "title": "FE-Task2: 引入并配置全局状态管理 (Zustand)",
+        "description": "为了解决跨组件数据共享问题，引入一个轻量级的全局状态管理库（推荐Zustand）。在 `frontend/src/store/` 目录下创建 `systemStore.ts` 用于管理系统宏观状态和工作流列表，以及 `logStore.ts` 用于存放从WebSocket接收的实时日志。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          38
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 48,
+        "title": "FE-Task3: 搭建核心UI组件库 (MUI)",
+        "description": "安装Material-UI (MUI) 库。在 `frontend/src/components/common/` 目录下，创建一套可被多处复用的基础UI组件，例如 PageLayout.tsx (包含导航与侧边栏)、StyledCard.tsx (统一样式卡片) 和 StatusChip.tsx (用于显示pending, running等状态)，以确保应用视觉风格的统一并加速开发。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          38
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 49,
+        "title": "FE-Task4: 实现Dashboard概览页面",
+        "description": "开发 `frontend/src/pages/DashboardPage.tsx`。此页面作为应用的首页，需要连接Zustand store和API服务层，定期获取并以图表（如MUI或Recharts的饼图）和指标卡片的形式，动态展示系统的宏观健康状况与数据统计。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          46,
+          47,
+          48
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 50,
+        "title": "FE-Task5: 实现工作流控制中心",
+        "description": "开发 `frontend/src/pages/WorkflowControlPage.tsx`。此页面包含两部分核心功能：1) 一个工作流列表，每项都有“启动”按钮，点击后调用API服务。2) 一个实时日志显示窗口，在组件加载时建立WebSocket连接，并将收到的日志动态渲染到界面上。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          46,
+          47,
+          48
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 51,
+        "title": "FE-Task6: [Epic] 实现知识浏览器",
+        "description": "开发 `frontend/src/pages/KnowledgeExplorerPage.tsx`，提供最终成果的探索与分析界面。此任务是一个Epic，包含两个主要的子功能：一个使用MUI DataGrid实现的、支持分页和搜索的事件数据表格；一个使用 `react-force-graph` 实现的、支持节点交互的知识图谱可视化组件。",
+        "details": "",
+        "testStrategy": "",
+        "status": "pending",
+        "dependencies": [
+          46,
+          47,
+          48
+        ],
+        "priority": "high",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-08-06T16:00:27.867Z",
+      "updated": "2025-08-11T14:56:08.424Z",
       "description": "Tasks for master context"
     }
   }
