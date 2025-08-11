@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Typography, Box, Paper, Grid } from '@mui/material';
-import { DataGrid, GridColDef, GridPaginationModel } from '@mui/x-data-grid';
+import { Typography, Box, Paper } from '@mui/material';
+import { DataGrid } from '@mui/x-data-grid';
+import type { GridColDef } from '@mui/x-data-grid';
 import ForceGraph2D from 'react-force-graph-2d';
-import { getEvents, EventRowData, getGraphData, GraphData } from '../services/api';
+import { getEvents, getGraphData } from '../services/api.ts';
+import type { EventRowData, GraphData } from '../services/api.ts';
 
 // --- Event Data Table Component ---
 
@@ -98,14 +100,14 @@ export const KnowledgeExplorerPage: React.FC = () => {
       <Typography variant="h4" gutterBottom sx={{ flexShrink: 0, p: 2 }}>
         Knowledge Explorer
       </Typography>
-      <Grid container spacing={2} sx={{ flexGrow: 1, p: 2 }}>
-        <Grid item xs={12} md={7} sx={{ height: '100%' }}>
+      <Box sx={{ flexGrow: 1, p: 2, display: 'flex', gap: 2 }}>
+        <Box sx={{ flex: '1 1 60%', minHeight: 0 }}>
           <EventDataTable />
-        </Grid>
-        <Grid item xs={12} md={5} sx={{ height: '100%' }}>
+        </Box>
+        <Box sx={{ flex: '1 1 40%', minHeight: 0 }}>
           <KnowledgeGraph />
-        </Grid>
-      </Grid>
+        </Box>
+      </Box>
     </Box>
   );
 };

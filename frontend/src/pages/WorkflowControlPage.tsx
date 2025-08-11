@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Typography, Grid, Paper, Box, List, ListItem, ListItemText, Button, Divider } from '@mui/material';
 import { useSystemStore } from '../store/systemStore';
 import { useLogStore } from '../store/logStore';
-import { startWorkflow } from '../services/api';
+import { startWorkflow } from '../services/api.ts';
 import { connectWebSocket, disconnectWebSocket } from '../services/websocket';
 
 const WorkflowList: React.FC = () => {

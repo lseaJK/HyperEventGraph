@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { Typography, Grid, Paper, Box, List, ListItem, ListItemText, Chip } from '@mui/material';
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useSystemStore } from '../store/systemStore';
-import { WorkflowStatus } from '../services/api';
+import type { WorkflowStatus } from '../services/api.ts';
 
 // --- Helper Functions & Data ---
 

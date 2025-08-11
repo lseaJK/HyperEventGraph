@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { SystemStatus, WorkflowStatus } from '../services/api';
+import type { SystemStatus, WorkflowStatus } from '../services/api.ts';
 
 interface SystemState {
   statusSummary: SystemStatus;
