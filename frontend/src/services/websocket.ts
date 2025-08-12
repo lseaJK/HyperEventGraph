@@ -33,7 +33,8 @@ export const connectWebSocket = (onMessage: (message: string) => void) => {
 
     socket.onerror = (error) => {
       console.error('WebSocket错误:', error);
-      onMessage(`WebSocket错误: [object Event]`);
+      // 提供更友好的错误信息，不要直接显示[object Event]
+      onMessage(`WebSocket连接出错，请检查后端服务是否启动`);
     };
 
     socket.onclose = () => {

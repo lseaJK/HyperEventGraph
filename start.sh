@@ -32,16 +32,18 @@ show_help() {
     echo "  -f, --frontend    仅启动前端服务"
     echo "  -b, --backend     仅启动后端服务"
     echo "  -a, --all         启动前端和后端服务 (默认)"
+    echo "  --ws-api          使用WebSocket支持启动API (推荐用于工作流日志)"
     echo "  --front-port=PORT 指定前端端口 (默认: $FRONTEND_PORT)"
     echo "  --back-port=PORT  指定后端端口 (默认: $BACKEND_PORT)"
     echo ""
     echo -e "${YELLOW}示例:${NC}"
-    echo "  $0 --all --front-port=5174 --back-port=8081"
+    echo "  $0 --all --ws-api --front-port=5174 --back-port=8081"
 }
 
 # 参数解析
 START_FRONTEND=false
 START_BACKEND=false
+USE_WEBSOCKET_API=false
 
 # 如果没有参数，默认启动全部
 if [ $# -eq 0 ]; then
@@ -64,6 +66,9 @@ else
             -a|--all)
                 START_FRONTEND=true
                 START_BACKEND=true
+                ;;
+            --ws-api)
+                USE_WEBSOCKET_API=true
                 ;;
             --front-port=*)
                 FRONTEND_PORT="${arg#*=}"
@@ -165,13 +170,20 @@ start_backend() {
     echo -e "\n${YELLOW}启动后端API服务...${NC}"
     cd "$PROJECT_ROOT"
     
-    # 检查enhanced_api.py是否存在，否则使用simple_api.py
-    BACKEND_SCRIPT="src/api/enhanced_api.py"
-    if [ ! -f "$BACKEND_SCRIPT" ]; then
+    # 检查API脚本选择
+    if [ "$USE_WEBSOCKET_API" = true ]; then
+        # 优先使用带WebSocket的API
+        echo -e "${GREEN}使用带WebSocket支持的API (用于工作流日志)${NC}"
         BACKEND_SCRIPT="simple_api.py"
-        echo -e "${YELLOW}使用简化版API ($BACKEND_SCRIPT)${NC}"
     else
-        echo -e "${GREEN}使用增强版API ($BACKEND_SCRIPT)${NC}"
+        # 标准选择逻辑
+        BACKEND_SCRIPT="src/api/enhanced_api.py"
+        if [ ! -f "$BACKEND_SCRIPT" ]; then
+            BACKEND_SCRIPT="simple_api.py"
+            echo -e "${YELLOW}使用简化版API ($BACKEND_SCRIPT)${NC}"
+        else
+            echo -e "${GREEN}使用增强版API ($BACKEND_SCRIPT)${NC}"
+        fi
     fi
     
     # 后台启动后端服务
@@ -189,6 +201,11 @@ start_backend() {
     fi
     
     echo -e "API文档: ${GREEN}http://localhost:$BACKEND_PORT/docs${NC}"
+    
+    # 如果使用WebSocket API，显示WebSocket端点
+    if [ "$USE_WEBSOCKET_API" = true ]; then
+        echo -e "WebSocket端点: ${GREEN}ws://localhost:$BACKEND_PORT/ws/{client_id}${NC}"
+    fi
 }
 
 # 主函数
