@@ -22,9 +22,6 @@ const WorkflowList: React.FC = () => {
 
   const handleStartWorkflow = async (workflowName: string, params: Record<string, any>) => {
     try {
-      // 在控制台输出参数，以便调试
-      console.log(`Starting workflow ${workflowName} with params:`, params);
-      
       // 将前端参数转换为API期望的格式
       const apiParams: Record<string, any> = {};
       

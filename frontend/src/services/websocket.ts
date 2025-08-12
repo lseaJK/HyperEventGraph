@@ -9,7 +9,6 @@ let reconnectTimeout: number | null = null;
 // 连接WebSocket并设置自动重连
 export const connectWebSocket = (onMessage: (message: string) => void) => {
   if (socket && socket.readyState === WebSocket.OPEN) {
-    console.log('WebSocket已连接');
     return;
   }
   
@@ -23,7 +22,6 @@ export const connectWebSocket = (onMessage: (message: string) => void) => {
     socket = new WebSocket(WS_URL);
 
     socket.onopen = () => {
-      console.log('WebSocket连接已建立');
       onMessage('已连接到服务器日志流...');
     };
 
@@ -38,7 +36,6 @@ export const connectWebSocket = (onMessage: (message: string) => void) => {
     };
 
     socket.onclose = () => {
-      console.log('WebSocket连接已关闭，尝试重新连接...');
       onMessage('与服务器日志流的连接已关闭，尝试重新连接...');
       socket = null;
       

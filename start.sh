@@ -129,12 +129,24 @@ check_dependencies() {
     
     # 检查后端依赖
     if [ "$START_BACKEND" = true ]; then
+        echo -e "${YELLOW}检查后端依赖...${NC}"
         if ! python3 -c "import fastapi" &> /dev/null; then
             echo -e "${YELLOW}后端依赖未安装，正在安装...${NC}"
             pip3 install -r "$PROJECT_ROOT/requirements.txt"
             
             if [ $? -ne 0 ]; then
                 echo -e "${RED}后端依赖安装失败${NC}"
+                exit 1
+            fi
+        fi
+        
+        # 专门检查uvicorn，因为它对于API启动很重要
+        if ! python3 -c "import uvicorn" &> /dev/null; then
+            echo -e "${YELLOW}安装uvicorn...${NC}"
+            pip3 install uvicorn
+            
+            if [ $? -ne 0 ]; then
+                echo -e "${RED}uvicorn安装失败${NC}"
                 exit 1
             fi
         fi
@@ -172,9 +184,9 @@ start_backend() {
     
     # 检查API脚本选择
     if [ "$USE_WEBSOCKET_API" = true ]; then
-        # 优先使用带WebSocket的API
+        # 优先使用带WebSocket的API，使用专门的启动脚本避免uvicorn警告
         echo -e "${GREEN}使用带WebSocket支持的API (用于工作流日志)${NC}"
-        BACKEND_SCRIPT="simple_api.py"
+        BACKEND_SCRIPT="start_simple_api.py"
     else
         # 标准选择逻辑
         BACKEND_SCRIPT="src/api/enhanced_api.py"
@@ -190,9 +202,12 @@ start_backend() {
     echo -e "后端将在端口 ${GREEN}$BACKEND_PORT${NC} 启动"
     
     # 确保正确传递端口参数
-    # 注意：simple_api.py现在需要--port作为命令行参数
-    if [[ "$BACKEND_SCRIPT" == *"simple_api.py"* ]]; then
-        python3 "$BACKEND_SCRIPT" --port $BACKEND_PORT &
+    if [[ "$BACKEND_SCRIPT" == *"start_simple_api.py"* ]]; then
+        # 使用专门的启动脚本，支持 --port= 格式
+        python3 "$BACKEND_SCRIPT" --port=$BACKEND_PORT &
+    elif [[ "$BACKEND_SCRIPT" == *"simple_api.py"* ]]; then
+        # 直接使用simple_api.py
+        python3 "$BACKEND_SCRIPT" --port=$BACKEND_PORT &
     else
         # 其他脚本可能有不同的参数处理方式
         python3 "$BACKEND_SCRIPT" --port=$BACKEND_PORT &

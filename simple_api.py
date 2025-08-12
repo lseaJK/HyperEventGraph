@@ -5,17 +5,15 @@ This version uses minimal dependencies for quick testing.
 """
 
 import sqlite3
-import subprocess
 import sys
-import threading
-import time
 import asyncio
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Set
+from typing import Dict
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import uvicorn
 
 app = FastAPI(
@@ -112,26 +110,7 @@ async def read_root():
     """Root endpoint to check if the API is running."""
     return {"message": "HyperEventGraph API is running", "status": "ok"}
 
-@app.get("/status")
-async def get_status():
-    """Get system status summary."""
-    return get_status_summary()
-
-@app.get("/workflows")
-async def get_workflows():
-    """Get available workflows."""
-    workflows = []
-    for name, script in WORKFLOW_SCRIPTS.items():
-        workflows.append({
-            "name": name,
-            "status": "Idle",
-            "last_run": None,
-            "script": script
-        })
-    return workflows
-
-from pydantic import BaseModel
-
+# Pydantic模型定义
 class WorkflowParams(BaseModel):
     batch_size: int = None
     extraction_mode: str = None
@@ -142,9 +121,9 @@ class WorkflowParams(BaseModel):
     min_cluster_size: int = None
     dbscan_eps: float = None
 
-@app.post("/workflow/{workflow_name}/start")
-async def start_workflow(workflow_name: str, params: WorkflowParams = None, background_tasks: BackgroundTasks = None):
-    """Start a workflow (simplified for testing)."""
+# 统一的工作流启动函数
+async def start_workflow_internal(workflow_name: str, params: WorkflowParams = None, background_tasks: BackgroundTasks = None):
+    """Internal function to start a workflow."""
     if workflow_name not in WORKFLOW_SCRIPTS:
         raise HTTPException(status_code=404, detail=f"Workflow '{workflow_name}' not found.")
     
@@ -278,13 +257,11 @@ async def get_api_workflows():
 @app.post("/api/workflow/{workflow_name}/start")
 async def start_api_workflow(workflow_name: str, params: WorkflowParams = None, background_tasks: BackgroundTasks = None):
     """启动工作流 - API版本"""
-    return await start_workflow(workflow_name, params, background_tasks)
+    return await start_workflow_internal(workflow_name, params, background_tasks)
 
 if __name__ == "__main__":
     print(f"Starting HyperEventGraph API server...")
     print(f"Database path: {DB_PATH}")
-    print(f"API docs will be available at: http://localhost:8080/docs")
-    print(f"WebSocket endpoint: ws://localhost:8080/ws/{1}")
     
     import sys
     
@@ -309,11 +286,20 @@ if __name__ == "__main__":
             except (IndexError, ValueError):
                 print("Warning: Invalid --port argument, using default port 8080")
     
-    # 关闭reload选项，避免uvicorn警告
-    uvicorn.run(
-        app,
-        host="0.0.0.0", 
-        port=port, 
-        reload=False,
-        log_level="info"
-    )
+    print(f"API docs will be available at: http://localhost:{port}/docs")
+    print(f"WebSocket endpoint: ws://localhost:{port}/ws/1")
+    
+    # 使用更简单的方式启动，避免 uvicorn 警告
+    try:
+        import uvicorn
+        config = uvicorn.Config(
+            app,
+            host="0.0.0.0", 
+            port=port, 
+            log_level="info"
+        )
+        server = uvicorn.Server(config)
+        server.run()
+    except Exception as e:
+        print(f"Failed to start server: {e}")
+        sys.exit(1)
