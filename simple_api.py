@@ -286,10 +286,34 @@ if __name__ == "__main__":
     print(f"API docs will be available at: http://localhost:8080/docs")
     print(f"WebSocket endpoint: ws://localhost:8080/ws/{1}")
     
+    import sys
+    
+    # 获取命令行参数
+    port = 8080
+    
+    # 处理各种可能的端口参数格式
+    for i, arg in enumerate(sys.argv[1:], 1):
+        # 处理 --port=8080 格式
+        if arg.startswith("--port="):
+            try:
+                port = int(arg.split("=")[1])
+                print(f"Using port from --port= format: {port}")
+            except (IndexError, ValueError):
+                print("Warning: Invalid --port= format, using default port 8080")
+        
+        # 处理 --port 8080 格式
+        elif arg == "--port" and i < len(sys.argv) - 1:
+            try:
+                port = int(sys.argv[i+1])
+                print(f"Using port from --port space format: {port}")
+            except (IndexError, ValueError):
+                print("Warning: Invalid --port argument, using default port 8080")
+    
+    # 关闭reload选项，避免uvicorn警告
     uvicorn.run(
         app,
         host="0.0.0.0", 
-        port=8080, 
-        reload=True,
+        port=port, 
+        reload=False,
         log_level="info"
     )

@@ -188,11 +188,19 @@ start_backend() {
     
     # 后台启动后端服务
     echo -e "后端将在端口 ${GREEN}$BACKEND_PORT${NC} 启动"
-    python3 "$BACKEND_SCRIPT" --port $BACKEND_PORT &
+    
+    # 确保正确传递端口参数
+    # 注意：simple_api.py现在需要--port作为命令行参数
+    if [[ "$BACKEND_SCRIPT" == *"simple_api.py"* ]]; then
+        python3 "$BACKEND_SCRIPT" --port $BACKEND_PORT &
+    else
+        # 其他脚本可能有不同的参数处理方式
+        python3 "$BACKEND_SCRIPT" --port=$BACKEND_PORT &
+    fi
     BACKEND_PID=$!
     
     # 等待后端启动
-    sleep 2
+    sleep 3  # 增加等待时间，确保服务有足够时间启动
     if kill -0 $BACKEND_PID 2>/dev/null; then
         echo -e "${GREEN}后端API服务已启动! (PID: $BACKEND_PID)${NC}"
     else

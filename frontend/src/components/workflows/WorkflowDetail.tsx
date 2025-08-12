@@ -43,7 +43,7 @@ interface WorkflowConfig {
 const workflowConfigs: WorkflowConfig = {
   extraction: {
     title: "事件抽取工作流",
-    description: "从文本中抽取结构化事件信息",
+    description: "从文本中抽取结构化事件信息，将非结构化数据转换为知识图谱节点",
     config: {
       batch_size: {
         type: 'number',
@@ -60,7 +60,7 @@ const workflowConfigs: WorkflowConfig = {
   },
   learning: {
     title: "知识学习工作流",
-    description: "从未知事件中学习新的事件类型",
+    description: "从未知事件中学习新的事件类型，扩展系统的知识边界",
     config: {
       clustering_threshold: {
         type: 'number',
@@ -77,7 +77,7 @@ const workflowConfigs: WorkflowConfig = {
   },
   triage: {
     title: "事件分类工作流",
-    description: "对输入文本进行初步事件分类",
+    description: "对输入文本进行初步事件分类，识别已知和未知事件类型",
     config: {
       confidence_threshold: {
         type: 'number',
@@ -88,7 +88,7 @@ const workflowConfigs: WorkflowConfig = {
   },
   cortex: {
     title: "Cortex智能分析",
-    description: "深度分析事件集合，生成故事单元",
+    description: "深度分析事件集合，识别事件模式并生成高级故事单元",
     config: {
       dbscan_eps: {
         type: 'number',
@@ -104,7 +104,7 @@ const workflowConfigs: WorkflowConfig = {
   },
   relationship_analysis: {
     title: "关系分析工作流",
-    description: "分析事件和实体之间的关系",
+    description: "分析事件和实体之间的多维关系，构建完整知识图谱",
     config: {
       analysis_depth: {
         type: 'select',
@@ -258,14 +258,43 @@ export const WorkflowDetail: React.FC<WorkflowDetailProps> = ({
             停止
           </Button>
         ) : (
-          <Button 
-            variant="contained" 
-            color="primary" 
-            startIcon={<PlayArrowIcon />}
-            onClick={handleStart}
-          >
-            启动
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            {/* 为抽取和学习模式添加特殊按钮 */}
+            {workflow.name === 'extraction' && (
+              <Button 
+                variant="outlined" 
+                color="info" 
+                startIcon={<PlayArrowIcon />}
+                onClick={() => {
+                  handleParamChange('extraction_mode', 'detailed');
+                  handleStart();
+                }}
+              >
+                详细模式
+              </Button>
+            )}
+            {workflow.name === 'learning' && (
+              <Button 
+                variant="outlined" 
+                color="info" 
+                startIcon={<PlayArrowIcon />}
+                onClick={() => {
+                  handleParamChange('learning_mode', 'interactive');
+                  handleStart();
+                }}
+              >
+                交互模式
+              </Button>
+            )}
+            <Button 
+              variant="contained" 
+              color="primary" 
+              startIcon={<PlayArrowIcon />}
+              onClick={handleStart}
+            >
+              启动
+            </Button>
+          </Box>
         )}
       </CardActions>
     </Card>
