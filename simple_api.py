@@ -130,8 +130,20 @@ async def get_workflows():
         })
     return workflows
 
+from pydantic import BaseModel
+
+class WorkflowParams(BaseModel):
+    batch_size: int = None
+    extraction_mode: str = None
+    learning_mode: str = None
+    confidence_threshold: float = None
+    clustering_threshold: float = None
+    analysis_depth: str = None
+    min_cluster_size: int = None
+    dbscan_eps: float = None
+
 @app.post("/workflow/{workflow_name}/start")
-async def start_workflow(workflow_name: str, background_tasks: BackgroundTasks):
+async def start_workflow(workflow_name: str, params: WorkflowParams = None, background_tasks: BackgroundTasks = None):
     """Start a workflow (simplified for testing)."""
     if workflow_name not in WORKFLOW_SCRIPTS:
         raise HTTPException(status_code=404, detail=f"Workflow '{workflow_name}' not found.")
@@ -139,13 +151,19 @@ async def start_workflow(workflow_name: str, background_tasks: BackgroundTasks):
     if workflow_status[workflow_name]["status"] == "Running":
         raise HTTPException(status_code=400, detail=f"Workflow '{workflow_name}' is already running.")
     
+    # 在控制台打印参数，便于调试
+    if params:
+        print(f"Starting {workflow_name} with params: {params.dict(exclude_none=True)}")
+    
     # 在后台启动模拟工作流
-    background_tasks.add_task(simulate_workflow, workflow_name)
+    if background_tasks:
+        background_tasks.add_task(simulate_workflow, workflow_name, params)
     
     return {
         "message": f"Workflow '{workflow_name}' start requested.",
         "status": "accepted",
-        "workflow": workflow_name
+        "workflow": workflow_name,
+        "params": params.dict(exclude_none=True) if params else {}
     }
 
 # WebSocket端点
@@ -165,7 +183,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int):
         print(f"客户端 #{connection_id} 断开连接")
 
 # 模拟工作流执行
-async def simulate_workflow(workflow_name: str):
+async def simulate_workflow(workflow_name: str, params=None):
     """模拟工作流执行，并通过WebSocket发送进度"""
     if workflow_name not in WORKFLOW_SCRIPTS:
         return
@@ -177,16 +195,62 @@ async def simulate_workflow(workflow_name: str):
     # 发送启动消息
     await manager.broadcast(f"> {workflow_name}: 工作流开始执行")
     
-    # 模拟几个执行阶段
-    stages = [
-        "加载配置...",
-        "准备数据...",
-        "处理中...",
-        "完成任务"
-    ]
+    # 如果有参数，显示参数信息
+    if params:
+        param_dict = params.dict(exclude_none=True)
+        if param_dict:
+            param_str = ", ".join([f"{k}={v}" for k, v in param_dict.items()])
+            await manager.broadcast(f"> {workflow_name}: 使用参数 {param_str}")
+    
+    # 根据不同工作流类型，模拟专有的执行阶段
+    if workflow_name == "extraction":
+        stages = [
+            "加载事件模式...",
+            "准备抽取模型...",
+            "批量处理文本...",
+            "执行结构化抽取...",
+            "验证抽取结果..."
+        ]
+    elif workflow_name == "learning":
+        stages = [
+            "加载未知事件样本...",
+            "执行事件聚类分析...",
+            "生成事件模式候选...",
+            "验证新事件模式..."
+        ]
+    elif workflow_name == "triage":
+        stages = [
+            "加载文本数据...",
+            "执行初步分类...",
+            "过滤低置信度结果...",
+            "准备人工审核内容..."
+        ]
+    elif workflow_name == "cortex":
+        stages = [
+            "初始化Cortex引擎...",
+            "加载事件向量化模型...",
+            "执行聚类算法...",
+            "精炼事件簇...",
+            "生成故事单元..."
+        ]
+    elif workflow_name == "relationship_analysis":
+        stages = [
+            "加载已抽取事件...",
+            "初始化关系分析模型...",
+            "识别事件间因果关系...",
+            "构建知识图谱...",
+            "更新存储库..."
+        ]
+    else:
+        stages = [
+            "加载配置...",
+            "准备数据...",
+            "处理中...",
+            "完成任务"
+        ]
     
     for stage in stages:
-        await asyncio.sleep(2)  # 模拟每个阶段的执行时间
+        await asyncio.sleep(1.5)  # 模拟每个阶段的执行时间
         await manager.broadcast(f"> {workflow_name}: {stage}")
     
     # 模拟完成
@@ -212,9 +276,9 @@ async def get_api_workflows():
     return workflows
 
 @app.post("/api/workflow/{workflow_name}/start")
-async def start_api_workflow(workflow_name: str, background_tasks: BackgroundTasks):
+async def start_api_workflow(workflow_name: str, params: WorkflowParams = None, background_tasks: BackgroundTasks = None):
     """启动工作流 - API版本"""
-    return await start_workflow(workflow_name, background_tasks)
+    return await start_workflow(workflow_name, params, background_tasks)
 
 if __name__ == "__main__":
     print(f"Starting HyperEventGraph API server...")

@@ -1,31 +1,67 @@
 import React, { useEffect, useRef } from 'react';
-import { Typography, Grid, Paper, Box, List, ListItem, ListItemText, Button, Divider, Alert } from '@mui/material';
+import { Typography, Paper, Box, Alert, Button, Stack } from '@mui/material';
 import { useSystemStore } from '../store/systemStore';
 import { useLogStore } from '../store/logStore';
 import { startWorkflow } from '../services/api.ts';
 import { connectWebSocket, disconnectWebSocket } from '../services/websocket';
+import { WorkflowDetail } from '../components/workflows/WorkflowDetail';
 
 const WorkflowList: React.FC = () => {
-  const { workflows, loading, error, fetchWorkflows } = useSystemStore();
+  const { workflows, error, fetchWorkflows } = useSystemStore();
+  const { addLog } = useLogStore();
 
   useEffect(() => {
     fetchWorkflows();
+    // 定期刷新工作流状态
+    const interval = setInterval(() => {
+      fetchWorkflows();
+    }, 10000); // 10秒刷新一次
+    
+    return () => clearInterval(interval);
   }, [fetchWorkflows]);
 
-  const handleStart = async (workflowName: string) => {
+  const handleStartWorkflow = async (workflowName: string, params: Record<string, any>) => {
     try {
-      await startWorkflow(workflowName);
-      // 启动成功后重新获取工作流状态
+      // 在控制台输出参数，以便调试
+      console.log(`Starting workflow ${workflowName} with params:`, params);
+      
+      // 将前端参数转换为API期望的格式
+      const apiParams: Record<string, any> = {};
+      
+      // 根据参数类型进行转换
+      Object.entries(params).forEach(([key, value]) => {
+        if (typeof value === 'string' && !isNaN(Number(value))) {
+          if (value.includes('.')) {
+            apiParams[key] = parseFloat(value);
+          } else {
+            apiParams[key] = parseInt(value);
+          }
+        } else {
+          apiParams[key] = value;
+        }
+      });
+      
+      // 添加日志消息
+      addLog(`正在启动工作流: ${workflowName}`);
+      if (Object.keys(apiParams).length > 0) {
+        addLog(`使用参数: ${JSON.stringify(apiParams)}`);
+      }
+      
+      // 调用API启动工作流
+      await startWorkflow(workflowName, apiParams);
+      
+      // 启动成功后立即重新获取工作流状态
       fetchWorkflows();
     } catch (error) {
       console.error(`Failed to start workflow ${workflowName}:`, error);
+      addLog(`启动工作流失败: ${workflowName}, 错误: ${error}`);
     }
   };
 
   return (
-    <Paper elevation={3} sx={{ p: 2, height: '100%' }}>
+    <Paper elevation={3} sx={{ p: 2, height: '100%', overflowY: 'auto' }}>
       <Typography variant="h6" gutterBottom>
-        Workflow Control
+        工作流控制中心
       </Typography>
       
       {error && (
@@ -34,24 +70,13 @@ const WorkflowList: React.FC = () => {
         </Alert>
       )}
       
-      <List>
-        {workflows.map((wf) => (
-          <ListItem key={wf.name} divider>
-            <ListItemText 
-              primary={wf.name} 
-              secondary={`Status: ${wf.status}${wf.last_run ? ` | Last run: ${wf.last_run}` : ''}`} 
-            />
-            <Button
-              variant="contained"
-              size="small"
-              onClick={() => handleStart(wf.name)}
-              disabled={wf.status === 'Running' || loading}
-            >
-              Start
-            </Button>
-          </ListItem>
-        ))}
-      </List>
+      {workflows.map((workflow) => (
+        <WorkflowDetail 
+          key={workflow.name}
+          workflow={workflow}
+          onStart={handleStartWorkflow}
+        />
+      ))}
     </Paper>
   );
 };
@@ -71,10 +96,10 @@ const LogViewer: React.FC = () => {
     <Paper elevation={3} sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
         <Typography variant="h6">
-          Real-time Logs
+          实时日志
         </Typography>
         <Button variant="outlined" size="small" onClick={clearLogs}>
-          Clear Logs
+          清除日志
         </Button>
       </Box>
       <Paper
@@ -115,16 +140,16 @@ export const WorkflowControlPage: React.FC = () => {
   return (
     <Box>
       <Typography variant="h4" gutterBottom>
-        Workflow Control Center
+        工作流控制中心
       </Typography>
-      <Grid container spacing={3} sx={{ height: 'calc(100vh - 120px)' }}>
-        <Grid item xs={12} md={5}>
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ height: 'calc(100vh - 120px)' }}>
+        <Box sx={{ flex: '0 0 40%', height: '100%', overflowY: 'auto' }}>
           <WorkflowList />
-        </Grid>
-        <Grid item xs={12} md={7}>
+        </Box>
+        <Box sx={{ flex: '0 0 60%', height: '100%' }}>
           <LogViewer />
-        </Grid>
-      </Grid>
+        </Box>
+      </Stack>
     </Box>
   );
 };

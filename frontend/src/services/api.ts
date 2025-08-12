@@ -83,9 +83,9 @@ export const getWorkflows = async (): Promise<WorkflowStatus[]> => {
   }
 };
 
-export const startWorkflow = async (workflowName: string): Promise<any> => {
+export const startWorkflow = async (workflowName: string, params?: Record<string, any>): Promise<any> => {
   try {
-    const response = await apiClient.post(`/workflow/${workflowName}/start`);
+    const response = await apiClient.post(`/workflow/${workflowName}/start`, params);
     return response.data;
   } catch (error) {
     console.error(`启动工作流 ${workflowName} 失败:`, error);
