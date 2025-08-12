@@ -76,6 +76,21 @@ async def get_status():
         # A general catch-all for any unexpected errors
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
 
+@app.get("/workflows")
+async def get_workflows():
+    """
+    Returns the list of available workflows and their basic information.
+    """
+    workflows = []
+    for name, script in WORKFLOW_SCRIPTS.items():
+        workflows.append({
+            "name": name,
+            "status": "Idle",  # For now, all workflows start as Idle
+            "last_run": None,  # Could be enhanced to track actual last run times
+            "script": script
+        })
+    return workflows
+
 @app.post("/workflow/{workflow_name}/start")
 async def start_workflow(workflow_name: str):
     """
@@ -134,6 +149,6 @@ if __name__ == "__main__":
         print(f"Database not found at {DB_PATH}. Please ensure it is created first.", file=sys.stderr)
         exit(1)
         
-    print(f"Starting server. API documentation will be at http://127.0.0.1:8000/docs")
-    uvicorn.run("main:app", app_dir=str(project_root / "src" / "api"), host="0.0.0.0", port=8000, reload=True)
+    print(f"Starting server. API documentation will be at http://127.0.0.1:8080/docs")
+    uvicorn.run("main:app", app_dir=str(project_root / "src" / "api"), host="0.0.0.0", port=8080, reload=True)
 

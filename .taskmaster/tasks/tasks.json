@@ -753,7 +753,7 @@
             "title": "Task #36.3: 实现Dashboard概览页面",
             "description": "开发Dashboard主页，用于展示系统概览。",
             "details": "1. 创建Dashboard页面组件。2. 调用后端的 `/status` 端点获取数据。3. 使用Recharts的PieChart组件将数据状态可视化。4. 使用MUI的Card组件展示关键性能指标（KPIs）。",
-            "status": "pending",
+            "status": "in-progress",
             "dependencies": [
               "36.2"
             ],
@@ -992,7 +992,7 @@
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-08-11T14:56:08.424Z",
+      "updated": "2025-08-12T13:21:31.821Z",
       "description": "Tasks for master context"
     }
   }

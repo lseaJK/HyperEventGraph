@@ -1,6 +1,6 @@
 // src/services/websocket.ts
 
-const WS_URL = 'ws://localhost:8000/ws/logs';
+const WS_URL = 'ws://localhost:8080/ws/1'; // Use client_id=1
 
 let socket: WebSocket | null = null;
 
@@ -14,7 +14,7 @@ export const connectWebSocket = (onMessage: (message: string) => void) => {
 
   socket.onopen = () => {
     console.log('WebSocket connection established.');
-    onMessage('Connection established with server log stream.');
+    onMessage('Connected to server log stream...');
   };
 
   socket.onmessage = (event) => {
@@ -23,7 +23,7 @@ export const connectWebSocket = (onMessage: (message: string) => void) => {
 
   socket.onerror = (error) => {
     console.error('WebSocket error:', error);
-    onMessage('WebSocket error. Check console for details.');
+    onMessage(`WebSocket error: ${error}`);
   };
 
   socket.onclose = () => {
@@ -36,5 +36,6 @@ export const connectWebSocket = (onMessage: (message: string) => void) => {
 export const disconnectWebSocket = () => {
   if (socket) {
     socket.close();
+    socket = null;
   }
 };

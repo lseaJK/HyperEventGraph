@@ -1,12 +1,12 @@
 import React, { useEffect, useRef } from 'react';
-import { Typography, Grid, Paper, Box, List, ListItem, ListItemText, Button, Divider } from '@mui/material';
+import { Typography, Grid, Paper, Box, List, ListItem, ListItemText, Button, Divider, Alert } from '@mui/material';
 import { useSystemStore } from '../store/systemStore';
 import { useLogStore } from '../store/logStore';
 import { startWorkflow } from '../services/api.ts';
 import { connectWebSocket, disconnectWebSocket } from '../services/websocket';
 
 const WorkflowList: React.FC = () => {
-  const { workflows, fetchWorkflows } = useSystemStore();
+  const { workflows, loading, error, fetchWorkflows } = useSystemStore();
 
   useEffect(() => {
     fetchWorkflows();
@@ -15,10 +15,10 @@ const WorkflowList: React.FC = () => {
   const handleStart = async (workflowName: string) => {
     try {
       await startWorkflow(workflowName);
-      // Optionally, add a notification for the user
+      // 启动成功后重新获取工作流状态
+      fetchWorkflows();
     } catch (error) {
       console.error(`Failed to start workflow ${workflowName}:`, error);
-      // Optionally, add an error notification
     }
   };
 
@@ -27,15 +27,25 @@ const WorkflowList: React.FC = () => {
       <Typography variant="h6" gutterBottom>
         Workflow Control
       </Typography>
+      
+      {error && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+      
       <List>
         {workflows.map((wf) => (
           <ListItem key={wf.name} divider>
-            <ListItemText primary={wf.name} secondary={`Status: ${wf.status}`} />
+            <ListItemText 
+              primary={wf.name} 
+              secondary={`Status: ${wf.status}${wf.last_run ? ` | Last run: ${wf.last_run}` : ''}`} 
+            />
             <Button
               variant="contained"
               size="small"
               onClick={() => handleStart(wf.name)}
-              disabled={wf.status === 'Running'}
+              disabled={wf.status === 'Running' || loading}
             >
               Start
             </Button>
