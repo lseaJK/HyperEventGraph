@@ -51,13 +51,10 @@ async def run_relationship_analysis_workflow():
     print("--- 开始关系分析与知识存储工作流 (V4 - 知识闭环版) ---")
 
     # --- 1. 加载配置和Agents ---
-    # The main CLI should handle config loading.
-    try:
-        config = get_config()
-    except RuntimeError:
-        print("Warning: Config not pre-loaded. Loading for standalone run.")
-        load_config("config.yaml")
-        config = get_config()
+    # Load configuration first
+    config_path = project_root / "config.yaml"
+    load_config(config_path)
+    config = get_config()
     
     db_manager = DatabaseManager(config.get('database', {}).get('path'))
     llm_client = LLMClient()
