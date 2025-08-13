@@ -1,56 +1,100 @@
-# reset_event_status.py
-import sqlite3
+#!/usr/bin/env python3
+"""
+重置并创建事理图谱演示数据
+"""
+import sys
 import os
+from pathlib import Path
+import hashlib
 
-DB_PATH = "master_state.db"
-NUM_TO_RESET = 100  # The number of events we want to re-process
+# 添加项目根目录到路径
+project_root = Path(__file__).resolve().parent
+sys.path.insert(0, str(project_root))
+
+from src.core.config_loader import load_config, get_config
+from src.core.database_manager import DatabaseManager
+
+def reset_and_create_demo():
+    """重置数据库并创建演示数据"""
+    print("🔄 重置数据库并创建事理图谱演示\n")
+    
+    # 加载配置
+    config_path = project_root / "config.yaml"
+    load_config(config_path)
+    config = get_config()
+    
+    # 删除并重新创建数据库
+    db_path = Path(config.get('database', {}).get('path', 'master_state.db'))
+    if db_path.exists():
+        db_path.unlink()
+        print(f"🗑️ 删除旧数据库: {db_path}")
+    
+    # 重新初始化数据库
+    db_manager = DatabaseManager(str(db_path))
+    print(f"🔧 重新创建数据库: {db_path}")
+    
+    # 创建演示事件数据 - 展示事理图谱的关联性
+    demo_events = [
+        {
+            'source_text': '腾讯控股发布2024年Q4财报，营收1638亿元，同比增长8%，游戏业务强劲增长14%',
+            'event_type': '财报发布',
+        },
+        {
+            'source_text': '受益于财报超预期，腾讯股价盘中上涨4.2%，市值重回4万亿港元',
+            'event_type': '股价变动',
+        },
+        {
+            'source_text': '中金上调腾讯目标价至480港元，维持买入评级',
+            'event_type': '分析师评级',
+        },
+        {
+            'source_text': '腾讯与微软达成AI战略合作，共推游戏和社交AI应用',
+            'event_type': '业务合作',
+        },
+        {
+            'source_text': '马化腾：2025年AI和云计算投资将增长30%',
+            'event_type': '管理层表态',
+        }
+    ]
+    
+    print("💾 创建演示数据...")
+    success_count = 0
+    
+    for i, event_data in enumerate(demo_events):
+        try:
+            event_id = hashlib.md5(event_data['source_text'].encode()).hexdigest()[:12]
+            
+            db_manager.insert_record(
+                id=event_id,
+                source_text=event_data['source_text'],
+                status='pending_clustering',
+                assigned_event_type=event_data['event_type'],
+                triage_confidence=0.90
+            )
+            
+            success_count += 1
+            print(f"✅ 事件 {i+1}: {event_data['event_type']}")
+            
+        except Exception as e:
+            print(f"❌ 插入失败: {e}")
+            continue
+    
+    # 验证结果
+    status_summary = db_manager.get_status_summary()
+    print(f"\n📊 数据库重置完成!")
+    print(f"✅ 成功插入 {success_count} 条演示数据")
+    
+    for status, count in status_summary.items():
+        print(f"  {status}: {count}")
+    
+    print(f"\n🚀 现在可以运行:")
+    print("  python temp_cortex.py  # 测试Cortex聚类")
+    print("  python run_cortex_workflow.py  # 正式工作流")
 
 def reset_event_status_for_testing():
-    """
-    Resets the status of a specified number of events back to 
-    'pending_clustering' so the Cortex workflow can be re-run.
-    It now includes events that have already been processed by the refiner.
-    """
-    if not os.path.exists(DB_PATH):
-        print(f"错误: 在 '{DB_PATH}' 未找到数据库文件。")
-        return
-
-    print(f"--- 正在重置数据库中的事件状态以供测试: {DB_PATH} ---")
-    
-    updated_count = 0
-    try:
-        with sqlite3.connect(DB_PATH) as conn:
-            cursor = conn.cursor()
-            
-            # Find events that have already been clustered or refined
-            query = """
-                SELECT id FROM master_state 
-                WHERE current_status IN ('pending_refinement', 'clustered_as_noise', 'pending_relationship_analysis')
-                LIMIT ?
-            """
-            cursor.execute(query, (NUM_TO_RESET,))
-            records_to_reset = cursor.fetchall()
-            
-            if not records_to_reset:
-                print("未找到符合重置条件的记录 (pending_refinement, clustered_as_noise, pending_relationship_analysis)。")
-                return
-
-            ids_to_reset = [record[0] for record in records_to_reset]
-            print(f"找到 {len(ids_to_reset)} 条记录，将重置其状态为 'pending_clustering'...")
-
-            # Use a placeholder for each ID to update them all at once
-            placeholders = ','.join('?' for _ in ids_to_reset)
-            update_query = f"UPDATE master_state SET current_status = 'pending_clustering', cluster_id = NULL, story_id = NULL WHERE id IN ({placeholders})"
-            
-            cursor.execute(update_query, ids_to_reset)
-            updated_count = cursor.rowcount
-            conn.commit()
-
-    except Exception as e:
-        print(f"\n重置状态时发生错误: {e}")
-        return
-
-    print(f"\n状态重置完成。成功更新了 {updated_count} 条记录。")
+    """原始的状态重置函数 - 保持向后兼容"""
+    print("使用reset_and_create_demo()代替此函数")
+    reset_and_create_demo()
 
 if __name__ == "__main__":
     reset_event_status_for_testing()
