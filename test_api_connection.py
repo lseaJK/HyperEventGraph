@@ -3,6 +3,15 @@
 测试API连接和模型可用性
 """
 import asyncio
+import sys
+from pathlib import Path
+
+# 添加项目根目录到路径
+project_root = Path(__file__).resolve().parent
+sys.path.insert(0, str(project_root))
+
+# 加载配置
+from src.core.config_loader import load_config
 from src.llm.llm_client import LLMClient
 
 async def test_api_connection():
@@ -10,6 +19,11 @@ async def test_api_connection():
     print("测试SiliconFlow API连接...")
     
     try:
+        # 首先加载配置
+        config_path = project_root / "config.yaml"
+        load_config(config_path)
+        print("✅ 配置文件加载成功")
+        
         llm_client = LLMClient()
         
         # 测试简单的API调用

@@ -25,6 +25,11 @@ def run_cortex_workflow():
     """Main function to run the Cortex workflow."""
     print("\n--- Running Cortex Workflow ---")
     
+    # 0. Load configuration first
+    config_path = project_root / "config.yaml"
+    load_config(config_path)
+    print("✅ Configuration loaded successfully")
+    
     # 1. Initialization
     config = get_config()
     db_path = config.get('database', {}).get('path')
