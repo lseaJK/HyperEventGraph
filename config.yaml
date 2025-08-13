@@ -25,7 +25,6 @@ llm:
       provider: "siliconflow"
       name: "deepseek-ai/DeepSeek-V2.5"
       temperature: 0.7
-      top_p: 0.7
       max_tokens: 1024
 
     # Model for schema generation: powerful, large context.
@@ -33,14 +32,12 @@ llm:
       provider: "siliconflow"
       name: "deepseek-ai/DeepSeek-V2.5"
       temperature: 0.6
-      top_p: 0.8
 
     # Model for extraction: strong instruction-following and JSON capabilities.
     extraction:
       provider: "siliconflow"
       name: "deepseek-ai/DeepSeek-V2.5"
       temperature: 0.3
-      top_p: 0.8
       max_tokens: 8192
 
     # Model for relationship analysis: powerful, logical reasoning.
@@ -48,7 +45,6 @@ llm:
       provider: "siliconflow"
       name: "deepseek-ai/DeepSeek-V2.5"
       temperature: 0.2
-      top_p: 0.8
       max_tokens: 4096
 
 # --- Workflow Specific Configurations ---
