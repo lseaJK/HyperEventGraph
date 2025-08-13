@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Typography, Paper, Box, Alert, Button, Stack } from '@mui/material';
 import { useSystemStore } from '../store/systemStore';
 import { useLogStore } from '../store/logStore';
-import { startWorkflow } from '../services/api.ts';
+import { startWorkflow, stopWorkflow } from '../services/api.ts';
 import { connectWebSocket, disconnectWebSocket } from '../services/websocket';
 import { WorkflowDetail } from '../components/workflows/WorkflowDetail';
 
@@ -55,6 +55,20 @@ const WorkflowList: React.FC = () => {
     }
   };
 
+  const handleStopWorkflow = async (workflowName: string) => {
+    try {
+      addLog(`正在停止工作流: ${workflowName}...`);
+      await stopWorkflow(workflowName);
+      addLog(`工作流 ${workflowName} 已停止 ⏹️`);
+      
+      // 停止成功后立即重新获取工作流状态
+      fetchWorkflows();
+    } catch (error) {
+      console.error(`Failed to stop workflow ${workflowName}:`, error);
+      addLog(`停止工作流失败: ${workflowName}, 错误: ${error}`);
+    }
+  };
+
   return (
     <Paper elevation={3} sx={{ p: 2, height: '100%', overflowY: 'auto' }}>
       <Typography variant="h6" gutterBottom>
@@ -72,6 +86,7 @@ const WorkflowList: React.FC = () => {
           key={workflow.name}
           workflow={workflow}
           onStart={handleStartWorkflow}
+          onStop={handleStopWorkflow}
         />
       ))}
     </Paper>

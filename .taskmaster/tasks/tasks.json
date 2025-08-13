@@ -855,7 +855,7 @@
         "description": "实现对正在运行的工作流进行生命周期管理的高级控制功能。这需要扩展 FastAPI 后端和前端控制中心，允许用户停止、暂停和恢复一个工作流进程。",
         "details": "1. **后端**:\n   - 维护一个进程注册表（如一个全局字典），存储 `workflow_name` 到 `subprocess.Popen` 对象的映射。\n   - 实现 `POST /api/workflow/{workflow_name}/stop` API，通过发送 `SIGTERM` 信号终止进程。\n   - (可选) 实现 `pause` 和 `resume` API，通过发送 `SIGSTOP` 和 `SIGCONT` 信号。\n2. **前端**:\n   - 在工作流控制中心，当一个任务正在运行时，将“启动”按钮变为“停止”、“暂停”等按钮组。\n   - 实现点击这些按钮时调用对应的 V2 API。\n   - 更新UI状态以反映任务的暂停或终止。",
         "testStrategy": "后端单元测试：验证调用 stop API 后，目标子进程确实被终止。\n前端单元测试：验证按钮状态在任务运行时会正确切换。\n端到端测试：启动一个长时间运行的脚本（如 `sleep 30`)，然后通过UI点击停止按钮，确认脚本提前终止。",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           37,
           40
@@ -869,7 +869,7 @@
         "description": "允许用户在启动工作流前，通过 UI 动态调整该工作流的关键参数，而无需修改后端的配置文件。这极大地提升了系统的灵活性和易用性。",
         "details": "1. **后端**:\n   - 修改 `POST /api/workflow/{workflow_name}/start` API，使其可以接受一个可选的配置参数（JSON body）。\n   - 修改 FastAPI 服务逻辑，在启动子进程时，将接收到的配置通过命令行参数（如 `--model-name glm-4.5-air`）或环境变量的方式传递给脚本。\n   - 后端工作流脚本需要修改为能够解析这些传入的参数，并覆盖默认配置。\n2. **前端**:\n   - 在工作流控制中心，点击“启动”按钮时，弹出一个配置对话框（Modal）。\n   - 在对话框中，根据工作流类型动态生成配置表单（如模型选择下拉框、批处理大小输入框）。\n   - 用户确认后，将表单数据作为请求体发送给 `start` API。",
         "testStrategy": "后端单元测试：验证使用不同配置参数调用 start API 时，子进程能接收到正确的命令行参数。\n前端单元测试：验证配置对话框能正确生成和提交表单数据。\n端到端测试：通过UI修改一个参数（如输出文件名），启动工作流，然后检查后端生成的文件名是否与UI中指定的一致。",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           37,
           40
@@ -992,7 +992,7 @@
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-08-12T16:35:29.416Z",
+      "updated": "2025-08-13T13:52:12.544Z",
       "description": "Tasks for master context"
     }
   }

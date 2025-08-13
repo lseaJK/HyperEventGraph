@@ -21,7 +21,9 @@ import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
+import SettingsIcon from '@mui/icons-material/Settings';
 import type { WorkflowStatus } from '../../services/api';
+import { WorkflowConfigDialog, type WorkflowConfig as ConfigDialogConfig } from './WorkflowConfigDialog';
 
 // 工作流配置接口
 interface WorkflowConfig {
@@ -129,6 +131,7 @@ export const WorkflowDetail: React.FC<WorkflowDetailProps> = ({
 }) => {
   const [expanded, setExpanded] = useState(false);
   const [params, setParams] = useState<Record<string, any>>({});
+  const [configDialogOpen, setConfigDialogOpen] = useState(false);
   
   const config = workflowConfigs[workflow.name] || {
     title: workflow.name.charAt(0).toUpperCase() + workflow.name.slice(1),
@@ -161,6 +164,11 @@ export const WorkflowDetail: React.FC<WorkflowDetailProps> = ({
     if (onStop) {
       onStop(workflow.name);
     }
+  };
+
+  const handleConfigApply = (config: ConfigDialogConfig) => {
+    setParams(config);
+    setConfigDialogOpen(false);
   };
   
   // 状态颜色映射
@@ -259,6 +267,16 @@ export const WorkflowDetail: React.FC<WorkflowDetailProps> = ({
           </Button>
         ) : (
           <Box sx={{ display: 'flex', gap: 1 }}>
+            {/* 配置按钮 */}
+            <Button 
+              variant="outlined" 
+              color="secondary" 
+              startIcon={<SettingsIcon />}
+              onClick={() => setConfigDialogOpen(true)}
+            >
+              高级配置
+            </Button>
+            
             {/* 为抽取和学习模式添加特殊按钮 */}
             {workflow.name === 'extraction' && (
               <Button 
@@ -297,6 +315,15 @@ export const WorkflowDetail: React.FC<WorkflowDetailProps> = ({
           </Box>
         )}
       </CardActions>
+
+      {/* 配置对话框 */}
+      <WorkflowConfigDialog
+        open={configDialogOpen}
+        onClose={() => setConfigDialogOpen(false)}
+        onConfirm={handleConfigApply}
+        workflowName={workflow.name}
+        initialConfig={params}
+      />
     </Card>
   );
 };

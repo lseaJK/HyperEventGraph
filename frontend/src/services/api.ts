@@ -1,7 +1,24 @@
 import axios from 'axios';
 
+// 动态构建API base URL，适配服务器端口映射
+const getApiBaseURL = () => {
+  const protocol = window.location.protocol;
+  const host = window.location.hostname;
+  
+  // 如果是开发环境且访问localhost，使用8080端口
+  // 否则使用当前页面的端口（适配服务器端口映射）
+  let port = window.location.port;
+  if (host === 'localhost' || host === '127.0.0.1') {
+    port = '8080';
+  }
+  
+  const baseUrl = `${protocol}//${host}:${port}/api`;
+  console.log('API Base URL:', baseUrl);
+  return baseUrl;
+};
+
 const apiClient = axios.create({
-  baseURL: 'http://localhost:8080/api',
+  baseURL: getApiBaseURL(),
   headers: {
     'Content-Type': 'application/json',
   },
@@ -89,6 +106,26 @@ export const startWorkflow = async (workflowName: string, params?: Record<string
     return response.data;
   } catch (error) {
     console.error(`启动工作流 ${workflowName} 失败:`, error);
+    throw error;
+  }
+};
+
+export const stopWorkflow = async (workflowName: string): Promise<any> => {
+  try {
+    const response = await apiClient.post(`/workflow/${workflowName}/stop`);
+    return response.data;
+  } catch (error) {
+    console.error(`停止工作流 ${workflowName} 失败:`, error);
+    throw error;
+  }
+};
+
+export const getWorkflowStatus = async (workflowName: string): Promise<any> => {
+  try {
+    const response = await apiClient.get(`/workflow/${workflowName}/status`);
+    return response.data;
+  } catch (error) {
+    console.error(`获取工作流状态 ${workflowName} 失败:`, error);
     throw error;
   }
 };

@@ -65,9 +65,9 @@ def check_database_status():
         
         # 检查各状态的数量
         cursor.execute("""
-            SELECT status, COUNT(*) 
+            SELECT current_status, COUNT(*) 
             FROM master_state 
-            GROUP BY status
+            GROUP BY current_status
         """)
         status_counts = cursor.fetchall()
         

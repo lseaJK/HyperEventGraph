@@ -9,7 +9,10 @@ import sys
 import asyncio
 from datetime import datetime
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
+import subprocess
+import signal
+import threading
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -48,6 +51,127 @@ class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[int, WebSocket] = {}
         self.counter = 0
+
+# 工作流进程管理
+class WorkflowProcessManager:
+    def __init__(self):
+        self.running_processes: Dict[str, subprocess.Popen] = {}
+        self.workflow_threads: Dict[str, threading.Thread] = {}
+        self.stop_flags: Dict[str, bool] = {}
+    
+    def start_process(self, workflow_name: str, script_path: str, params: Dict = None) -> bool:
+        """启动工作流进程"""
+        if workflow_name in self.running_processes:
+            return False
+        
+        try:
+            cmd = ["python", script_path]
+            if params:
+                # 将参数转换为命令行参数（根据具体脚本支持的参数格式）
+                for key, value in params.items():
+                    if value is not None:
+                        cmd.extend([f"--{key}", str(value)])
+            
+            # 启动进程
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+                universal_newlines=True
+            )
+            
+            self.running_processes[workflow_name] = process
+            self.stop_flags[workflow_name] = False
+            
+            # 在单独线程中监控进程输出
+            thread = threading.Thread(
+                target=self._monitor_process,
+                args=(workflow_name, process)
+            )
+            thread.daemon = True
+            thread.start()
+            
+            self.workflow_threads[workflow_name] = thread
+            return True
+            
+        except Exception as e:
+            print(f"Failed to start workflow {workflow_name}: {e}")
+            return False
+    
+    def stop_process(self, workflow_name: str) -> bool:
+        """停止工作流进程"""
+        if workflow_name not in self.running_processes:
+            return False
+        
+        try:
+            process = self.running_processes[workflow_name]
+            self.stop_flags[workflow_name] = True
+            
+            # 优雅停止
+            if process.poll() is None:
+                process.terminate()
+                
+                # 等待5秒，如果还没停止就强制杀死
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+            
+            # 清理
+            del self.running_processes[workflow_name]
+            if workflow_name in self.workflow_threads:
+                del self.workflow_threads[workflow_name]
+            if workflow_name in self.stop_flags:
+                del self.stop_flags[workflow_name]
+                
+            return True
+            
+        except Exception as e:
+            print(f"Failed to stop workflow {workflow_name}: {e}")
+            return False
+    
+    def get_process_status(self, workflow_name: str) -> str:
+        """获取进程状态"""
+        if workflow_name not in self.running_processes:
+            return "Idle"
+        
+        process = self.running_processes[workflow_name]
+        if process.poll() is None:
+            return "Running"
+        else:
+            return "Completed"
+    
+    def is_running(self, workflow_name: str) -> bool:
+        """检查工作流是否正在运行"""
+        return (workflow_name in self.running_processes and 
+                self.running_processes[workflow_name].poll() is None)
+    
+    async def _monitor_process(self, workflow_name: str, process: subprocess.Popen):
+        """监控进程输出并通过WebSocket广播"""
+        try:
+            while process.poll() is None and not self.stop_flags.get(workflow_name, False):
+                output = process.stdout.readline()
+                if output:
+                    await manager.broadcast(f"[{workflow_name}] {output.strip()}")
+                
+                # 检查错误输出
+                if process.stderr:
+                    error = process.stderr.readline()
+                    if error:
+                        await manager.broadcast(f"[{workflow_name}] ERROR: {error.strip()}")
+            
+            # 进程结束
+            return_code = process.poll()
+            if return_code == 0:
+                await manager.broadcast(f"[{workflow_name}] 工作流完成 ✅")
+            else:
+                await manager.broadcast(f"[{workflow_name}] 工作流异常结束，返回码: {return_code} ❌")
+                
+        except Exception as e:
+            await manager.broadcast(f"[{workflow_name}] 监控异常: {str(e)} ⚠️")
         
     async def connect(self, websocket: WebSocket) -> int:
         await websocket.accept()
@@ -82,6 +206,7 @@ class ConnectionManager:
 
 # 创建连接管理器实例
 manager = ConnectionManager()
+process_manager = WorkflowProcessManager()
 
 # 模拟工作流状态
 workflow_status = {name: {"status": "Idle", "last_run": None} for name in WORKFLOW_SCRIPTS}
@@ -127,16 +252,40 @@ async def start_workflow_internal(workflow_name: str, params: WorkflowParams = N
     if workflow_name not in WORKFLOW_SCRIPTS:
         raise HTTPException(status_code=404, detail=f"Workflow '{workflow_name}' not found.")
     
-    if workflow_status[workflow_name]["status"] == "Running":
+    if process_manager.is_running(workflow_name):
         raise HTTPException(status_code=400, detail=f"Workflow '{workflow_name}' is already running.")
     
-    # 在控制台打印参数，便于调试
-    if params:
-        print(f"Starting {workflow_name} with params: {params.dict(exclude_none=True)}")
+    # 获取脚本路径
+    script_path = WORKFLOW_SCRIPTS[workflow_name]
     
-    # 在后台启动模拟工作流
-    if background_tasks:
-        background_tasks.add_task(simulate_workflow, workflow_name, params)
+    # 准备参数
+    workflow_params = params.dict(exclude_none=True) if params else {}
+    
+    # 在控制台打印参数，便于调试
+    if workflow_params:
+        print(f"Starting {workflow_name} with params: {workflow_params}")
+    
+    # 使用进程管理器启动工作流
+    success = process_manager.start_process(workflow_name, script_path, workflow_params)
+    
+    if success:
+        # 更新状态
+        workflow_status[workflow_name]["status"] = "Running"
+        workflow_status[workflow_name]["last_run"] = datetime.now().isoformat()
+        
+        await manager.broadcast(f"🚀 工作流 '{workflow_name}' 已启动")
+        
+        return {
+            "message": f"Workflow '{workflow_name}' started successfully.",
+            "status": "started",
+            "workflow": workflow_name,
+            "params": workflow_params
+        }
+    else:
+        raise HTTPException(status_code=500, detail=f"Failed to start workflow '{workflow_name}'.")
+
+# 保留原来的模拟工作流函数作为备用
+async def simulate_workflow_legacy(workflow_name: str, params: WorkflowParams = None):
     
     return {
         "message": f"Workflow '{workflow_name}' start requested.",
@@ -258,6 +407,46 @@ async def get_api_workflows():
 async def start_api_workflow(workflow_name: str, params: WorkflowParams = None, background_tasks: BackgroundTasks = None):
     """启动工作流 - API版本"""
     return await start_workflow_internal(workflow_name, params, background_tasks)
+
+@app.post("/api/workflow/{workflow_name}/stop")
+async def stop_workflow(workflow_name: str):
+    """停止工作流"""
+    if workflow_name not in WORKFLOW_SCRIPTS:
+        raise HTTPException(status_code=404, detail=f"Workflow '{workflow_name}' not found.")
+    
+    # 使用进程管理器停止工作流
+    success = process_manager.stop_process(workflow_name)
+    
+    if success:
+        # 更新状态
+        workflow_status[workflow_name]["status"] = "Idle"
+        await manager.broadcast(f"⏹️ 工作流 '{workflow_name}' 已停止")
+        
+        return {
+            "message": f"Workflow '{workflow_name}' stopped successfully.",
+            "status": "stopped",
+            "workflow": workflow_name
+        }
+    else:
+        raise HTTPException(status_code=400, detail=f"Failed to stop workflow '{workflow_name}' or it's not running.")
+
+@app.get("/api/workflow/{workflow_name}/status")
+async def get_workflow_status(workflow_name: str):
+    """获取特定工作流的详细状态"""
+    if workflow_name not in WORKFLOW_SCRIPTS:
+        raise HTTPException(status_code=404, detail=f"Workflow '{workflow_name}' not found.")
+    
+    process_status = process_manager.get_process_status(workflow_name)
+    is_running = process_manager.is_running(workflow_name)
+    
+    return {
+        "name": workflow_name,
+        "status": process_status,
+        "is_running": is_running,
+        "last_run": workflow_status[workflow_name]["last_run"],
+        "can_stop": is_running,
+        "can_start": not is_running
+    }
 
 if __name__ == "__main__":
     print(f"Starting HyperEventGraph API server...")
