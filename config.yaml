@@ -23,27 +23,27 @@ llm:
     # Model for initial triage: fast and cost-effective.
     triage:
       provider: "siliconflow"
-      name: "deepseek-ai/DeepSeek-V2.5"
+      name: "deepseek-ai/DeepSeek-V3"
       temperature: 0.7
       max_tokens: 1024
 
     # Model for schema generation: powerful, large context.
     schema_generation:
       provider: "siliconflow"
-      name: "deepseek-ai/DeepSeek-V2.5"
+      name: "deepseek-ai/DeepSeek-R1"
       temperature: 0.6
 
     # Model for extraction: strong instruction-following and JSON capabilities.
     extraction:
       provider: "siliconflow"
-      name: "deepseek-ai/DeepSeek-V2.5"
+      name: "deepseek-ai/DeepSeek-V3"
       temperature: 0.3
       max_tokens: 8192
 
     # Model for relationship analysis: powerful, logical reasoning.
     relationship_analysis:
       provider: "siliconflow"
-      name: "deepseek-ai/DeepSeek-V2.5"
+      name: "deepseek-ai/DeepSeek-R1"
       temperature: 0.2
       max_tokens: 4096
 
