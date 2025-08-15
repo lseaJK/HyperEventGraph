@@ -52,6 +52,41 @@ class ConnectionManager:
         self.active_connections: Dict[int, WebSocket] = {}
         self.counter = 0
 
+    async def connect(self, websocket: WebSocket) -> int:
+        """接受WebSocket连接"""
+        await websocket.accept()
+        self.counter += 1
+        connection_id = self.counter
+        self.active_connections[connection_id] = websocket
+        return connection_id
+
+    def disconnect(self, connection_id: int):
+        """断开连接"""
+        if connection_id in self.active_connections:
+            del self.active_connections[connection_id]
+
+    async def send_personal_message(self, message: str, connection_id: int):
+        """发送个人消息"""
+        if connection_id in self.active_connections:
+            websocket = self.active_connections[connection_id]
+            try:
+                await websocket.send_text(message)
+            except:
+                self.disconnect(connection_id)
+
+    async def broadcast(self, message: str):
+        """广播消息到所有连接"""
+        disconnected = []
+        for connection_id, websocket in self.active_connections.items():
+            try:
+                await websocket.send_text(message)
+            except:
+                disconnected.append(connection_id)
+        
+        # 清理断开的连接
+        for connection_id in disconnected:
+            self.disconnect(connection_id)
+
 # 工作流进程管理
 class WorkflowProcessManager:
     def __init__(self):

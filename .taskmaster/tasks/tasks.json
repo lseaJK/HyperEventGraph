@@ -652,7 +652,7 @@
         "description": "此任务用于追踪 `run_extraction_workflow.py` 在全量数据集上的执行过程。主要工作是监控其进度，确保其顺利完成，并处理在运行过程中可能出现的任何问题。",
         "details": "",
         "testStrategy": "",
-        "status": "in-progress",
+        "status": "done",
         "dependencies": [],
         "priority": "medium",
         "subtasks": []
@@ -988,11 +988,22 @@
         ],
         "priority": "high",
         "subtasks": []
+      },
+      {
+        "id": 52,
+        "title": "完成基于现有事件的知识图谱构建",
+        "description": "基于已成功导入的2497条结构化事件，完成知识图谱构建的核心流程",
+        "details": "1. 运行Cortex聚类工作流：python run_cortex_workflow.py 2. 运行关系分析：python run_relationship_analysis.py 3. 验证混合检索功能 4. 确保Web界面正常展示",
+        "testStrategy": "",
+        "status": "in-progress",
+        "dependencies": [],
+        "priority": "high",
+        "subtasks": []
       }
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",
-      "updated": "2025-08-13T13:52:12.544Z",
+      "updated": "2025-08-15T14:45:55.205Z",
       "description": "Tasks for master context"
     }
   }
