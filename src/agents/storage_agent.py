@@ -181,9 +181,14 @@ class StorageAgent:
             print("  (ChromaDB) Skipping storage: embedding model not available.")
             return
 
+        # 添加空值检查
+        if not event_data:
+            print(f"  (ChromaDB) Error: event_data is None for event {event_id}")
+            return
+
         try:
             # 1. Store original source text
-            source_text = event_data.get('text', '')
+            source_text = event_data.get('source_text', '') or event_data.get('text', '') if event_data else ''
             if source_text:
                 self._source_text_collection.add(
                     documents=[source_text],
@@ -191,48 +196,67 @@ class StorageAgent:
                     ids=[f"{event_id}_source"]
                 )
 
-            # 2. Store event description
-            structured_data = event_data.get('structured_data', {})
-            if isinstance(structured_data, str):
-                try:
-                    structured_data = json.loads(structured_data)
-                except json.JSONDecodeError:
-                    structured_data = {}
+            # 2. Store event description - 安全处理None值
+            structured_data = event_data.get('structured_data') if event_data else None
             
-            event_description = structured_data.get('description', '')
-            if event_description:
-                self._event_desc_collection.add(
-                    documents=[event_description],
-                    metadatas=[{"event_id": event_id, "type": "event_description"}],
-                    ids=[f"{event_id}_desc"]
-                )
+            # 如果structured_data是None，跳过处理
+            if structured_data is None:
+                print(f"  (ChromaDB) Skipping event description: structured_data is None for {event_id}")
+            else:
+                if isinstance(structured_data, str):
+                    try:
+                        structured_data = json.loads(structured_data)
+                    except json.JSONDecodeError:
+                        structured_data = {}
+                
+                if isinstance(structured_data, dict):
+                    event_description = structured_data.get('description', '')
+                    if event_description:
+                        self._event_desc_collection.add(
+                            documents=[event_description],
+                            metadatas=[{"event_id": event_id, "type": "event_description"}],
+                            ids=[f"{event_id}_desc"]
+                        )
 
-            # 3. Store entity-centric context
-            entities = event_data.get('involved_entities', [])
-            if isinstance(entities, str):
-                try:
-                    entities = json.loads(entities)
-                except json.JSONDecodeError:
+            # 3. Store entity-centric context - 安全处理None值
+            entities = event_data.get('involved_entities') if event_data else None
+            
+            # 如果involved_entities是None，跳过处理
+            if entities is None:
+                print(f"  (ChromaDB) Skipping entities: involved_entities is None for {event_id}")
+            else:
+                if isinstance(entities, str):
+                    try:
+                        entities = json.loads(entities)
+                    except json.JSONDecodeError:
+                        entities = []
+                
+                if not isinstance(entities, list):
                     entities = []
-            
-            if not isinstance(entities, list):
-                entities = []
 
-            entity_contexts = []
-            entity_ids = []
-            for i, entity in enumerate(entities):
-                entity_name = entity.get('entity_name')
-                if entity_name and event_description:
-                    context = f"实体: {entity_name}; 事件: {event_description}"
-                    entity_contexts.append(context)
-                    entity_ids.append(f"{event_id}_entity_{i}")
+                entity_contexts = []
+                entity_ids = []
+                event_description = ""
+                
+                # 获取事件描述用于实体上下文
+                if structured_data and isinstance(structured_data, dict):
+                    event_description = structured_data.get('description', '')
+                
+                for i, entity in enumerate(entities):
+                    # 安全检查entity不为None且为字典
+                    if entity is not None and isinstance(entity, dict):
+                        entity_name = entity.get('entity_name')
+                        if entity_name and event_description:
+                            context = f"实体: {entity_name}; 事件: {event_description}"
+                            entity_contexts.append(context)
+                            entity_ids.append(f"{event_id}_entity_{i}")
             
-            if entity_contexts:
-                self._entity_context_collection.add(
-                    documents=entity_contexts,
-                    metadatas=[{"event_id": event_id, "type": "entity_context"}] * len(entity_contexts),
-                    ids=entity_ids
-                )
+                if entity_contexts:
+                    self._entity_context_collection.add(
+                        documents=entity_contexts,
+                        metadatas=[{"event_id": event_id, "type": "entity_context"}] * len(entity_contexts),
+                        ids=entity_ids
+                    )
             
             print(f"  (ChromaDB) Successfully stored vectors for event {event_id}.")
 

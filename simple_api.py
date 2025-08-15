@@ -438,6 +438,93 @@ async def get_api_workflows():
         })
     return workflows
 
+@app.get("/api/events")
+async def get_events(page: int = 0, page_size: int = 10):
+    """获取事件数据 - 分页"""
+    try:
+        # 连接数据库获取事件数据
+        import sqlite3
+        conn = sqlite3.connect("master_state.db")
+        cursor = conn.cursor()
+        
+        # 获取总数
+        cursor.execute("SELECT COUNT(*) FROM master_state")
+        total = cursor.fetchone()[0]
+        
+        # 分页查询
+        offset = page * page_size
+        cursor.execute("""
+            SELECT id, source_text, current_status, assigned_event_type, notes, last_updated
+            FROM master_state 
+            ORDER BY last_updated DESC 
+            LIMIT ? OFFSET ?
+        """, (page_size, offset))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        # 格式化数据
+        events = []
+        for row in rows:
+            events.append({
+                "id": row[0],
+                "source_text": row[1][:200] + "..." if len(row[1]) > 200 else row[1],
+                "status": row[2],
+                "event_type": row[3],
+                "notes": row[4],
+                "last_updated": row[5]
+            })
+        
+        return {
+            "events": events,
+            "pagination": {
+                "page": page,
+                "page_size": page_size,
+                "total": total,
+                "pages": (total + page_size - 1) // page_size
+            }
+        }
+        
+    except Exception as e:
+        print(f"Error fetching events: {e}")
+        return {
+            "events": [],
+            "pagination": {
+                "page": page,
+                "page_size": page_size,
+                "total": 0,
+                "pages": 0
+            }
+        }
+
+@app.get("/api/graph")
+async def get_graph():
+    """获取知识图谱数据"""
+    try:
+        # 这里应该从Neo4j获取数据，现在先返回模拟数据
+        nodes = [
+            {"id": "node1", "label": "华为", "type": "Company"},
+            {"id": "node2", "label": "专利发布", "type": "Event"},
+            {"id": "node3", "label": "昆山杜克大学", "type": "ResearchAgency"},
+        ]
+        
+        edges = [
+            {"source": "node1", "target": "node2", "relationship": "INVOLVED_IN"},
+            {"source": "node3", "target": "node2", "relationship": "INVOLVED_IN"},
+        ]
+        
+        return {
+            "nodes": nodes,
+            "edges": edges
+        }
+        
+    except Exception as e:
+        print(f"Error fetching graph: {e}")
+        return {
+            "nodes": [],
+            "edges": []
+        }
+
 @app.post("/api/workflow/{workflow_name}/start")
 async def start_api_workflow(workflow_name: str, params: WorkflowParams = None, background_tasks: BackgroundTasks = None):
     """启动工作流 - API版本"""

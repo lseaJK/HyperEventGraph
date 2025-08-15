@@ -176,12 +176,25 @@ def run_cortex_workflow():
         print("\nNo stories were generated. No database updates to perform.")
     else:
         print(f"\nGenerated a total of {len(all_stories)} stories. Updating database...")
-        for story in all_stories:
+        successful_updates = 0
+        for i, story in enumerate(all_stories):
             story_id = story['story_id']
             event_ids_in_story = story['event_ids']
+            
+            print(f"\n更新故事 {i+1}/{len(all_stories)}: {story_id}")
+            print(f"  包含事件数: {len(event_ids_in_story)}")
+            print(f"  事件ID示例: {event_ids_in_story[:3] if len(event_ids_in_story) >= 3 else event_ids_in_story}")
+            
             # Update all events in the story with the new story_id and set status
             # for the next stage in the pipeline.
-            db_manager.update_story_info(event_ids_in_story, story_id, 'pending_relationship_analysis')
+            try:
+                db_manager.update_story_info(event_ids_in_story, story_id, 'pending_relationship_analysis')
+                successful_updates += 1
+                print(f"  ✅ 成功更新")
+            except Exception as e:
+                print(f"  ❌ 更新失败: {e}")
+        
+        print(f"\nDatabase update完成: {successful_updates}/{len(all_stories)} 故事成功更新")
         print("Database updated with story information.")
 
     print("\n--- Modified Cortex Workflow Finished ---")
