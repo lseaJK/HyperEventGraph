@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Typography, Box, Paper, List, ListItem, ListItemText, Chip } from '@mui/material';
+import { Typography, Box, Paper, ToggleButtonGroup, ToggleButton } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import type { GridColDef } from '@mui/x-data-grid';
-// import ForceGraph2D from 'react-force-graph-2d';
+import ForceGraph2D from 'react-force-graph-2d';
 import { getEvents, getGraphData } from '../services/api.ts';
 import type { EventRowData, GraphData } from '../services/api.ts';
+import { ViewList, AccountTree } from '@mui/icons-material';
 
 // --- Event Data Table Component ---
 
@@ -82,18 +83,13 @@ const KnowledgeGraph: React.FC = () => {
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'force' | 'list'>('force');
 
   useEffect(() => {
     getGraphData()
       .then(data => {
         console.log('Raw graph data:', data);
-        // Convert 'edges' to 'links' if needed (API sometimes returns 'edges')
-        const processedData = {
-          nodes: data.nodes || [],
-          links: data.links || (data as any).edges || []
-        };
-        console.log('Processed graph data:', processedData);
-        setGraphData(processedData);
+        setGraphData(data);
         setLoading(false);
       })
       .catch(err => {
@@ -119,19 +115,83 @@ const KnowledgeGraph: React.FC = () => {
     );
   }
 
+  const nodeColor = (node: any) => {
+    return node.type === 'Event' ? '#ff6b6b' : '#4ecdc4';
+  };
+
+  const linkColor = (link: any) => {
+    switch (link.label) {
+      case 'INVOLVED_IN': return '#ffd93d';
+      case 'PRECEDES': return '#6bcf7f';
+      case 'COOPERATES_WITH': return '#4d79ff';
+      case 'RELATED_TO': return '#ff9ff3';
+      default: return '#999';
+    }
+  };
+
   return (
     <Paper sx={{ height: '100%', width: '100%', position: 'relative' }}>
-       <Typography variant="h6" sx={{ p: 2, position: 'absolute', top: 0, left: 0, zIndex: 1 }}>
-        Knowledge Graph ({graphData.nodes.length} nodes, {graphData.links.length} links)
-      </Typography>
-      {graphData.nodes.length > 0 ? (
-        <Box sx={{ p: 2, pt: 8 }}>
+      <Box sx={{ p: 2, borderBottom: '1px solid #ddd', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography variant="h6">
+          Knowledge Graph ({graphData.nodes.length} nodes, {graphData.links.length} links)
+        </Typography>
+        <Box>
+          <ToggleButtonGroup
+            value={viewMode}
+            exclusive
+            onChange={(_, newMode) => newMode && setViewMode(newMode)}
+            size="small"
+          >
+            <ToggleButton value="force">
+              <AccountTree />
+            </ToggleButton>
+            <ToggleButton value="list">
+              <ViewList />
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
+      </Box>
+      
+      {viewMode === 'force' && graphData.nodes.length > 0 ? (
+        <Box sx={{ height: 'calc(100% - 80px)' }}>
+          <ForceGraph2D
+            graphData={graphData}
+            nodeLabel="name"
+            nodeColor={nodeColor}
+            linkLabel="label"
+            linkColor={linkColor}
+            linkDirectionalArrowLength={6}
+            linkDirectionalArrowRelPos={1}
+            linkWidth={2}
+            nodeRelSize={8}
+            width={800}
+            height={500}
+            backgroundColor="#f8f9fa"
+            onNodeClick={(node) => {
+              console.log('Node clicked:', node);
+            }}
+            onLinkClick={(link) => {
+              console.log('Link clicked:', link);
+            }}
+            cooldownTicks={100}
+            d3AlphaDecay={0.02}
+            d3VelocityDecay={0.3}
+          />
+        </Box>
+      ) : (
+        <Box sx={{ p: 2, height: 'calc(100% - 80px)', overflow: 'auto' }}>
           <Typography variant="subtitle1" gutterBottom>
             Nodes ({graphData.nodes.length}):
           </Typography>
           <Box sx={{ mb: 2 }}>
             {graphData.nodes.map((node) => (
-              <Box key={node.id} sx={{ mb: 1, p: 1, border: '1px solid #ddd', borderRadius: 1 }}>
+              <Box key={node.id} sx={{ 
+                mb: 1, 
+                p: 1, 
+                border: '1px solid #ddd', 
+                borderRadius: 1,
+                backgroundColor: node.type === 'Event' ? '#fff5f5' : '#f0ffff'
+              }}>
                 <Typography variant="body2">
                   <strong>{node.name || node.id}</strong> ({node.type})
                 </Typography>
@@ -142,16 +202,31 @@ const KnowledgeGraph: React.FC = () => {
             Links ({graphData.links.length}):
           </Typography>
           {graphData.links.map((link, index) => (
-            <Box key={index} sx={{ mb: 1, p: 1, border: '1px solid #eee', borderRadius: 1 }}>
+            <Box key={index} sx={{ 
+              mb: 1, 
+              p: 1, 
+              border: '1px solid #eee', 
+              borderRadius: 1,
+              backgroundColor: '#fafafa'
+            }}>
               <Typography variant="body2">
-                {link.source} → {link.target} ({link.label})
+                <span style={{ fontWeight: 'bold', color: '#2196f3' }}>{link.source}</span> 
+                {' → '}
+                <span style={{ fontWeight: 'bold', color: '#ff9800' }}>{link.target}</span>
+                {link.label && (
+                  <span style={{ 
+                    marginLeft: 8, 
+                    padding: '2px 8px', 
+                    backgroundColor: '#e3f2fd', 
+                    borderRadius: 4, 
+                    fontSize: '0.75rem' 
+                  }}>
+                    {link.label}
+                  </span>
+                )}
               </Typography>
             </Box>
           ))}
-        </Box>
-      ) : (
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-          <Typography>No graph data available</Typography>
         </Box>
       )}
     </Paper>
