@@ -44,6 +44,7 @@ WORKFLOW_SCRIPTS = {
     "learning": "run_learning_workflow.py",
     "cortex": "run_cortex_workflow.py",
     "improved_cortex": "run_improved_cortex_workflow.py",
+    "smart_clustering": "run_smart_clustering.py",
     "relationship_analysis": "run_relationship_analysis.py",
 }
 
@@ -53,6 +54,8 @@ class WorkflowParams(BaseModel):
     max_workers: int = None
     batch_size: int = None
     cluster_ratio: float = None
+    mode: str = None
+    max_story_size: int = None
     
 class FullPipelineRequest(BaseModel):
     includeImport: bool = False
