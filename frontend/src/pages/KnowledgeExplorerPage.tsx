@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Typography, Box, Paper } from '@mui/material';
+import { Typography, Box, Paper, List, ListItem, ListItemText, Chip } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import type { GridColDef } from '@mui/x-data-grid';
-import ForceGraph2D from 'react-force-graph-2d';
+// import ForceGraph2D from 'react-force-graph-2d';
 import { getEvents, getGraphData } from '../services/api.ts';
 import type { EventRowData, GraphData } from '../services/api.ts';
 
@@ -36,14 +36,23 @@ const EventDataTable: React.FC = () => {
     let active = true;
     (async () => {
       setLoading(true);
-      const { rows: newRows, rowCount: newRowCount } = await getEvents(
-        paginationModel.page,
-        paginationModel.pageSize
-      );
-      if (active) {
-        setRows(newRows);
-        setRowCount(newRowCount);
-        setLoading(false);
+      try {
+        const { rows: newRows, rowCount: newRowCount } = await getEvents(
+          paginationModel.page,
+          paginationModel.pageSize
+        );
+        if (active) {
+          setRows(newRows);
+          setRowCount(newRowCount || newRows.length);
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('Failed to load events:', error);
+        if (active) {
+          setRows([]);
+          setRowCount(0);
+          setLoading(false);
+        }
       }
     })();
     return () => { active = false; };
@@ -69,24 +78,80 @@ const EventDataTable: React.FC = () => {
 
 const KnowledgeGraph: React.FC = () => {
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getGraphData().then(setGraphData);
+    getGraphData()
+      .then(data => {
+        console.log('Raw graph data:', data);
+        // Convert 'edges' to 'links' if needed (API sometimes returns 'edges')
+        const processedData = {
+          nodes: data.nodes || [],
+          links: data.links || (data as any).edges || []
+        };
+        console.log('Processed graph data:', processedData);
+        setGraphData(processedData);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('Failed to load graph data:', err);
+        setError('Failed to load graph data');
+        setLoading(false);
+      });
   }, []);
+
+  if (loading) {
+    return (
+      <Paper sx={{ height: '100%', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Typography>Loading graph...</Typography>
+      </Paper>
+    );
+  }
+
+  if (error) {
+    return (
+      <Paper sx={{ height: '100%', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Typography color="error">{error}</Typography>
+      </Paper>
+    );
+  }
 
   return (
     <Paper sx={{ height: '100%', width: '100%', position: 'relative' }}>
-       <Typography variant="h6" sx={{ p: 2, position: 'absolute', top: 0, left: 0 }}>
-        Knowledge Graph
+       <Typography variant="h6" sx={{ p: 2, position: 'absolute', top: 0, left: 0, zIndex: 1 }}>
+        Knowledge Graph ({graphData.nodes.length} nodes, {graphData.links.length} links)
       </Typography>
-      <ForceGraph2D
-        graphData={graphData}
-        nodeLabel="name"
-        nodeAutoColorBy="type"
-        linkDirectionalArrowLength={3.5}
-        linkDirectionalArrowRelPos={1}
-        linkLabel="label"
-      />
+      {graphData.nodes.length > 0 ? (
+        <Box sx={{ p: 2, pt: 8 }}>
+          <Typography variant="subtitle1" gutterBottom>
+            Nodes ({graphData.nodes.length}):
+          </Typography>
+          <Box sx={{ mb: 2 }}>
+            {graphData.nodes.map((node) => (
+              <Box key={node.id} sx={{ mb: 1, p: 1, border: '1px solid #ddd', borderRadius: 1 }}>
+                <Typography variant="body2">
+                  <strong>{node.name || node.id}</strong> ({node.type})
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+          <Typography variant="subtitle1" gutterBottom>
+            Links ({graphData.links.length}):
+          </Typography>
+          {graphData.links.map((link, index) => (
+            <Box key={index} sx={{ mb: 1, p: 1, border: '1px solid #eee', borderRadius: 1 }}>
+              <Typography variant="body2">
+                {link.source} → {link.target} ({link.label})
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      ) : (
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+          <Typography>No graph data available</Typography>
+        </Box>
+      )}
     </Paper>
   );
 };
