@@ -58,12 +58,17 @@ def enhanced_cortex_workflow():
     """增强版 Cortex 工作流主函数"""
     print("🧠 启动增强版智能聚类工作流...")
     
-    # 1. 加载配置和初始化
-    load_config('config.yaml')
+    # 1. 加载配置和初始化 (use explicit project-root config path to avoid ambiguity)
+    config_path = project_root / "config.yaml"
+    load_config(config_path)
     config = get_config()
+    print(f"Configuration loaded from: {config_path}")
     db_manager = DatabaseManager(config['database']['path'])
     
     print("✅ 配置加载成功")
+    # debug: show database path used
+    db_path_debug = config.get('database', {}).get('path')
+    print(f"Using database path: {db_path_debug}")
     
     # 2. 获取待聚类事件
     pending_events_df = db_manager.get_records_by_status_as_df('pending_clustering')
