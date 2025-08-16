@@ -1,10 +1,11 @@
 import React, { useEffect, useRef } from 'react';
-import { Typography, Paper, Box, Alert, Button, Stack } from '@mui/material';
+import { Typography, Paper, Box, Alert, Button, Stack, Grid } from '@mui/material';
 import { useSystemStore } from '../store/systemStore';
 import { useLogStore } from '../store/logStore';
 import { startWorkflow, stopWorkflow } from '../services/api.ts';
 import { connectWebSocket, disconnectWebSocket } from '../services/websocket';
 import { WorkflowDetail } from '../components/workflows/WorkflowDetail';
+import { FullPipelineControl } from '../components/workflows/FullPipelineControl';
 
 const WorkflowList: React.FC = () => {
   const { workflows, error, fetchWorkflows } = useSystemStore();
@@ -138,6 +139,11 @@ const LogViewer: React.FC = () => {
 
 export const WorkflowControlPage: React.FC = () => {
   const { addLog } = useLogStore();
+  const { fetchWorkflows } = useSystemStore();
+
+  const handleRefresh = () => {
+    fetchWorkflows();
+  };
 
   useEffect(() => {
     // Establish WebSocket connection on mount
@@ -152,13 +158,25 @@ export const WorkflowControlPage: React.FC = () => {
   return (
     <Box>
       <Typography variant="h4" gutterBottom>
-        工作流控制中心
+        HyperEventGraph 工作流控制中心
       </Typography>
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ height: 'calc(100vh - 120px)' }}>
-        <Box sx={{ flex: '0 0 40%', height: '100%', overflowY: 'auto' }}>
+      <Typography variant="body2" color="text.secondary" gutterBottom sx={{ mb: 3 }}>
+        构建事件知识图谱的完整流程控制和监控平台
+      </Typography>
+      
+      <Stack direction={{ xs: 'column', lg: 'row' }} spacing={2} sx={{ height: 'calc(100vh - 160px)' }}>
+        {/* 全流程控制面板 */}
+        <Box sx={{ flex: '0 0 350px', height: '100%' }}>
+          <FullPipelineControl onRefresh={handleRefresh} />
+        </Box>
+        
+        {/* 工作流列表 */}
+        <Box sx={{ flex: '0 0 400px', height: '100%', overflowY: 'auto' }}>
           <WorkflowList />
         </Box>
-        <Box sx={{ flex: '0 0 60%', height: '100%' }}>
+        
+        {/* 日志查看器 */}
+        <Box sx={{ flex: 1, height: '100%' }}>
           <LogViewer />
         </Box>
       </Stack>
