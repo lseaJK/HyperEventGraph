@@ -42,10 +42,17 @@ WORKFLOW_SCRIPTS = {
     "triage": "run_batch_triage.py",
     "extraction": "run_extraction_workflow.py", 
     "learning": "run_learning_workflow.py",
-    "cortex": "run_cortex_workflow.py",
+    
+    # 聚类方法 (A组件 - 二选一)
+    "smart_clustering": "run_smart_clustering.py",  # 推荐：智能聚类
+    "cortex": "run_cortex_workflow.py",             # 简单：事件类型聚类
     "improved_cortex": "run_improved_cortex_workflow.py",
-    "smart_clustering": "run_smart_clustering.py",
+    
+    # 关系分析与学习
     "relationship_analysis": "run_relationship_analysis.py",
+    
+    # 评估 (C组件)
+    "clustering_evaluation": "run_clustering_evaluation.py",
 }
 
 # Pydantic models
@@ -310,6 +317,24 @@ async def start_workflow(workflow_name: str, params: WorkflowParams = None, back
     if params:
         param_dict = params.dict(exclude_none=True)
     
+    # 特殊处理不同工作流的参数
+    if workflow_name == "smart_clustering":
+        # 智能聚类默认参数
+        if "mode" not in param_dict:
+            param_dict["mode"] = "company"
+        if "max_story_size" not in param_dict:
+            param_dict["max_story_size"] = 15
+    elif workflow_name == "clustering_evaluation":
+        # 聚类评估默认参数
+        if "group_by" not in param_dict:
+            param_dict["group_by"] = "story_id"
+        if "status" not in param_dict:
+            param_dict["status"] = "pending_relationship_analysis"
+        if "sample_per_group" not in param_dict:
+            param_dict["sample_per_group"] = 3
+        if "out_dir" not in param_dict:
+            param_dict["out_dir"] = "outputs"
+    
     # 启动工作流
     success = process_manager.start_process(workflow_name, script_path, param_dict)
     
@@ -439,6 +464,77 @@ async def get_graph_data():
             }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+@app.get("/api/clustering/evaluation/latest")
+async def get_latest_evaluation():
+    """获取最新的聚类评估结果"""
+    try:
+        import glob
+        import json
+        from pathlib import Path
+        
+        # 查找最新的评估报告
+        report_files = glob.glob("outputs/clustering_evaluation_report_*.json")
+        if not report_files:
+            return {"status": "no_reports", "message": "No evaluation reports found"}
+        
+        # 获取最新的报告文件
+        latest_report = max(report_files, key=lambda x: Path(x).stat().st_mtime)
+        
+        with open(latest_report, 'r', encoding='utf-8') as f:
+            report_data = json.load(f)
+        
+        # 查找对应的 CSV 样本文件
+        timestamp = latest_report.split('_')[-1].replace('.json', '')
+        csv_file = f"outputs/clustering_evaluation_samples_{timestamp}.csv"
+        
+        result = {
+            "status": "success",
+            "report": report_data,
+            "files": {
+                "report": latest_report,
+                "samples": csv_file if Path(csv_file).exists() else None
+            },
+            "timestamp": timestamp
+        }
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading evaluation results: {str(e)}")
+
+@app.get("/api/clustering/evaluation/history")
+async def get_evaluation_history():
+    """获取聚类评估历史记录"""
+    try:
+        import glob
+        import json
+        from pathlib import Path
+        
+        report_files = glob.glob("outputs/clustering_evaluation_report_*.json")
+        history = []
+        
+        for report_file in sorted(report_files, key=lambda x: Path(x).stat().st_mtime, reverse=True):
+            try:
+                with open(report_file, 'r', encoding='utf-8') as f:
+                    report_data = json.load(f)
+                
+                timestamp = report_file.split('_')[-1].replace('.json', '')
+                history.append({
+                    "timestamp": timestamp,
+                    "file": report_file,
+                    "groups_evaluated": report_data.get("groups_evaluated", 0),
+                    "total_events": report_data.get("total_events", 0),
+                    "mean_cohesion": report_data.get("mean_inter_centroid_similarity", 0),
+                    "created_at": report_data.get("created_at", 0)
+                })
+            except:
+                continue  # 跳过损坏的文件
+        
+        return {"status": "success", "history": history}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading evaluation history: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8080)

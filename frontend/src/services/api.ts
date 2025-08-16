@@ -92,9 +92,11 @@ export const getWorkflows = async (): Promise<WorkflowStatus[]> => {
     return [
       { name: 'triage', status: 'Idle', last_run: null },
       { name: 'extraction', status: 'Idle', last_run: null },
+      { name: 'smart_clustering', status: 'Idle', last_run: null },  // A组件：推荐
+      { name: 'cortex', status: 'Idle', last_run: null },           // A组件：简单版
+      { name: 'relationship_analysis', status: 'Idle', last_run: null },
       { name: 'learning', status: 'Idle', last_run: null },
-      { name: 'cortex', status: 'Idle', last_run: null },
-      { name: 'relationship_analysis', status: 'Idle', last_run: null }
+      { name: 'clustering_evaluation', status: 'Idle', last_run: null }  // C组件
     ];
   }
 };
