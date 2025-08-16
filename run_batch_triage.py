@@ -34,17 +34,54 @@ class TriageAgent:
         Calls the LLM asynchronously to triage the text.
         Returns a dictionary with event_type, confidence_score, and explanation.
         """
-        prompt = prompt_manager.get_prompt("triage", text_sample=text)
+        # 提供必要的参数来生成提示词
+        try:
+            # 从注册表中提取事件类型名称
+            from src.event_extraction.schemas import EVENT_SCHEMA_REGISTRY
+            known_event_types = list(EVENT_SCHEMA_REGISTRY.keys())
+            event_types_str = "\n- ".join(known_event_types)
+            
+            # 领域信息
+            known_domains = ["financial", "circuit", "general"]
+            domains_str = "\n- ".join(known_domains)
+        except Exception as e:
+            print(f"Could not load event schemas: {e}")
+            # 提供备用值
+            event_types_str = "- company_merger_and_acquisition\n- investment_and_financing\n- executive_change"
+            domains_str = "- financial\n- circuit\n- general"
+        
+        prompt = prompt_manager.get_prompt(
+            "triage", 
+            text_sample=text,
+            domains_str=domains_str,
+            event_types_str=event_types_str
+        )
+        
+        # 将提示词转换为消息格式
+        messages = [{"role": "user", "content": prompt}]
         
         try:
-            response = await self.llm_client.get_json_response(prompt, task_type="triage")
+            response = await self.llm_client.get_json_response(messages, task_type="triage")
             if not response:
                 raise ValueError("LLM call failed or returned an empty response.")
             
+            # 检查响应类型，如果是字符串则尝试解析
+            if isinstance(response, str):
+                try:
+                    response = json.loads(response)
+                except json.JSONDecodeError:
+                    print(f"Failed to parse LLM response as JSON: {response}")
+                    return {"event_type": "parse_failed", "confidence_score": 0.0, "explanation": "JSON parse error"}
+            
+            # 确保response是字典类型
+            if not isinstance(response, dict):
+                print(f"Unexpected response type: {type(response)}, content: {response}")
+                return {"event_type": "format_error", "confidence_score": 0.0, "explanation": "Invalid response format"}
+            
             return {
                 "event_type": response.get("event_type", "unknown"),
-                "confidence_score": response.get("confidence_score", 0.1),
-                "explanation": response.get("explanation", "No explanation provided.")
+                "confidence_score": response.get("confidence", response.get("confidence_score", 0.1)),
+                "explanation": response.get("explanation", response.get("notes", f"Domain: {response.get('domain', 'unknown')}, Status: {response.get('status', 'unknown')}"))
             }
         except Exception as e:
             print(f"Triage failed for a record: {e}")

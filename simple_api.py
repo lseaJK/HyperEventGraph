@@ -184,41 +184,113 @@ class WorkflowProcessManager:
         return (workflow_name in self.running_processes and 
                 self.running_processes[workflow_name].poll() is None)
     
-    async def _monitor_process(self, workflow_name: str, process: subprocess.Popen):
+    def _monitor_process(self, workflow_name: str, process: subprocess.Popen):
         """监控进程输出并通过WebSocket广播"""
-        try:
-            while process.poll() is None and not self.stop_flags.get(workflow_name, False):
-                output = process.stdout.readline()
-                if output:
-                    await manager.broadcast(f"[{workflow_name}] {output.strip()}")
-                
-                # 检查错误输出
-                if process.stderr:
-                    error = process.stderr.readline()
-                    if error:
-                        await manager.broadcast(f"[{workflow_name}] ERROR: {error.strip()}")
-            
-            # 进程结束
-            return_code = process.poll()
-            if return_code == 0:
-                await manager.broadcast(f"[{workflow_name}] 工作流完成 ✅")
-            else:
-                await manager.broadcast(f"[{workflow_name}] 工作流异常结束，返回码: {return_code} ❌")
-                
-        except Exception as e:
-            await manager.broadcast(f"[{workflow_name}] 监控异常: {str(e)} ⚠️")
+        import time
         
+        async def broadcast_message(message: str):
+            """异步广播消息的包装函数"""
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                await manager.broadcast(message)
+                loop.close()
+            except Exception as e:
+                print(f"WebSocket broadcast failed: {e}")
+        
+        def sync_broadcast(message: str):
+            """同步版本的广播"""
+            try:
+                asyncio.run(broadcast_message(message))
+            except Exception as e:
+                print(f"Sync broadcast failed: {e}")
+        
+        try:
+            sync_broadcast(f"🚀 [{workflow_name}] 工作流已启动")
+            
+            while process.poll() is None and not self.stop_flags.get(workflow_name, False):
+                # 读取标准输出
+                if process.stdout:
+                    try:
+                        output = process.stdout.readline()
+                        if output:
+                            sync_broadcast(f"📊 [{workflow_name}] {output.strip()}")
+                    except Exception:
+                        pass
+                
+                # 读取错误输出
+                if process.stderr:
+                    try:
+                        error = process.stderr.readline()
+                        if error:
+                            sync_broadcast(f"⚠️ [{workflow_name}] {error.strip()}")
+                    except Exception:
+                        pass
+                
+                time.sleep(0.1)  # 避免过度占用CPU
+            
+            # 进程结束后的状态检查
+            return_code = process.wait()
+            if return_code == 0:
+                sync_broadcast(f"✅ [{workflow_name}] 工作流完成")
+            else:
+                sync_broadcast(f"❌ [{workflow_name}] 工作流失败 (返回码: {return_code})")
+                
+                # 读取剩余的错误输出
+                if process.stderr:
+                    remaining_errors = process.stderr.read()
+                    if remaining_errors:
+                        sync_broadcast(f"❌ [{workflow_name}] 错误详情: {remaining_errors}")
+            
+        except Exception as e:
+            sync_broadcast(f"❌ [{workflow_name}] 监控进程异常: {str(e)}")
+        finally:
+            # 清理
+            if workflow_name in self.running_processes:
+                del self.running_processes[workflow_name]
+            if workflow_name in self.workflow_threads:
+                del self.workflow_threads[workflow_name]
+            if workflow_name in self.stop_flags:
+# WebSocket连接管理
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[int, WebSocket] = {}
+        self.counter = 0
+
     async def connect(self, websocket: WebSocket) -> int:
+        """接受WebSocket连接"""
         await websocket.accept()
         self.counter += 1
-        self.active_connections[self.counter] = websocket
-        return self.counter
-        
-    def disconnect(self, id: int):
-        if id in self.active_connections:
-            del self.active_connections[id]
-    
+        connection_id = self.counter
+        self.active_connections[connection_id] = websocket
+        return connection_id
+
+    def disconnect(self, connection_id: int):
+        """断开连接"""
+        if connection_id in self.active_connections:
+            del self.active_connections[connection_id]
+
+    async def send_personal_message(self, message: str, connection_id: int):
+        """发送个人消息"""
+        if connection_id in self.active_connections:
+            websocket = self.active_connections[connection_id]
+            try:
+                await websocket.send_text(message)
+            except:
+                self.disconnect(connection_id)
+
     async def broadcast(self, message: str):
+        """广播消息到所有连接"""
+        disconnected = []
+        for connection_id, websocket in self.active_connections.items():
+            try:
+                await websocket.send_text(message)
+            except:
+                disconnected.append(connection_id)
+        
+        # 清理断开的连接
+        for connection_id in disconnected:
+            self.disconnect(connection_id)
         disconnected_ids = []
         for connection_id, websocket in self.active_connections.items():
             try:
