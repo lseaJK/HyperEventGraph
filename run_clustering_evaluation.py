@@ -101,6 +101,8 @@ def evaluate_groups(groups: dict, sample_per_group: int = 3, min_group_size: int
 
     vectorizer = TfidfVectorizer(max_features=5000, ngram_range=(1, 2))
     X = vectorizer.fit_transform(texts)
+    # Convert sparse matrix to dense array to avoid np.matrix compatibility issues
+    X = X.toarray()
 
     unique_labels = sorted(set(label_for_index))
     label_to_indices = {lab: [] for lab in unique_labels}
@@ -112,8 +114,8 @@ def evaluate_groups(groups: dict, sample_per_group: int = 3, min_group_size: int
     intra_sim = {}
     for lab, indices in label_to_indices.items():
         mat = X[indices]
-        centroid = mat.mean(axis=0)
-        centroids[lab] = np.asarray(centroid).ravel()
+        centroid = np.asarray(mat.mean(axis=0)).ravel()
+        centroids[lab] = centroid
         # compute similarity of members to centroid
         sims = cosine_similarity(mat, centroid.reshape(1, -1))
         # sims shape (n,1)
@@ -216,7 +218,10 @@ def main():
         print('CSV:', res['csv'])
         print('Report:', res['report'])
     except Exception as e:
+        import traceback
         print('Evaluation failed:', e)
+        print('Full traceback:')
+        traceback.print_exc()
 
 
 if __name__ == '__main__':
