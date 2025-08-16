@@ -83,13 +83,18 @@ const KnowledgeGraph: React.FC = () => {
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'force' | 'list'>('force');
+  const [viewMode, setViewMode] = useState<'force' | 'list'>('list');
 
   useEffect(() => {
     getGraphData()
       .then(data => {
         console.log('Raw graph data:', data);
-        setGraphData(data);
+        // 为了防止ForceGraph2D污染原始数据，创建深度拷贝
+        const cleanData = {
+          nodes: data.nodes.map(node => ({ ...node })),
+          links: data.links.map(link => ({ ...link }))
+        };
+        setGraphData(cleanData);
         setLoading(false);
       })
       .catch(err => {
@@ -116,14 +121,24 @@ const KnowledgeGraph: React.FC = () => {
   }
 
   const nodeColor = (node: any) => {
-    return node.type === 'Event' ? '#ff6b6b' : '#4ecdc4';
+    switch (node.type) {
+      case 'Event': return '#ff6b6b';
+      case 'EventCategory': return '#ff9999';
+      case 'Organization': return '#4ecdc4';
+      case 'TechDomain': return '#95e1d3';
+      case 'Entity': return '#6c5ce7';
+      default: return '#ddd';
+    }
   };
 
   const linkColor = (link: any) => {
     switch (link.label) {
       case 'INVOLVED_IN': return '#ffd93d';
+      case 'BELONGS_TO': return '#a29bfe';
+      case 'APPLIES_TO': return '#fd79a8';
       case 'PRECEDES': return '#6bcf7f';
       case 'COOPERATES_WITH': return '#4d79ff';
+      case 'SYNERGIZES_WITH': return '#e17055';
       case 'RELATED_TO': return '#ff9ff3';
       default: return '#999';
     }
@@ -139,7 +154,11 @@ const KnowledgeGraph: React.FC = () => {
           <ToggleButtonGroup
             value={viewMode}
             exclusive
-            onChange={(_, newMode) => newMode && setViewMode(newMode)}
+            onChange={(_, newMode) => {
+              if (newMode !== null) {
+                setViewMode(newMode);
+              }
+            }}
             size="small"
           >
             <ToggleButton value="force">
@@ -155,7 +174,10 @@ const KnowledgeGraph: React.FC = () => {
       {viewMode === 'force' && graphData.nodes.length > 0 ? (
         <Box sx={{ height: 'calc(100% - 80px)' }}>
           <ForceGraph2D
-            graphData={graphData}
+            graphData={{
+              nodes: graphData.nodes.map(node => ({ ...node })),
+              links: graphData.links.map(link => ({ ...link }))
+            }}
             nodeLabel="name"
             nodeVal={8}
             nodeColor={nodeColor}
@@ -216,7 +238,7 @@ const KnowledgeGraph: React.FC = () => {
                 backgroundColor: node.type === 'Event' ? '#fff5f5' : '#f0ffff'
               }}>
                 <Typography variant="body2">
-                  <strong>{node.name || node.id}</strong> ({node.type})
+                  <strong>{String(node.name || node.id)}</strong> ({node.type})
                 </Typography>
               </Box>
             ))}
@@ -233,9 +255,13 @@ const KnowledgeGraph: React.FC = () => {
               backgroundColor: '#fafafa'
             }}>
               <Typography variant="body2">
-                <span style={{ fontWeight: 'bold', color: '#2196f3' }}>{link.source}</span> 
+                <span style={{ fontWeight: 'bold', color: '#2196f3' }}>
+                  {String(link.source)}
+                </span> 
                 {' → '}
-                <span style={{ fontWeight: 'bold', color: '#ff9800' }}>{link.target}</span>
+                <span style={{ fontWeight: 'bold', color: '#ff9800' }}>
+                  {String(link.target)}
+                </span>
                 {link.label && (
                   <span style={{ 
                     marginLeft: 8, 

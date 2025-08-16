@@ -51,7 +51,7 @@ export interface EventRowData extends EventData {}
 export interface GraphNode {
   id: string;
   name: string;
-  type: 'Event' | 'Entity';
+  type: 'Event' | 'Entity' | 'EventCategory' | 'Organization' | 'TechDomain';
 }
 
 export interface GraphLink {
@@ -214,43 +214,63 @@ export const getGraphData = async (): Promise<GraphData> => {
       console.log('强制生成丰富的网络图谱数据，展示完整的知识图谱能力');
       
       // 创建丰富的事件和实体网络
-      const companies = ['华为', '腾讯', '阿里巴巴', '百度', '字节跳动', '小米', '京东', '美团'];
-      const eventTypes = ['合作签约', '产品发布', '技术突破', '投资并购', '专利申请', '市场扩张'];
-      const productTypes = ['AI技术', '5G产品', '云服务', '智能硬件', '移动应用', '物联网'];
+      const companies = ['华为技术', '腾讯控股', '阿里巴巴集团', '百度科技', '字节跳动', '小米集团', '京东集团', '美团'];
+      const eventCategories = ['技术创新', '商业合作', '产品发布', '市场扩张', '投资并购', '专利申请'];
+      const techDomains = ['人工智能', '5G通信', '云计算', '智能制造', '移动互联网', '物联网'];
       
       const nodes: GraphNode[] = [];
       const links: GraphLink[] = [];
       
-      // 生成事件节点
-      for (let i = 1; i <= 20; i++) {
-        const eventType = eventTypes[i % eventTypes.length];
+      // 生成高层次事件分类节点
+      eventCategories.forEach((category, i) => {
+        nodes.push({
+          id: `category_${i + 1}`,
+          name: category,
+          type: 'EventCategory'
+        });
+      });
+      
+      // 生成具体事件节点
+      for (let i = 1; i <= 15; i++) {
+        const categoryIdx = (i - 1) % eventCategories.length;
+        const category = eventCategories[categoryIdx];
+        const company = companies[i % companies.length];
+        
+        // 创建具体的事件节点
         nodes.push({
           id: `event_${i}`,
-          name: `${eventType}_${i}`,
+          name: `${company}${category}事件`,
           type: 'Event'
+        });
+        
+        // 事件归属于事件分类
+        links.push({
+          source: `event_${i}`,
+          target: `category_${categoryIdx + 1}`,
+          label: 'BELONGS_TO'
         });
       }
       
-      // 生成实体节点（公司）
+      // 生成公司实体节点
       companies.forEach((company, i) => {
         nodes.push({
           id: `company_${i + 1}`,
           name: company,
-          type: 'Entity'
+          type: 'Organization'
         });
       });
       
-      // 生成产品节点
-      productTypes.forEach((product, i) => {
+      // 生成技术领域节点
+      techDomains.forEach((domain, i) => {
         nodes.push({
-          id: `product_${i + 1}`,
-          name: product,
-          type: 'Entity'
+          id: `domain_${i + 1}`,
+          name: domain,
+          type: 'TechDomain'
         });
       });
       
       // 生成事件-公司关系
-      for (let i = 1; i <= 20; i++) {
+      for (let i = 1; i <= 15; i++) {
         const companyId = `company_${(i % companies.length) + 1}`;
         links.push({
           source: companyId,
@@ -258,20 +278,18 @@ export const getGraphData = async (): Promise<GraphData> => {
           label: 'INVOLVED_IN'
         });
         
-        // 部分事件涉及产品
-        if (i % 3 === 0) {
-          const productId = `product_${(i % productTypes.length) + 1}`;
-          links.push({
-            source: productId,
-            target: `event_${i}`,
-            label: 'RELATED_TO'
-          });
-        }
+        // 事件涉及技术领域
+        const domainId = `domain_${(i % techDomains.length) + 1}`;
+        links.push({
+          source: `event_${i}`,
+          target: domainId,
+          label: 'APPLIES_TO'
+        });
       }
       
       // 生成事件间的时序关系
-      for (let i = 1; i < 20; i++) {
-        if (i % 4 === 0) {
+      for (let i = 1; i < 15; i++) {
+        if (i % 3 === 0) {
           links.push({
             source: `event_${i}`,
             target: `event_${i + 1}`,
@@ -287,6 +305,17 @@ export const getGraphData = async (): Promise<GraphData> => {
           target: `company_${i + 1}`,
           label: 'COOPERATES_WITH'
         });
+      }
+      
+      // 生成跨领域技术关系
+      for (let i = 1; i < techDomains.length; i++) {
+        if (i % 2 === 0) {
+          links.push({
+            source: `domain_${i}`,
+            target: `domain_${i + 1}`,
+            label: 'SYNERGIZES_WITH'
+          });
+        }
       }
       
       return { nodes, links };
