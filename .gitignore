@@ -59,9 +59,9 @@ node_modules/
 # OS specific
 .DS_Store
 
+./report
+report/*
+
 # Task files
 # tasks.json
 # tasks/ 
-
-./report
-report/*

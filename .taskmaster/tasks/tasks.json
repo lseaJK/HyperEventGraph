@@ -1000,6 +1000,51 @@
         "priority": "high",
         "subtasks": []
       }
+      ,
+      {
+        "id": 53,
+        "title": "MVP-C: Implement run_clustering_evaluation.py (TF-IDF evaluator)",
+        "description": "实现轻量级聚类评估脚本：按 story_id 或 cluster_id 分组，从 master_state.db 读取记录，使用 TF-IDF 计算组内到质心的余弦相似度，生成抽样 CSV 和 JSON 指标报告。支持 --group-by, --status, --sample-per-group, --out-dir 参数。",
+        "details": "输出: outputs/clustering_evaluation_samples_<ts>.csv, outputs/clustering_evaluation_report_<ts>.json。依赖 scikit-learn, pandas，可选 jieba 用于中文分词。",
+        "testStrategy": "在测试环境运行脚本并验证文件生成。对 5-20 个已分配 story_id 的样本执行，检查 CSV 内容和 report 的指标字段存在。",
+        "status": "pending",
+        "dependencies": [],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 54,
+        "title": "MVP-C: Write docs/clustering_evaluation_README.md",
+        "description": "编写轻量 README，说明如何运行评估脚本、解释输出字段、以及常见问题（比如没有 story_id 时如何生成样本）。",
+        "details": "包含示例命令、依赖说明（scikit-learn, pandas, jieba 可选）以及如何在前端/QA 流程中使用 CSV。",
+        "testStrategy": "人工检查 README 中命令是否可复制运行并能在标准环境生成输出。",
+        "status": "pending",
+        "dependencies": [53],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": 55,
+        "title": "MVP-C: Integrate evaluator into QA flow",
+        "description": "在文档和运维脚本中加入如何在聚类完成后运行评估（例如在 run_smart_clustering.py 完成后运行评估脚本的示例命令或短 wrapper 脚本）。",
+        "details": "提供一个短脚本或说明：在 cluster workflows 完成后触发 evaluator，并将 CSV 分发给审核人员。",
+        "testStrategy": "运行 end-to-end：执行一个聚类（company 或 theme），确认 story_id 被写入 DB，然后运行 evaluator，验证 outputs/*.csv 生成并包含合理样例。",
+        "status": "pending",
+        "dependencies": [53,54],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": 56,
+        "title": "MVP-C-Enhancement: Optional embedding-based evaluation",
+        "description": "可选任务：为评估增加基于句向量的指标（sentence-transformers 或 BGE），并对比 TF-IDF 结果。",
+        "details": "实现可切换到 embedding 模式的评估路径，保存额外的 embedding_metrics 字段到 report。",
+        "testStrategy": "在有 GPU 或允许的环境下运行，比较 embedding 与 TF-IDF 的聚类得分差异。",
+        "status": "pending",
+        "dependencies": [53],
+        "priority": "low",
+        "subtasks": []
+      }
     ],
     "metadata": {
       "created": "2025-07-16T12:53:46.081Z",

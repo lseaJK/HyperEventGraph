@@ -115,7 +115,7 @@ def evaluate_groups(groups: dict, sample_per_group: int = 3, min_group_size: int
         centroid = mat.mean(axis=0)
         centroids[lab] = np.asarray(centroid).ravel()
         # compute similarity of members to centroid
-        sims = cosine_similarity(mat, centroid)
+        sims = cosine_similarity(mat, centroid.reshape(1, -1))
         # sims shape (n,1)
         intra_sim[lab] = float(np.mean(sims)) if sims.size else 0.0
 
@@ -137,7 +137,9 @@ def evaluate_groups(groups: dict, sample_per_group: int = 3, min_group_size: int
     silhouette = None
     try:
         if len(set(labels_int)) >= 2 and X.shape[0] > len(set(labels_int)):
-            silhouette = float(silhouette_score(X, labels_int, metric='cosine'))
+            # Convert sparse matrix to dense for silhouette_score
+            X_dense = X.toarray() if hasattr(X, 'toarray') else X
+            silhouette = float(silhouette_score(X_dense, labels_int, metric='cosine'))
     except Exception:
         silhouette = None
 

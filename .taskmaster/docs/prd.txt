@@ -1,0 +1,24 @@
+HyperEventGraph V3.1 / V4.0 combined PRD
+
+Include full architecture summary and implementation tasks covering:
+
+- Central state DB `master_state.db` and `config.yaml` driven workflows.
+- Tasks: triage (run_batch_triage.py), human review (prepare_review_file.py, process_review_results.py), schema learning (run_learning_workflow.py), extraction (run_extraction_workflow.py), cortex clustering (run_cortex_workflow.py), relationship analysis (run_relationship_analysis.py), graph/vector storage (GraphStorageAgent/VectorStorageAgent).
+
+Add a new minimal-cost clustering evaluation deliverable (MVP-C):
+- Script `run_clustering_evaluation.py` to read `master_state.db` grouped by `story_id` or `cluster_id`, optional status filter.
+- Outputs: `outputs/clustering_evaluation_samples_<ts>.csv` (sample rows per group), `outputs/clustering_evaluation_report_<ts>.json` (cohesion/separation metrics).
+- Use TF-IDF (sklearn.TfidfVectorizer) with optional `jieba` for Chinese tokenization. Compute mean cosine-to-centroid per group and mean inter-centroid similarity; optionally compute silhouette score.
+- README: `docs/clustering_evaluation_README.md` with examples and quick run commands.
+
+Acceptance criteria:
+-  run_clustering_evaluation.py runs on target environment with scikit-learn and pandas and writes outputs to `outputs/`.
+-  The CSV contains sampled events with group_label, group_size, sample text, and cohesion score.
+
+Priority (MVP-C):
+1. Implement evaluation script and README.
+2. Wire it into operational flow and QA process.
+3. (Optional) Add embedding-based evaluation later.
+
+
+Additional context: include the full requirements document from rules/需求文档V4.0.md in .taskmaster/docs if needed for parsing.
