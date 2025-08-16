@@ -85,8 +85,8 @@ cortex:
     # Time window for grouping events (in days)
     time_window_days: 30
     # DBSCAN `eps` parameter: The maximum distance between two samples for one to be considered as in the neighborhood of the other.
-    # Reduced from 0.8 to 0.6 for tighter clustering
-    dbscan_eps: 0.6
+    # Reduced from 0.6 to 0.3 for much tighter clustering to avoid mega-clusters
+    dbscan_eps: 0.3
     # DBSCAN `min_samples` parameter: The number of samples in a neighborhood for a point to be considered as a core point.
     dbscan_min_samples: 2
 

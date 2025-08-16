@@ -79,6 +79,17 @@ def enhanced_cortex_workflow():
     
     print(f"📊 发现 {len(pending_events_df)} 个待聚类事件")
     
+    # 检查测试限制
+    test_limit = os.getenv('TEST_LIMIT')
+    if test_limit:
+        try:
+            limit = int(test_limit)
+            if len(pending_events_df) > limit:
+                pending_events_df = pending_events_df.head(limit)
+                print(f"🧪 测试模式: 限制处理 {limit} 个事件")
+        except ValueError:
+            print("⚠️ TEST_LIMIT 环境变量无效，忽略限制")
+    
     # 3. 初始化增强版 Cortex 代理
     cortex_agent = EnhancedCortexAgent()
     
@@ -128,11 +139,12 @@ def enhanced_cortex_workflow():
         enhanced_summary = cortex_agent.generate_enhanced_story_summary(cluster_indices, events)
         print(f"📝 增强摘要: {enhanced_summary}")
         
-        # 准备事件文本用于LLM摘要
+        # 准备事件文本用于LLM摘要 - 限制大小避免API错误
         cluster_texts = []
         cluster_event_ids = []
+        max_events_for_llm = 50  # 限制LLM处理的事件数量
         
-        for idx in cluster_indices:
+        for idx in cluster_indices[:max_events_for_llm]:  # 只取前50个事件
             event = events[idx]
             cluster_event_ids.append(event['id'])
             
@@ -143,17 +155,22 @@ def enhanced_cortex_workflow():
                     structured = json.loads(structured_data)
                     description = structured.get('description', '')
                     if description:
-                        cluster_texts.append(f"事件{idx+1}: {description}")
+                        cluster_texts.append(f"事件{idx+1}: {description[:100]}...")  # 限制单个事件长度
                     else:
-                        cluster_texts.append(f"事件{idx+1}: {event['source_text'][:100]}...")
+                        cluster_texts.append(f"事件{idx+1}: {event['source_text'][:80]}...")
                 except:
-                    cluster_texts.append(f"事件{idx+1}: {event['source_text'][:100]}...")
+                    cluster_texts.append(f"事件{idx+1}: {event['source_text'][:80]}...")
             else:
-                cluster_texts.append(f"事件{idx+1}: {event['source_text'][:100]}...")
+                cluster_texts.append(f"事件{idx+1}: {event['source_text'][:80]}...")
         
-        # 使用LLM生成故事摘要
+        # 所有事件ID都要更新，不只是用于LLM的前50个
+        cluster_event_ids = [events[idx]['id'] for idx in cluster_indices]
+        
+        # 使用LLM生成故事摘要 - 添加大簇提示
         events_text = "\\n".join(cluster_texts)
-        prompt = f"""请基于以下相关事件，生成一个连贯的故事摘要：
+        size_note = f" (注：此簇共{len(cluster_indices)}个事件，以下仅展示前{min(len(cluster_indices), max_events_for_llm)}个)" if len(cluster_indices) > max_events_for_llm else ""
+        
+        prompt = f"""请基于以下相关事件，生成一个连贯的故事摘要{size_note}：
 
 {events_text}
 
@@ -218,11 +235,6 @@ def enhanced_cortex_workflow():
 
 if __name__ == "__main__":
     try:
-        # 检查测试限制
-        test_limit = os.getenv('TEST_LIMIT')
-        if test_limit:
-            print(f"🧪 测试模式: 限制处理 {test_limit} 个事件")
-        
         success = enhanced_cortex_workflow()
         
         if success:

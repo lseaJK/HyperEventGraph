@@ -62,47 +62,63 @@ class EnhancedCortexAgent:
         try:
             from sentence_transformers import SentenceTransformer
             model_name = self.cortex_config.get('vectorizer', {}).get('model_name', 'BAAI/bge-large-zh-v1.5')
-            self.embedding_model = SentenceTransformer(model_name)
-            logger.info(f"✅ 加载嵌入模型: {model_name}")
+            # 使用配置中的缓存目录
+            cache_dir = self.config.get('model_settings', {}).get('cache_dir', '/home/kai/models')
+            self.embedding_model = SentenceTransformer(model_name, cache_folder=cache_dir)
+            logger.info(f"✅ 加载嵌入模型: {model_name} (缓存: {cache_dir})")
         except Exception as e:
             logger.error(f"❌ 嵌入模型加载失败: {e}")
             self.embedding_model = None
     
     def parse_event_date(self, date_str: str) -> datetime:
-        """解析多种格式的事件日期"""
+        """解析多种格式的事件日期，尽量保持原始精度"""
         if not date_str:
-            return datetime.now()
+            return datetime(2023, 1, 1)  # 默认假设2023年开始
         
-        # 常见日期格式的正则表达式
+        date_str = str(date_str).strip()
+        
+        # 常见日期格式的正则表达式，按精度从高到低排序
         patterns = [
-            (r'(\d{4})-(\d{1,2})-(\d{1,2})', '%Y-%m-%d'),      # 2023-07-21
-            (r'(\d{4})-H(\d)', None),                          # 2023-H1 (上半年)
-            (r'(\d{4})-Q(\d)', None),                          # 2023-Q1 (季度)
-            (r'(\d{4})', '%Y'),                                # 2023 (年)
+            # 完整日期
+            (r'(\d{4})-(\d{1,2})-(\d{1,2})', lambda m: datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))),
+            # 年-月
+            (r'(\d{4})-(\d{1,2})$', lambda m: datetime(int(m.group(1)), int(m.group(2)), 1)),  # 月初
+            # 半年格式
+            (r'(\d{4})-H(\d)', lambda m: datetime(int(m.group(1)), 6 if int(m.group(2)) == 2 else 1, 1)),
+            # 季度格式  
+            (r'(\d{4})-Q(\d)', lambda m: datetime(int(m.group(1)), (int(m.group(2)) - 1) * 3 + 1, 1)),
+            # 年份
+            (r'(\d{4})$', lambda m: datetime(int(m.group(1)), 1, 1)),  # 年初
         ]
         
-        for pattern, fmt in patterns:
-            match = re.match(pattern, str(date_str))
+        # 尝试精确匹配
+        for pattern, converter in patterns:
+            match = re.match(pattern, date_str)
             if match:
-                if 'H' in date_str:  # 半年
-                    year = int(match.group(1))
-                    half = int(match.group(2))
-                    month = 6 if half == 2 else 1
-                    return datetime(year, month, 1)
-                elif 'Q' in date_str:  # 季度
-                    year = int(match.group(1))
-                    quarter = int(match.group(2))
-                    month = (quarter - 1) * 3 + 1
-                    return datetime(year, month, 1)
-                elif fmt:
-                    try:
-                        return datetime.strptime(date_str, fmt)
-                    except:
-                        continue
+                try:
+                    return converter(match)
+                except (ValueError, IndexError):
+                    continue
         
-        # 默认返回当前时间
-        logger.warning(f"⚠️ 无法解析日期格式: {date_str}")
-        return datetime.now()
+        # 对于复杂格式，提取第一个完整的年份，保持年份精度
+        year_match = re.search(r'(\d{4})', date_str)
+        if year_match:
+            year = int(year_match.group(1))
+            # 检查是否有月份信息
+            month_match = re.search(r'-(\d{1,2})', date_str)
+            if month_match:
+                try:
+                    month = int(month_match.group(1))
+                    if 1 <= month <= 12:
+                        return datetime(year, month, 1)
+                except ValueError:
+                    pass
+            # 只有年份信息
+            return datetime(year, 1, 1)
+        
+        # 完全无法解析时的备选方案
+        logger.warning(f"⚠️ 无法解析日期格式: {date_str}，保留原始字符串，使用2023-01-01作为排序基准")
+        return datetime(2023, 1, 1)
     
     def extract_event_features(self, events: List[Dict]) -> np.ndarray:
         """提取多维度事件特征"""
@@ -351,7 +367,7 @@ class EnhancedCortexAgent:
         
         # 提取关键信息
         entities = set()
-        time_range = []
+        raw_dates = []  # 保存原始日期字符串
         event_types = set()
         descriptions = []
         
@@ -368,9 +384,10 @@ class EnhancedCortexAgent:
                 if isinstance(entity, dict):
                     entities.add(entity.get('entity_name', ''))
             
-            # 时间
-            event_date = self.parse_event_date(event.get('event_date', ''))
-            time_range.append(event_date)
+            # 时间 - 保存原始字符串
+            raw_date = event.get('event_date', '')
+            if raw_date:
+                raw_dates.append(raw_date)
             
             # 类型
             event_types.add(event.get('assigned_event_type', ''))
@@ -390,19 +407,16 @@ class EnhancedCortexAgent:
         # 构建摘要
         summary_parts = []
         
-        # 时间范围
-        if time_range:
-            time_range.sort()
-            start_time = time_range[0]
-            end_time = time_range[-1]
-            
-            if start_time.year == end_time.year:
-                if start_time.month == end_time.month:
-                    time_str = f"{start_time.year}年{start_time.month}月"
-                else:
-                    time_str = f"{start_time.year}年{start_time.month}-{end_time.month}月"
+        # 时间范围 - 使用原始日期字符串
+        if raw_dates:
+            # 去重并排序
+            unique_dates = sorted(set(raw_dates))
+            if len(unique_dates) == 1:
+                time_str = unique_dates[0]
+            elif len(unique_dates) == 2:
+                time_str = f"{unique_dates[0]} ~ {unique_dates[1]}"
             else:
-                time_str = f"{start_time.year}-{end_time.year}年"
+                time_str = f"{unique_dates[0]} ~ {unique_dates[-1]} (共{len(unique_dates)}个时间点)"
             
             summary_parts.append(f"时间：{time_str}")
         

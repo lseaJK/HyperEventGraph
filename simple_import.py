@@ -116,7 +116,7 @@ def import_events_simple(jsonl_file: str, db_path: str = "master_state.db"):
 
 if __name__ == "__main__":
     import sys
-    jsonl_file = sys.argv[1] if len(sys.argv) > 1 else "docs/output/structured_events_0730.jsonl"
+    jsonl_file = sys.argv[1] if len(sys.argv) > 1 else "output/extraction/structured_events_0813.jsonl"
     success = import_events_simple(jsonl_file)
     
     if success:
