@@ -73,14 +73,20 @@ cortex:
     # Threshold for what constitutes a "large" cluster that needs special handling.
     large_cluster_threshold: 20
   clustering:
+    # Enhanced clustering parameters for multi-dimensional approach
     # Weight for entity similarity in the final distance calculation.
-    # A value of 0 means only vector similarity is used.
-    # A value of 1 means only entity similarity is used.
-    # A good starting point is 0.3.
     entity_weight: 0.3
+    # Weight for semantic similarity (BGE embeddings)
+    semantic_weight: 0.4
+    # Weight for time-based features
+    time_weight: 0.2
+    # Weight for event type features
+    type_weight: 0.1
+    # Time window for grouping events (in days)
+    time_window_days: 30
     # DBSCAN `eps` parameter: The maximum distance between two samples for one to be considered as in the neighborhood of the other.
-    # This is the most important DBSCAN parameter to tune.
-    dbscan_eps: 0.8
+    # Reduced from 0.8 to 0.6 for tighter clustering
+    dbscan_eps: 0.6
     # DBSCAN `min_samples` parameter: The number of samples in a neighborhood for a point to be considered as a core point.
     dbscan_min_samples: 2
 

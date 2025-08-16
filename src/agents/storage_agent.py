@@ -167,13 +167,12 @@ class StorageAgent:
         """
         A single transaction to create all relationships between events.
         """
+        # Use native Cypher CREATE statement since APOC is not available
         query = """
         MATCH (source:Event {eventId: $source_id})
         MATCH (target:Event {eventId: $target_id})
-        // Use apoc.create.relationship for dynamic relationship types
-        CALL apoc.create.relationship(source, $rel_type, {reason: $reason}, target)
-        YIELD rel
-        RETURN rel
+        CREATE (source)-[r:RELATES_TO {type: $rel_type, reason: $reason}]->(target)
+        RETURN r
         """
         for rel in relationships:
             # Basic validation
@@ -204,8 +203,10 @@ class StorageAgent:
             # 1. Store original source text
             source_text = event_data.get('source_text', '') or event_data.get('text', '') if event_data else ''
             if source_text:
+                source_embedding = self._embedding_model.encode([source_text])[0].tolist()
                 self._source_text_collection.add(
                     documents=[source_text],
+                    embeddings=[source_embedding],
                     metadatas=[{"event_id": event_id, "type": "source_text"}],
                     ids=[f"{event_id}_source"]
                 )
@@ -226,8 +227,10 @@ class StorageAgent:
                 if isinstance(structured_data, dict):
                     event_description = structured_data.get('description', '')
                     if event_description:
+                        desc_embedding = self._embedding_model.encode([event_description])[0].tolist()
                         self._event_desc_collection.add(
                             documents=[event_description],
+                            embeddings=[desc_embedding],
                             metadatas=[{"event_id": event_id, "type": "event_description"}],
                             ids=[f"{event_id}_desc"]
                         )
@@ -266,8 +269,10 @@ class StorageAgent:
                             entity_ids.append(f"{event_id}_entity_{i}")
             
                 if entity_contexts:
+                    entity_embeddings = self._embedding_model.encode(entity_contexts).tolist()
                     self._entity_context_collection.add(
                         documents=entity_contexts,
+                        embeddings=entity_embeddings,
                         metadatas=[{"event_id": event_id, "type": "entity_context"}] * len(entity_contexts),
                         ids=entity_ids
                     )
