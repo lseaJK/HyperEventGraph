@@ -157,13 +157,36 @@ const KnowledgeGraph: React.FC = () => {
           <ForceGraph2D
             graphData={graphData}
             nodeLabel="name"
+            nodeVal={8}
             nodeColor={nodeColor}
+            nodeCanvasObject={(node, ctx, globalScale) => {
+              const label = node.name || '';
+              const fontSize = 12/globalScale;
+              ctx.font = `${fontSize}px Sans-Serif`;
+              const textWidth = ctx.measureText(label).width;
+              const bckgDimensions = [textWidth, fontSize].map(n => n + fontSize * 0.2);
+
+              // 绘制节点背景圆圈
+              ctx.fillStyle = nodeColor(node);
+              ctx.beginPath();
+              ctx.arc(node.x, node.y, 8, 0, 2 * Math.PI, false);
+              ctx.fill();
+
+              // 绘制文字背景
+              ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+              ctx.fillRect(node.x - bckgDimensions[0] / 2, node.y - bckgDimensions[1] / 2, bckgDimensions[0], bckgDimensions[1]);
+
+              // 绘制文字
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillStyle = 'black';
+              ctx.fillText(label, node.x, node.y);
+            }}
             linkLabel="label"
             linkColor={linkColor}
             linkDirectionalArrowLength={6}
             linkDirectionalArrowRelPos={1}
             linkWidth={2}
-            nodeRelSize={8}
             width={800}
             height={500}
             backgroundColor="#f8f9fa"
