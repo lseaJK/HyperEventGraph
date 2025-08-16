@@ -8,7 +8,10 @@ import type { WorkflowStatus } from '../services/api.ts';
 
 const COLORS = {
   pending_triage: '#FFBB28',
-  pending_extraction: '#FF8042',
+  pending_review: '#FF8042', 
+  pending_extraction: '#8884d8',
+  pending_clustering: '#82ca9d',
+  pending_relationship_analysis: '#ffc658',
   completed: '#00C49F',
 };
 
@@ -87,10 +90,10 @@ export const DashboardPage: React.FC = () => {
         Dashboard
       </Typography>
       <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 8 }}>
           <StatusPieChart data={pieChartData} />
         </Grid>
-        <Grid item xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <WorkflowStatusList workflows={workflows} />
         </Grid>
       </Grid>

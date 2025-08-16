@@ -71,7 +71,22 @@ export interface GraphData {
 export const getStatus = async (): Promise<SystemStatus> => {
   try {
     const response = await apiClient.get('/status');
-    return response.data;
+    const data = response.data;
+    
+    // 如果API返回空数据，返回测试数据以便查看界面效果
+    if (Object.keys(data).length === 0) {
+      console.log('API返回空状态，使用测试数据');
+      return {
+        pending_triage: 156,
+        pending_review: 89,
+        pending_extraction: 234,
+        pending_clustering: 67,
+        pending_relationship_analysis: 12,
+        completed: 1542
+      };
+    }
+    
+    return data;
   } catch (error) {
     console.error('获取状态失败:', error);
     // 返回备用数据，避免UI崩溃

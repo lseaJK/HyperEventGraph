@@ -16,8 +16,10 @@ const tableColumns: GridColDef[] = [
     field: 'involved_entities',
     headerName: 'Involved Entities',
     width: 300,
-    valueGetter: (value: { entity_name: string; entity_type: string }[]) =>
-      value.map(e => `${e.entity_name} (${e.entity_type})`).join(', '),
+    valueGetter: (value: { entity_name: string; entity_type: string }[]) => {
+      if (!value || !Array.isArray(value)) return '';
+      return value.map(e => `${e.entity_name} (${e.entity_type})`).join(', ');
+    },
   },
   {
     field: 'event_summary',
