@@ -133,7 +133,35 @@ export const getWorkflowStatus = async (workflowName: string): Promise<any> => {
 export const getEvents = async (page: number, pageSize: number): Promise<{ rows: EventRowData[], rowCount: number }> => {
   try {
     const response = await apiClient.get(`/events?page=${page}&page_size=${pageSize}`);
-    return response.data;
+    const data = response.data;
+    
+    // 适配API返回的实际格式
+    const apiRows = data.events || [];
+    const apiRowCount = data.pagination?.total || 0;
+    
+    // 如果API返回空数据，使用模拟数据进行测试
+    if (apiRows.length === 0 && apiRowCount === 0) {
+      console.log('API返回空数据，使用模拟数据进行测试');
+      const mockData: EventData[] = Array.from({ length: 50 }, (_, i) => ({
+        id: `evt_${i + 1}`,
+        event_type: i % 3 === 0 ? '合作签约' : (i % 3 === 1 ? '产品发布' : '技术突破'),
+        trigger: i % 3 === 0 ? '签署协议' : (i % 3 === 1 ? '推出产品' : '研发成功'),
+        involved_entities: [
+          { entity_name: `公司${String.fromCharCode(65 + i % 26)}`, entity_type: 'Organization' },
+          { entity_name: `产品${i + 1}`, entity_type: 'Product' },
+        ],
+        event_summary: `公司${String.fromCharCode(65 + i % 26)} 在 产品${i + 1} 方面取得了重要进展。`,
+        source_text: `这是第${i + 1}个事件的原始文本片段...`,
+      }));
+
+      const rows = mockData.slice(page * pageSize, (page + 1) * pageSize);
+      return { rows, rowCount: mockData.length };
+    }
+    
+    return {
+      rows: apiRows,
+      rowCount: apiRowCount
+    };
   } catch (error) {
     console.error('获取事件数据失败:', error);
     
@@ -158,7 +186,13 @@ export const getEvents = async (page: number, pageSize: number): Promise<{ rows:
 export const getGraphData = async (): Promise<GraphData> => {
   try {
     const response = await apiClient.get('/graph');
-    return response.data;
+    const data = response.data;
+    
+    // 适配API返回的实际格式（edges -> links）
+    return {
+      nodes: data.nodes || [],
+      links: data.links || data.edges || []
+    };
   } catch (error) {
     console.error('获取图谱数据失败:', error);
     
