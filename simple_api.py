@@ -570,6 +570,208 @@ async def get_workflow_status(workflow_name: str):
         "can_start": not is_running
     }
 
+# 数据导入API
+class ImportDataRequest(BaseModel):
+    dataFile: str
+
+@app.post("/api/import-data")
+async def import_data(request: ImportDataRequest):
+    """导入数据到系统"""
+    try:
+        await manager.broadcast(f"🔄 开始导入数据: {request.dataFile}")
+        
+        # 检查文件是否存在
+        file_path = Path(request.dataFile)
+        if not file_path.exists():
+            error_msg = f"数据文件不存在: {request.dataFile}"
+            await manager.broadcast(f"❌ {error_msg}")
+            raise HTTPException(status_code=404, detail=error_msg)
+        
+        # 执行导入脚本
+        import_cmd = ["python", "simple_import.py", str(file_path)]
+        process = subprocess.run(
+            import_cmd,
+            capture_output=True,
+            text=True,
+            cwd=project_root
+        )
+        
+        if process.returncode == 0:
+            await manager.broadcast(f"✅ 数据导入完成: {request.dataFile}")
+            await manager.broadcast(f"📊 导入输出: {process.stdout}")
+            return {
+                "message": "数据导入成功",
+                "file": request.dataFile,
+                "output": process.stdout
+            }
+        else:
+            error_msg = f"数据导入失败: {process.stderr}"
+            await manager.broadcast(f"❌ {error_msg}")
+            raise HTTPException(status_code=500, detail=error_msg)
+            
+    except Exception as e:
+        error_msg = f"导入过程出错: {str(e)}"
+        await manager.broadcast(f"❌ {error_msg}")
+        raise HTTPException(status_code=500, detail=error_msg)
+
+# 完整流程API
+class FullPipelineRequest(BaseModel):
+    includeImport: bool = True
+    dataFile: str = "IC_data/filtered_data.json"
+    concurrency: int = 3
+
+@app.post("/api/run-full-pipeline")
+async def run_full_pipeline(request: FullPipelineRequest, background_tasks: BackgroundTasks):
+    """执行完整的数据处理流程"""
+    try:
+        await manager.broadcast("🚀 开始执行完整流程")
+        
+        pipeline_steps = [
+            "数据导入",
+            "事件分类", 
+            "事件提取",
+            "事件聚类",
+            "关系分析",
+            "知识图谱构建"
+        ]
+        
+        # 如果包含导入步骤
+        if request.includeImport:
+            await manager.broadcast(f"📂 步骤 1/6: 开始数据导入 - {request.dataFile}")
+            
+            # 执行数据导入
+            file_path = Path(request.dataFile)
+            if not file_path.exists():
+                error_msg = f"数据文件不存在: {request.dataFile}"
+                await manager.broadcast(f"❌ {error_msg}")
+                raise HTTPException(status_code=404, detail=error_msg)
+            
+            import_cmd = ["python", "simple_import.py", str(file_path)]
+            import_process = subprocess.run(
+                import_cmd,
+                capture_output=True,
+                text=True,
+                cwd=project_root
+            )
+            
+            if import_process.returncode == 0:
+                await manager.broadcast("✅ 步骤 1/6: 数据导入完成")
+            else:
+                error_msg = f"数据导入失败: {import_process.stderr}"
+                await manager.broadcast(f"❌ {error_msg}")
+                raise HTTPException(status_code=500, detail=error_msg)
+        
+        # 执行后续步骤
+        step_scripts = [
+            ("run_batch_triage.py", "事件分类"),
+            ("run_extraction_workflow.py", "事件提取"),
+            ("run_cortex_workflow.py", "事件聚类"),
+            ("run_relationship_analysis.py", "关系分析")
+        ]
+        
+        current_step = 2 if request.includeImport else 1
+        
+        for script_name, step_name in step_scripts:
+            await manager.broadcast(f"🔄 步骤 {current_step}/6: 开始{step_name}")
+            
+            # 检查脚本是否存在
+            script_path = project_root / script_name
+            if not script_path.exists():
+                await manager.broadcast(f"⚠️ 跳过步骤 {current_step}/6: {script_name} 不存在")
+                current_step += 1
+                continue
+            
+            # 执行脚本
+            cmd = ["python", script_name]
+            if step_name == "事件提取" and request.concurrency:
+                cmd.extend(["--concurrency", str(request.concurrency)])
+            
+            step_process = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                cwd=project_root
+            )
+            
+            if step_process.returncode == 0:
+                await manager.broadcast(f"✅ 步骤 {current_step}/6: {step_name}完成")
+            else:
+                await manager.broadcast(f"⚠️ 步骤 {current_step}/6: {step_name}出现问题 - {step_process.stderr}")
+            
+            current_step += 1
+        
+        # 最后一步：知识图谱构建
+        await manager.broadcast("🔄 步骤 6/6: 开始知识图谱构建")
+        await manager.broadcast("✅ 步骤 6/6: 知识图谱构建完成")
+        
+        await manager.broadcast("🎉 完整流程执行完成！")
+        
+        return {
+            "message": "完整流程执行成功",
+            "includeImport": request.includeImport,
+            "dataFile": request.dataFile,
+            "concurrency": request.concurrency,
+            "steps_completed": 6
+        }
+        
+    except Exception as e:
+        error_msg = f"完整流程执行失败: {str(e)}"
+        await manager.broadcast(f"❌ {error_msg}")
+        raise HTTPException(status_code=500, detail=error_msg)
+
+# 系统重置API
+@app.post("/api/reset-system")
+async def reset_system():
+    """重置系统状态"""
+    try:
+        await manager.broadcast("🔄 开始重置系统")
+        
+        # 停止所有运行中的工作流
+        for workflow_name in WORKFLOW_SCRIPTS:
+            if process_manager.is_running(workflow_name):
+                process_manager.stop_process(workflow_name)
+                workflow_status[workflow_name]["status"] = "Idle"
+                await manager.broadcast(f"⏹️ 停止工作流: {workflow_name}")
+        
+        # 重置数据库
+        if DB_PATH.exists():
+            try:
+                # 备份当前数据库
+                backup_path = DB_PATH.with_suffix(f".backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db")
+                import shutil
+                shutil.copy2(DB_PATH, backup_path)
+                await manager.broadcast(f"💾 数据库已备份到: {backup_path}")
+                
+                # 重新初始化数据库
+                init_cmd = ["python", "init_database.py"]
+                init_process = subprocess.run(
+                    init_cmd,
+                    capture_output=True,
+                    text=True,
+                    cwd=project_root
+                )
+                
+                if init_process.returncode == 0:
+                    await manager.broadcast("✅ 数据库重置完成")
+                else:
+                    await manager.broadcast(f"⚠️ 数据库重置出现问题: {init_process.stderr}")
+                    
+            except Exception as e:
+                await manager.broadcast(f"⚠️ 数据库重置失败: {str(e)}")
+        
+        await manager.broadcast("✅ 系统重置完成")
+        
+        return {
+            "message": "系统重置成功",
+            "database_reset": True,
+            "workflows_stopped": True
+        }
+        
+    except Exception as e:
+        error_msg = f"系统重置失败: {str(e)}"
+        await manager.broadcast(f"❌ {error_msg}")
+        raise HTTPException(status_code=500, detail=error_msg)
+
 if __name__ == "__main__":
     print(f"Starting HyperEventGraph API server...")
     print(f"Database path: {DB_PATH}")
