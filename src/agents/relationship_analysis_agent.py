@@ -84,7 +84,8 @@ class RelationshipAnalysisAgent:
 
             # Use the client's robust JSON parsing for the response
             parsed_json = await self.llm_client.get_json_response(
-                messages=[{"role": "user", "content": f"Please parse the following text into a valid JSON array. The text is: {raw_response}"}]
+                messages=[{"role": "user", "content": f"Please parse the following text into a valid JSON array. The text is: {raw_response}"}],
+                task_type=self.task_type
             )
 
             if isinstance(parsed_json, list):

@@ -22,12 +22,18 @@ def check_data_integrity():
     """)
     
     result = cursor.fetchone()
-    total, has_source, has_entities, has_structured = result[3], result[0], result[1], result[2]
+    print(f"查询结果: {result}")
     
-    print(f"总记录数: {total}")
-    print(f"有source_text的记录: {has_source} ({has_source/total*100:.1f}%)")
-    print(f"有involved_entities的记录: {has_entities} ({has_entities/total*100:.1f}%)")
-    print(f"有structured_data的记录: {has_structured} ({has_structured/total*100:.1f}%)")
+    if result and result[3] > 0:
+        total, has_source, has_entities, has_structured = result[3], result[0] or 0, result[1] or 0, result[2] or 0
+        
+        print(f"总记录数: {total}")
+        print(f"有source_text的记录: {has_source} ({has_source/total*100:.1f}%)")
+        print(f"有involved_entities的记录: {has_entities} ({has_entities/total*100:.1f}%)")
+        print(f"有structured_data的记录: {has_structured} ({has_structured/total*100:.1f}%)")
+    else:
+        print("❌ 查询结果异常或没有记录")
+        return
     
     # 找一条有完整数据的记录
     cursor.execute("""

@@ -27,6 +27,8 @@ def import_events_simple(jsonl_file: str, db_path: str = "master_state.db"):
             assigned_event_type TEXT,
             story_id TEXT,
             notes TEXT,
+            involved_entities TEXT,
+            structured_data TEXT,
             last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -48,19 +50,32 @@ def import_events_simple(jsonl_file: str, db_path: str = "master_state.db"):
                 # 生成ID
                 record_id = hashlib.md5(source_text.encode()).hexdigest()
                 
+                # 准备结构化数据
+                structured_data = {
+                    'quantitative_data': data.get('quantitative_data'),
+                    'event_date': data.get('event_date'),
+                    'description': data.get('description'),
+                    'micro_event_type': data.get('micro_event_type'),
+                    'forecast': data.get('forecast')
+                }
+                
+                involved_entities = data.get('involved_entities', [])
+                
                 # 插入记录（如果ID重复会被忽略）
                 try:
                     cursor.execute("""
                         INSERT OR IGNORE INTO master_state 
-                        (id, source_text, current_status, triage_confidence, assigned_event_type, notes)
-                        VALUES (?, ?, ?, ?, ?, ?)
+                        (id, source_text, current_status, triage_confidence, assigned_event_type, notes, structured_data, involved_entities)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         record_id,
                         source_text,
                         'pending_clustering',
                         1.0,
                         data.get('event_type', 'unknown'),
-                        f'Imported event: {data.get("description", "")[:100]}...'
+                        f'Imported event: {data.get("description", "")[:100]}...',
+                        json.dumps(structured_data, ensure_ascii=False),
+                        json.dumps(involved_entities, ensure_ascii=False)
                     ))
                     
                     if cursor.rowcount > 0:

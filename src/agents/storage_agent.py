@@ -35,10 +35,24 @@ class StorageAgent:
 
         try:
             self._chroma_client = chromadb.PersistentClient(path=str(chroma_db_path))
-            # Initialize collections for different types of text data
-            self._source_text_collection = self._chroma_client.get_or_create_collection("source_texts")
-            self._event_desc_collection = self._chroma_client.get_or_create_collection("event_descriptions")
-            self._entity_context_collection = self._chroma_client.get_or_create_collection("entity_centric_contexts")
+            # Initialize collections for different types of text data with correct embedding dimension
+            # BGE-large-zh-v1.5 outputs 1024-dimensional embeddings
+            metadata = {"hnsw:space": "cosine"}
+            self._source_text_collection = self._chroma_client.get_or_create_collection(
+                "source_texts", 
+                embedding_function=None,  # We'll provide embeddings manually
+                metadata=metadata
+            )
+            self._event_desc_collection = self._chroma_client.get_or_create_collection(
+                "event_descriptions",
+                embedding_function=None,
+                metadata=metadata
+            )
+            self._entity_context_collection = self._chroma_client.get_or_create_collection(
+                "entity_centric_contexts",
+                embedding_function=None,
+                metadata=metadata
+            )
             print(f"ChromaDB client connected at '{chroma_db_path}'.")
         except Exception as e:
             print(f"Error connecting to ChromaDB: {e}")
