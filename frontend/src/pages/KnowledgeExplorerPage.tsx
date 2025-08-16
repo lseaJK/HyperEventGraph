@@ -120,31 +120,30 @@ const KnowledgeGraph: React.FC = () => {
     );
   }
 
+  // 事件图谱的颜色编码系统：按事件层次区分
   const nodeColor = (node: any) => {
-    switch (node.type) {
-      case 'Event': return '#ff6b6b';
-      case 'EventCategory': return '#ff9999';
-      case 'Organization': return '#4ecdc4';
-      case 'TechDomain': return '#95e1d3';
-      case 'Entity': return '#6c5ce7';
-      default: return '#ddd';
+    // 根据节点名称判断事件层次
+    if (node.name.includes('技术产业升级') || node.name.includes('企业数字化转型') || 
+        node.name.includes('市场竞争格局变化') || node.name.includes('产业生态重构')) {
+      return '#FF6B6B'; // 红色 - 高层次事件
     }
+    if (node.name.includes('5G技术商业化') || node.name.includes('AI技术产业') || 
+        node.name.includes('企业云服务') || node.name.includes('智能制造') ||
+        node.name.includes('市场份额') || node.name.includes('新兴技术') ||
+        node.name.includes('产业链整合') || node.name.includes('跨界合作')) {
+      return '#4ECDC4'; // 青色 - 中层次事件
+    }
+    return '#45B7D1'; // 蓝色 - 低层次事件（具体操作事件）
   };
 
+  // 事件关系的颜色编码
   const linkColor = (link: any) => {
     switch (link.label) {
-      case 'IS_INSTANCE_OF': return '#8e44ad';      // 紫色：实例归属关系
-      case 'EXECUTED': return '#3498db';            // 蓝色：执行关系
-      case 'APPLIES_TO': return '#e74c3c';          // 红色：应用关系
-      case 'LEADS_TO': return '#f39c12';            // 橙色：概念流转关系
-      case 'FOLLOWED_BY': return '#27ae60';         // 绿色：事件时序关系
-      case 'COOPERATES_WITH': return '#9b59b6';     // 深紫色：合作关系
-      case 'INVOLVED_IN': return '#ffd93d';         // 黄色：参与关系
-      case 'BELONGS_TO': return '#a29bfe';          // 浅紫色：归属关系
-      case 'PRECEDES': return '#6bcf7f';            // 浅绿色：前置关系
-      case 'SYNERGIZES_WITH': return '#e17055';     // 橙红色：协同关系
-      case 'RELATED_TO': return '#ff9ff3';          // 粉色：相关关系
-      default: return '#95a5a6';                    // 灰色：其他关系
+      case 'CONTRIBUTES_TO': return '#FF9F43'; // 橙色 - 贡献关系（层次向上）
+      case 'TRIGGERS': return '#6C5CE7'; // 紫色 - 触发关系（同层级）
+      case 'FOLLOWED_BY': return '#A8E6CF'; // 淡绿色 - 时序关系
+      case 'INFLUENCES': return '#FD79A8'; // 粉色 - 直接影响关系（跨层级）
+      default: return '#95A5A6'; // 灰色 - 其他关系
     }
   };
 

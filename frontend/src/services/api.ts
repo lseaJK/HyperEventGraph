@@ -211,41 +211,48 @@ export const getGraphData = async (): Promise<GraphData> => {
     
     // 强制生成丰富的测试数据来展示网络能力
     if (true || apiResult.nodes.length <= 10) {
-      console.log('强制生成丰富的网络图谱数据，展示完整的知识图谱能力');
+      console.log('强制生成事件层次图谱数据，展示从低层次到高层次的事件关系');
       
-      // 设计分层的知识图谱：事件概念层 + 具体事件层
-      const eventConcepts = ['技术创新', '商业合作', '产品发布', '市场扩张', '投资并购', '专利申请'];
-      const organizations = ['华为技术', '腾讯控股', '阿里巴巴集团', '百度科技', '字节跳动', '小米集团'];
-      const techDomains = ['人工智能', '5G通信', '云计算', '智能制造', '移动互联网', '物联网'];
-      
+      // 构建事件图谱：从低层次到高层次的事件关系
       const nodes: GraphNode[] = [];
       const links: GraphLink[] = [];
       
-      // === 事件概念层 ===
-      eventConcepts.forEach((concept, i) => {
-        nodes.push({
-          id: `concept_${i + 1}`,
-          name: concept,
-          type: 'EventCategory'
-        });
-      });
-      
-      // === 具体事件层：保留完整语义 ===
-      const concreteEvents = [
-        { id: 'evt_001', name: '华为发布5G基站新技术', concept: '技术创新', org: '华为技术', domain: '5G通信' },
-        { id: 'evt_002', name: '腾讯与阿里巴巴达成云服务合作', concept: '商业合作', org: '腾讯控股', domain: '云计算' },
-        { id: 'evt_003', name: '小米推出新一代智能手机', concept: '产品发布', org: '小米集团', domain: '智能制造' },
-        { id: 'evt_004', name: '百度AI技术专利申请获批', concept: '专利申请', org: '百度科技', domain: '人工智能' },
-        { id: 'evt_005', name: '字节跳动进军海外市场', concept: '市场扩张', org: '字节跳动', domain: '移动互联网' },
-        { id: 'evt_006', name: '阿里投资物联网初创公司', concept: '投资并购', org: '阿里巴巴集团', domain: '物联网' },
-        { id: 'evt_007', name: '华为与小米建立技术合作伙伴关系', concept: '商业合作', org: '华为技术', domain: '5G通信' },
-        { id: 'evt_008', name: '腾讯发布新版云计算平台', concept: '产品发布', org: '腾讯控股', domain: '云计算' },
-        { id: 'evt_009', name: '百度自动驾驶技术突破', concept: '技术创新', org: '百度科技', domain: '人工智能' },
-        { id: 'evt_010', name: '字节跳动收购AI芯片公司', concept: '投资并购', org: '字节跳动', domain: '人工智能' }
+      // === 高层次事件（抽象事件类别）===
+      const highLevelEvents = [
+        { id: 'evt_high_001', name: '技术产业升级', type: 'Event', level: 'high' },
+        { id: 'evt_high_002', name: '企业数字化转型', type: 'Event', level: 'high' },
+        { id: 'evt_high_003', name: '市场竞争格局变化', type: 'Event', level: 'high' },
+        { id: 'evt_high_004', name: '产业生态重构', type: 'Event', level: 'high' }
       ];
       
-      // 添加具体事件节点
-      concreteEvents.forEach(event => {
+      // === 中层次事件（具体业务事件）===
+      const midLevelEvents = [
+        { id: 'evt_mid_001', name: '5G技术商业化部署', type: 'Event', level: 'mid', parent: 'evt_high_001' },
+        { id: 'evt_mid_002', name: 'AI技术产业应用', type: 'Event', level: 'mid', parent: 'evt_high_001' },
+        { id: 'evt_mid_003', name: '企业云服务迁移', type: 'Event', level: 'mid', parent: 'evt_high_002' },
+        { id: 'evt_mid_004', name: '智能制造转型', type: 'Event', level: 'mid', parent: 'evt_high_002' },
+        { id: 'evt_mid_005', name: '市场份额争夺', type: 'Event', level: 'mid', parent: 'evt_high_003' },
+        { id: 'evt_mid_006', name: '新兴技术竞赛', type: 'Event', level: 'mid', parent: 'evt_high_003' },
+        { id: 'evt_mid_007', name: '产业链整合', type: 'Event', level: 'mid', parent: 'evt_high_004' },
+        { id: 'evt_mid_008', name: '跨界合作兴起', type: 'Event', level: 'mid', parent: 'evt_high_004' }
+      ];
+      
+      // === 低层次事件（具体操作事件）===
+      const lowLevelEvents = [
+        { id: 'evt_low_001', name: '华为发布5G基站设备', type: 'Event', level: 'low', parent: 'evt_mid_001' },
+        { id: 'evt_low_002', name: '运营商建设5G网络', type: 'Event', level: 'low', parent: 'evt_mid_001' },
+        { id: 'evt_low_003', name: '百度推出自动驾驶平台', type: 'Event', level: 'low', parent: 'evt_mid_002' },
+        { id: 'evt_low_004', name: '腾讯发布AI语音助手', type: 'Event', level: 'low', parent: 'evt_mid_002' },
+        { id: 'evt_low_005', name: '阿里企业客户迁移至云', type: 'Event', level: 'low', parent: 'evt_mid_003' },
+        { id: 'evt_low_006', name: '传统企业采用云服务', type: 'Event', level: 'low', parent: 'evt_mid_003' },
+        { id: 'evt_low_007', name: '小米建设智能工厂', type: 'Event', level: 'low', parent: 'evt_mid_004' },
+        { id: 'evt_low_008', name: '制造业引入机器人', type: 'Event', level: 'low', parent: 'evt_mid_004' },
+        { id: 'evt_low_009', name: '字节跳动海外扩张', type: 'Event', level: 'low', parent: 'evt_mid_005' },
+        { id: 'evt_low_010', name: '短视频平台用户争夺', type: 'Event', level: 'low', parent: 'evt_mid_005' }
+      ];
+      
+      // 添加所有事件节点
+      [...highLevelEvents, ...midLevelEvents, ...lowLevelEvents].forEach(event => {
         nodes.push({
           id: event.id,
           name: event.name,
@@ -253,80 +260,57 @@ export const getGraphData = async (): Promise<GraphData> => {
         });
       });
       
-      // === 组织和技术领域层 ===
-      organizations.forEach((org, i) => {
-        nodes.push({
-          id: `org_${i + 1}`,
-          name: org,
-          type: 'Organization'
+      // === 建立事件层次关系 ===
+      
+      // 1. 中层事件 → 高层事件 (CONTRIBUTES_TO)
+      midLevelEvents.forEach(event => {
+        links.push({
+          source: event.id,
+          target: event.parent,
+          label: 'CONTRIBUTES_TO'
         });
       });
       
-      techDomains.forEach((domain, i) => {
-        nodes.push({
-          id: `domain_${i + 1}`,
-          name: domain,
-          type: 'TechDomain'
+      // 2. 低层事件 → 中层事件 (CONTRIBUTES_TO)
+      lowLevelEvents.forEach(event => {
+        links.push({
+          source: event.id,
+          target: event.parent,
+          label: 'CONTRIBUTES_TO'
         });
       });
       
-      // === 建立分层关联关系 ===
+      // 3. 同层级事件间的流转关系 (TRIGGERS)
       
-      // 1. 具体事件 → 事件概念 (IS_INSTANCE_OF)
-      concreteEvents.forEach(event => {
-        const conceptIdx = eventConcepts.indexOf(event.concept);
-        if (conceptIdx >= 0) {
-          links.push({
-            source: event.id,
-            target: `concept_${conceptIdx + 1}`,
-            label: 'IS_INSTANCE_OF'
-          });
-        }
-      });
-      
-      // 2. 具体事件 → 组织 (EXECUTED_BY)
-      concreteEvents.forEach(event => {
-        const orgIdx = organizations.indexOf(event.org);
-        if (orgIdx >= 0) {
-          links.push({
-            source: `org_${orgIdx + 1}`,
-            target: event.id,
-            label: 'EXECUTED'
-          });
-        }
-      });
-      
-      // 3. 具体事件 → 技术领域 (APPLIES_TO)
-      concreteEvents.forEach(event => {
-        const domainIdx = techDomains.indexOf(event.domain);
-        if (domainIdx >= 0) {
-          links.push({
-            source: event.id,
-            target: `domain_${domainIdx + 1}`,
-            label: 'APPLIES_TO'
-          });
-        }
-      });
-      
-      // 4. 事件概念间的流转关系 (LEADS_TO)
+      // 高层事件间的触发关系
       links.push(
-        { source: 'concept_1', target: 'concept_3', label: 'LEADS_TO' }, // 技术创新 → 产品发布
-        { source: 'concept_3', target: 'concept_4', label: 'LEADS_TO' }, // 产品发布 → 市场扩张
-        { source: 'concept_2', target: 'concept_5', label: 'LEADS_TO' }, // 商业合作 → 投资并购
-        { source: 'concept_1', target: 'concept_6', label: 'LEADS_TO' }  // 技术创新 → 专利申请
+        { source: 'evt_high_001', target: 'evt_high_002', label: 'TRIGGERS' }, // 技术升级 → 数字化转型
+        { source: 'evt_high_002', target: 'evt_high_003', label: 'TRIGGERS' }, // 数字化转型 → 竞争格局变化
+        { source: 'evt_high_003', target: 'evt_high_004', label: 'TRIGGERS' }  // 竞争格局变化 → 产业生态重构
       );
       
-      // 5. 具体事件间的时序关系 (FOLLOWED_BY)
+      // 中层事件间的触发关系
       links.push(
-        { source: 'evt_001', target: 'evt_003', label: 'FOLLOWED_BY' }, // 华为5G技术 → 小米智能手机
-        { source: 'evt_004', target: 'evt_009', label: 'FOLLOWED_BY' }, // 百度AI专利 → 百度自动驾驶
-        { source: 'evt_002', target: 'evt_008', label: 'FOLLOWED_BY' }  // 腾讯阿里合作 → 腾讯云平台
+        { source: 'evt_mid_001', target: 'evt_mid_002', label: 'TRIGGERS' }, // 5G部署 → AI应用
+        { source: 'evt_mid_003', target: 'evt_mid_004', label: 'TRIGGERS' }, // 云服务迁移 → 智能制造
+        { source: 'evt_mid_005', target: 'evt_mid_006', label: 'TRIGGERS' }, // 市场争夺 → 技术竞赛
+        { source: 'evt_mid_007', target: 'evt_mid_008', label: 'TRIGGERS' }  // 产业链整合 → 跨界合作
       );
       
-      // 6. 组织间合作关系 (COOPERATES_WITH)
+      // 低层事件间的时序关系 (FOLLOWED_BY)
       links.push(
-        { source: 'org_1', target: 'org_6', label: 'COOPERATES_WITH' }, // 华为 ↔ 小米
-        { source: 'org_2', target: 'org_3', label: 'COOPERATES_WITH' }  // 腾讯 ↔ 阿里巴巴
+        { source: 'evt_low_001', target: 'evt_low_002', label: 'FOLLOWED_BY' }, // 华为5G设备 → 运营商建网
+        { source: 'evt_low_003', target: 'evt_low_004', label: 'FOLLOWED_BY' }, // 百度自动驾驶 → 腾讯AI助手
+        { source: 'evt_low_005', target: 'evt_low_006', label: 'FOLLOWED_BY' }, // 阿里云迁移 → 传统企业采用
+        { source: 'evt_low_007', target: 'evt_low_008', label: 'FOLLOWED_BY' }, // 小米智能工厂 → 制造业机器人
+        { source: 'evt_low_009', target: 'evt_low_010', label: 'FOLLOWED_BY' }  // 字节海外扩张 → 用户争夺
+      );
+      
+      // 4. 跨层级的直接影响关系 (INFLUENCES)
+      links.push(
+        { source: 'evt_low_001', target: 'evt_high_001', label: 'INFLUENCES' }, // 华为5G → 技术产业升级
+        { source: 'evt_low_005', target: 'evt_high_002', label: 'INFLUENCES' }, // 阿里云迁移 → 数字化转型
+        { source: 'evt_low_009', target: 'evt_high_003', label: 'INFLUENCES' }  // 字节海外扩张 → 竞争格局变化
       );
       
       return { nodes, links };
