@@ -588,7 +588,7 @@ async def import_data(request: ImportDataRequest):
             raise HTTPException(status_code=404, detail=error_msg)
         
         # 执行导入脚本
-        import_cmd = ["python", "simple_import.py", str(file_path)]
+        import_cmd = ["python", "import_text_array.py", str(file_path)]
         process = subprocess.run(
             import_cmd,
             capture_output=True,
@@ -646,7 +646,7 @@ async def run_full_pipeline(request: FullPipelineRequest, background_tasks: Back
                 await manager.broadcast(f"❌ {error_msg}")
                 raise HTTPException(status_code=404, detail=error_msg)
             
-            import_cmd = ["python", "simple_import.py", str(file_path)]
+            import_cmd = ["python", "import_text_array.py", str(file_path)]
             import_process = subprocess.run(
                 import_cmd,
                 capture_output=True,
