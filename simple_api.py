@@ -525,6 +525,133 @@ async def get_graph():
             "edges": []
         }
 
+@app.get("/api/graph-data")
+async def get_graph_data():
+    """获取知识图谱数据 - 为前端提供标准化数据格式"""
+    try:
+        # 连接数据库获取处理过的事件数据
+        import sqlite3
+        conn = sqlite3.connect("master_state.db")
+        cursor = conn.cursor()
+        
+        # 获取已处理的事件数据构建图谱
+        cursor.execute("""
+            SELECT id, source_text, current_status, assigned_event_type, notes
+            FROM master_state 
+            WHERE current_status IN ('triaged', 'extracted', 'clustered', 'analyzed')
+            LIMIT 50
+        """)
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        # 构建节点和边
+        nodes = []
+        edges = []
+        
+        for i, row in enumerate(rows):
+            event_id, source_text, status, event_type, notes = row
+            
+            # 创建事件节点
+            nodes.append({
+                "id": event_id,
+                "type": "Event",
+                "name": f"{event_type or 'Event'}_{event_id[:8]}",
+                "level": "mid",
+                "summary": source_text[:100] + "..." if len(source_text) > 100 else source_text
+            })
+            
+            # 如果有事件类型，创建类型节点
+            if event_type:
+                type_id = f"type_{event_type}"
+                if not any(n["id"] == type_id for n in nodes):
+                    nodes.append({
+                        "id": type_id,
+                        "type": "EventCategory", 
+                        "name": event_type,
+                        "level": "high"
+                    })
+                
+                # 连接事件到类型
+                edges.append({
+                    "source": event_id,
+                    "target": type_id,
+                    "type": "BELONGS_TO"
+                })
+        
+        # 如果没有处理过的数据，从所有数据中取样本
+        if not nodes:
+            cursor = sqlite3.connect("master_state.db").cursor()
+            cursor.execute("""
+                SELECT id, source_text, current_status, assigned_event_type, notes
+                FROM master_state 
+                LIMIT 20
+            """)
+            
+            rows = cursor.fetchall()
+            conn.close()
+            
+            for i, row in enumerate(rows):
+                event_id, source_text, status, event_type, notes = row
+                
+                nodes.append({
+                    "id": event_id,
+                    "type": "Event",
+                    "name": f"Event_{event_id[:8]}",
+                    "level": "low",
+                    "summary": source_text[:100] + "..." if len(source_text) > 100 else source_text
+                })
+                
+                # 简单连接相邻事件
+                if i > 0:
+                    edges.append({
+                        "source": rows[i-1][0],
+                        "target": event_id,
+                        "type": "TEMPORAL_FOLLOWS"
+                    })
+        
+        return {"nodes": nodes, "edges": edges}
+        
+    except Exception as e:
+        print(f"Error fetching graph data: {e}")
+        # 返回默认的示例数据
+        return {
+            "nodes": [
+                {
+                    "id": "event_1",
+                    "type": "Event",
+                    "name": "科创板成立",
+                    "level": "high",
+                    "summary": "科创板正式开市，为科技创新企业提供融资平台"
+                },
+                {
+                    "id": "event_2", 
+                    "type": "Event",
+                    "name": "首批企业上市",
+                    "level": "mid",
+                    "summary": "首批25家科创板企业成功上市交易"
+                },
+                {
+                    "id": "category_1",
+                    "type": "EventCategory",
+                    "name": "市场事件",
+                    "level": "high"
+                }
+            ],
+            "edges": [
+                {
+                    "source": "event_1",
+                    "target": "event_2", 
+                    "type": "TRIGGERS"
+                },
+                {
+                    "source": "event_1",
+                    "target": "category_1",
+                    "type": "BELONGS_TO"
+                }
+            ]
+        }
+
 @app.post("/api/workflow/{workflow_name}/start")
 async def start_api_workflow(workflow_name: str, params: WorkflowParams = None, background_tasks: BackgroundTasks = None):
     """启动工作流 - API版本"""
@@ -772,6 +899,52 @@ async def reset_system():
         await manager.broadcast(f"❌ {error_msg}")
         raise HTTPException(status_code=500, detail=error_msg)
 
+
+@app.get("/api/graph-data")
+async def get_graph_data():
+    try:
+        db_manager = DatabaseManager()
+        
+        # 获取处理过的事件数据构建图谱
+        query = """
+        SELECT * FROM master_state 
+        WHERE status IN ('triaged', 'extracted', 'clustered', 'analyzed')
+        LIMIT 100
+        """
+        
+        cursor = db_manager.connection.execute(query)
+        events = cursor.fetchall()
+        columns = [description[0] for description in cursor.description]
+        
+        # 构建节点和边
+        nodes = []
+        edges = []
+        
+        for event in events:
+            event_dict = dict(zip(columns, event))
+            # 创建事件节点
+            nodes.append({
+                "id": event_dict["id"],
+                "type": "Event",
+                "name": f"Event_{event_dict['id'][:8]}",
+                "level": "mid"
+            })
+        
+        # 简单的边连接（可以后续增强）
+        for i in range(len(nodes)-1):
+            edges.append({
+                "source": nodes[i]["id"],
+                "target": nodes[i+1]["id"],
+                "type": "FOLLOWS"
+            })
+        
+        return {"nodes": nodes, "edges": edges}
+        
+    except Exception as e:
+        print(f"获取图谱数据错误: {e}")
+        return {"nodes": [], "edges": []}
+
+        
 if __name__ == "__main__":
     print(f"Starting HyperEventGraph API server...")
     print(f"Database path: {DB_PATH}")
