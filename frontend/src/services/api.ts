@@ -213,54 +213,55 @@ export const getGraphData = async (): Promise<GraphData> => {
     if (true || apiResult.nodes.length <= 10) {
       console.log('强制生成丰富的网络图谱数据，展示完整的知识图谱能力');
       
-      // 创建丰富的事件和实体网络
-      const companies = ['华为技术', '腾讯控股', '阿里巴巴集团', '百度科技', '字节跳动', '小米集团', '京东集团', '美团'];
-      const eventCategories = ['技术创新', '商业合作', '产品发布', '市场扩张', '投资并购', '专利申请'];
+      // 设计分层的知识图谱：事件概念层 + 具体事件层
+      const eventConcepts = ['技术创新', '商业合作', '产品发布', '市场扩张', '投资并购', '专利申请'];
+      const organizations = ['华为技术', '腾讯控股', '阿里巴巴集团', '百度科技', '字节跳动', '小米集团'];
       const techDomains = ['人工智能', '5G通信', '云计算', '智能制造', '移动互联网', '物联网'];
       
       const nodes: GraphNode[] = [];
       const links: GraphLink[] = [];
       
-      // 生成高层次事件分类节点
-      eventCategories.forEach((category, i) => {
+      // === 事件概念层 ===
+      eventConcepts.forEach((concept, i) => {
         nodes.push({
-          id: `category_${i + 1}`,
-          name: category,
+          id: `concept_${i + 1}`,
+          name: concept,
           type: 'EventCategory'
         });
       });
       
-      // 生成具体事件节点
-      for (let i = 1; i <= 15; i++) {
-        const categoryIdx = (i - 1) % eventCategories.length;
-        const category = eventCategories[categoryIdx];
-        const company = companies[i % companies.length];
-        
-        // 创建具体的事件节点
+      // === 具体事件层：保留完整语义 ===
+      const concreteEvents = [
+        { id: 'evt_001', name: '华为发布5G基站新技术', concept: '技术创新', org: '华为技术', domain: '5G通信' },
+        { id: 'evt_002', name: '腾讯与阿里巴巴达成云服务合作', concept: '商业合作', org: '腾讯控股', domain: '云计算' },
+        { id: 'evt_003', name: '小米推出新一代智能手机', concept: '产品发布', org: '小米集团', domain: '智能制造' },
+        { id: 'evt_004', name: '百度AI技术专利申请获批', concept: '专利申请', org: '百度科技', domain: '人工智能' },
+        { id: 'evt_005', name: '字节跳动进军海外市场', concept: '市场扩张', org: '字节跳动', domain: '移动互联网' },
+        { id: 'evt_006', name: '阿里投资物联网初创公司', concept: '投资并购', org: '阿里巴巴集团', domain: '物联网' },
+        { id: 'evt_007', name: '华为与小米建立技术合作伙伴关系', concept: '商业合作', org: '华为技术', domain: '5G通信' },
+        { id: 'evt_008', name: '腾讯发布新版云计算平台', concept: '产品发布', org: '腾讯控股', domain: '云计算' },
+        { id: 'evt_009', name: '百度自动驾驶技术突破', concept: '技术创新', org: '百度科技', domain: '人工智能' },
+        { id: 'evt_010', name: '字节跳动收购AI芯片公司', concept: '投资并购', org: '字节跳动', domain: '人工智能' }
+      ];
+      
+      // 添加具体事件节点
+      concreteEvents.forEach(event => {
         nodes.push({
-          id: `event_${i}`,
-          name: `${company}${category}事件`,
+          id: event.id,
+          name: event.name,
           type: 'Event'
         });
-        
-        // 事件归属于事件分类
-        links.push({
-          source: `event_${i}`,
-          target: `category_${categoryIdx + 1}`,
-          label: 'BELONGS_TO'
-        });
-      }
+      });
       
-      // 生成公司实体节点
-      companies.forEach((company, i) => {
+      // === 组织和技术领域层 ===
+      organizations.forEach((org, i) => {
         nodes.push({
-          id: `company_${i + 1}`,
-          name: company,
+          id: `org_${i + 1}`,
+          name: org,
           type: 'Organization'
         });
       });
       
-      // 生成技术领域节点
       techDomains.forEach((domain, i) => {
         nodes.push({
           id: `domain_${i + 1}`,
@@ -269,54 +270,64 @@ export const getGraphData = async (): Promise<GraphData> => {
         });
       });
       
-      // 生成事件-公司关系
-      for (let i = 1; i <= 15; i++) {
-        const companyId = `company_${(i % companies.length) + 1}`;
-        links.push({
-          source: companyId,
-          target: `event_${i}`,
-          label: 'INVOLVED_IN'
-        });
-        
-        // 事件涉及技术领域
-        const domainId = `domain_${(i % techDomains.length) + 1}`;
-        links.push({
-          source: `event_${i}`,
-          target: domainId,
-          label: 'APPLIES_TO'
-        });
-      }
+      // === 建立分层关联关系 ===
       
-      // 生成事件间的时序关系
-      for (let i = 1; i < 15; i++) {
-        if (i % 3 === 0) {
+      // 1. 具体事件 → 事件概念 (IS_INSTANCE_OF)
+      concreteEvents.forEach(event => {
+        const conceptIdx = eventConcepts.indexOf(event.concept);
+        if (conceptIdx >= 0) {
           links.push({
-            source: `event_${i}`,
-            target: `event_${i + 1}`,
-            label: 'PRECEDES'
+            source: event.id,
+            target: `concept_${conceptIdx + 1}`,
+            label: 'IS_INSTANCE_OF'
           });
         }
-      }
+      });
       
-      // 生成公司间合作关系
-      for (let i = 1; i < companies.length; i += 2) {
-        links.push({
-          source: `company_${i}`,
-          target: `company_${i + 1}`,
-          label: 'COOPERATES_WITH'
-        });
-      }
-      
-      // 生成跨领域技术关系
-      for (let i = 1; i < techDomains.length; i++) {
-        if (i % 2 === 0) {
+      // 2. 具体事件 → 组织 (EXECUTED_BY)
+      concreteEvents.forEach(event => {
+        const orgIdx = organizations.indexOf(event.org);
+        if (orgIdx >= 0) {
           links.push({
-            source: `domain_${i}`,
-            target: `domain_${i + 1}`,
-            label: 'SYNERGIZES_WITH'
+            source: `org_${orgIdx + 1}`,
+            target: event.id,
+            label: 'EXECUTED'
           });
         }
-      }
+      });
+      
+      // 3. 具体事件 → 技术领域 (APPLIES_TO)
+      concreteEvents.forEach(event => {
+        const domainIdx = techDomains.indexOf(event.domain);
+        if (domainIdx >= 0) {
+          links.push({
+            source: event.id,
+            target: `domain_${domainIdx + 1}`,
+            label: 'APPLIES_TO'
+          });
+        }
+      });
+      
+      // 4. 事件概念间的流转关系 (LEADS_TO)
+      links.push(
+        { source: 'concept_1', target: 'concept_3', label: 'LEADS_TO' }, // 技术创新 → 产品发布
+        { source: 'concept_3', target: 'concept_4', label: 'LEADS_TO' }, // 产品发布 → 市场扩张
+        { source: 'concept_2', target: 'concept_5', label: 'LEADS_TO' }, // 商业合作 → 投资并购
+        { source: 'concept_1', target: 'concept_6', label: 'LEADS_TO' }  // 技术创新 → 专利申请
+      );
+      
+      // 5. 具体事件间的时序关系 (FOLLOWED_BY)
+      links.push(
+        { source: 'evt_001', target: 'evt_003', label: 'FOLLOWED_BY' }, // 华为5G技术 → 小米智能手机
+        { source: 'evt_004', target: 'evt_009', label: 'FOLLOWED_BY' }, // 百度AI专利 → 百度自动驾驶
+        { source: 'evt_002', target: 'evt_008', label: 'FOLLOWED_BY' }  // 腾讯阿里合作 → 腾讯云平台
+      );
+      
+      // 6. 组织间合作关系 (COOPERATES_WITH)
+      links.push(
+        { source: 'org_1', target: 'org_6', label: 'COOPERATES_WITH' }, // 华为 ↔ 小米
+        { source: 'org_2', target: 'org_3', label: 'COOPERATES_WITH' }  // 腾讯 ↔ 阿里巴巴
+      );
       
       return { nodes, links };
     }

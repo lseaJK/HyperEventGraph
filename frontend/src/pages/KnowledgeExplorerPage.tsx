@@ -133,14 +133,18 @@ const KnowledgeGraph: React.FC = () => {
 
   const linkColor = (link: any) => {
     switch (link.label) {
-      case 'INVOLVED_IN': return '#ffd93d';
-      case 'BELONGS_TO': return '#a29bfe';
-      case 'APPLIES_TO': return '#fd79a8';
-      case 'PRECEDES': return '#6bcf7f';
-      case 'COOPERATES_WITH': return '#4d79ff';
-      case 'SYNERGIZES_WITH': return '#e17055';
-      case 'RELATED_TO': return '#ff9ff3';
-      default: return '#999';
+      case 'IS_INSTANCE_OF': return '#8e44ad';      // 紫色：实例归属关系
+      case 'EXECUTED': return '#3498db';            // 蓝色：执行关系
+      case 'APPLIES_TO': return '#e74c3c';          // 红色：应用关系
+      case 'LEADS_TO': return '#f39c12';            // 橙色：概念流转关系
+      case 'FOLLOWED_BY': return '#27ae60';         // 绿色：事件时序关系
+      case 'COOPERATES_WITH': return '#9b59b6';     // 深紫色：合作关系
+      case 'INVOLVED_IN': return '#ffd93d';         // 黄色：参与关系
+      case 'BELONGS_TO': return '#a29bfe';          // 浅紫色：归属关系
+      case 'PRECEDES': return '#6bcf7f';            // 浅绿色：前置关系
+      case 'SYNERGIZES_WITH': return '#e17055';     // 橙红色：协同关系
+      case 'RELATED_TO': return '#ff9ff3';          // 粉色：相关关系
+      default: return '#95a5a6';                    // 灰色：其他关系
     }
   };
 
