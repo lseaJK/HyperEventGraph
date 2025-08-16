@@ -137,7 +137,7 @@ export const runFullPipeline = async (params?: {
   concurrency?: number;
 }): Promise<any> => {
   try {
-    const response = await apiClient.post('/pipeline/run-full', params);
+    const response = await apiClient.post('/run-full-pipeline', params);
     return response.data;
   } catch (error) {
     console.error('执行完整流程失败:', error);
