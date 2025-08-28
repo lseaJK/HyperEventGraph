@@ -251,6 +251,7 @@ class WorkflowProcessManager:
             if workflow_name in self.workflow_threads:
                 del self.workflow_threads[workflow_name]
             if workflow_name in self.stop_flags:
+                del self.stop_flags[workflow_name]
 # WebSocket连接管理
 class ConnectionManager:
     def __init__(self):
@@ -512,39 +513,47 @@ async def get_api_workflows():
 
 @app.get("/api/events")
 async def get_events(page: int = 0, page_size: int = 10):
-    """获取事件数据 - 分页"""
+    """获取事件数据 - 分页 (已修复，查询正确的数据表)"""
+    conn = None
     try:
-        # 连接数据库获取事件数据
         import sqlite3
+        import json
         conn = sqlite3.connect("master_state.db")
+        conn.row_factory = sqlite3.Row  # 允许按列名访问数据
+
         cursor = conn.cursor()
-        
-        # 获取总数
-        cursor.execute("SELECT COUNT(*) FROM master_state")
-        total = cursor.fetchone()[0]
-        
-        # 分页查询
+
+        # 首先，从正确的目标表 event_data 中获取总行数
+        cursor.execute("SELECT COUNT(*) FROM event_data WHERE processed = 1")
+        total_count = cursor.fetchone()[0]
+
+        # 然后，获取分页后的详细数据
         offset = page * page_size
         cursor.execute("""
-            SELECT id, source_text, current_status, assigned_event_type, notes, last_updated
-            FROM master_state 
-            ORDER BY last_updated DESC 
+            SELECT id, event_type, trigger, entities, summary 
+            FROM event_data 
+            WHERE processed = 1
+            ORDER BY id DESC
             LIMIT ? OFFSET ?
         """, (page_size, offset))
         
         rows = cursor.fetchall()
-        conn.close()
         
-        # 格式化数据
+        # 将数据库行格式化为前端期望的JSON对象
         events = []
         for row in rows:
+            try:
+                # 'entities' 字段在数据库中是JSON字符串，需要解析成数组
+                entities_list = json.loads(row['entities']) if row['entities'] else []
+            except (json.JSONDecodeError, TypeError):
+                entities_list = []
+
             events.append({
-                "id": row[0],
-                "source_text": row[1][:200] + "..." if len(row[1]) > 200 else row[1],
-                "status": row[2],
-                "event_type": row[3],
-                "notes": row[4],
-                "last_updated": row[5]
+                "id": row['id'],
+                "event_type": row['event_type'],
+                "trigger": row['trigger'],
+                "involved_entities": entities_list,
+                "event_summary": row['summary'],
             })
         
         return {
@@ -552,75 +561,52 @@ async def get_events(page: int = 0, page_size: int = 10):
             "pagination": {
                 "page": page,
                 "page_size": page_size,
-                "total": total,
-                "pages": (total + page_size - 1) // page_size
+                "total": total_count,
+                "pages": (total_count + page_size - 1) // page_size
             }
         }
         
     except Exception as e:
-        print(f"Error fetching events: {e}")
+        print(f"获取事件数据时出错: {e}")
+        # 如果出错，返回一个结构完整的空响应
         return {
             "events": [],
-            "pagination": {
-                "page": page,
-                "page_size": page_size,
-                "total": 0,
-                "pages": 0
-            }
+            "pagination": { "page": page, "page_size": page_size, "total": 0, "pages": 0 }
         }
+    finally:
+        if conn:
+            conn.close()
 
 @app.get("/api/graph")
-async def get_graph():
-    """获取知识图谱数据"""
-    try:
-        # 这里应该从Neo4j获取数据，现在先返回模拟数据
-        nodes = [
-            {"id": "node1", "label": "华为", "type": "Company"},
-            {"id": "node2", "label": "专利发布", "type": "Event"},
-            {"id": "node3", "label": "昆山杜克大学", "type": "ResearchAgency"},
-        ]
-        
-        edges = [
-            {"source": "node1", "target": "node2", "relationship": "INVOLVED_IN"},
-            {"source": "node3", "target": "node2", "relationship": "INVOLVED_IN"},
-        ]
-        
-        return {
-            "nodes": nodes,
-            "edges": edges
-        }
-        
-    except Exception as e:
-        print(f"Error fetching graph: {e}")
-        return {
-            "nodes": [],
-            "edges": []
-        }
-
-@app.get("/api/graph-data")
 async def get_graph_data():
     """获取知识图谱数据 - 为前端提供标准化数据格式"""
+    nodes = []
+    edges = []
+    conn = None
     try:
-        # 连接数据库获取处理过的事件数据
         import sqlite3
         conn = sqlite3.connect("master_state.db")
         cursor = conn.cursor()
         
-        # 获取已处理的事件数据构建图谱
+        # 优先获取已处理的事件数据
         cursor.execute("""
             SELECT id, source_text, current_status, assigned_event_type, notes
             FROM master_state 
             WHERE current_status IN ('triaged', 'extracted', 'clustered', 'analyzed')
             LIMIT 50
         """)
-        
         rows = cursor.fetchall()
-        conn.close()
         
+        # 如果没有处理过的数据，则从所有数据中取样本作为备用
+        if not rows:
+            cursor.execute("""
+                SELECT id, source_text, current_status, assigned_event_type, notes
+                FROM master_state 
+                LIMIT 20
+            """)
+            rows = cursor.fetchall()
+
         # 构建节点和边
-        nodes = []
-        edges = []
-        
         for i, row in enumerate(rows):
             event_id, source_text, status, event_type, notes = row
             
@@ -629,7 +615,7 @@ async def get_graph_data():
                 "id": event_id,
                 "type": "Event",
                 "name": f"{event_type or 'Event'}_{event_id[:8]}",
-                "level": "mid",
+                "level": "mid" if status in ('triaged', 'extracted', 'clustered', 'analyzed') else "low",
                 "summary": source_text[:100] + "..." if len(source_text) > 100 else source_text
             })
             
@@ -648,81 +634,18 @@ async def get_graph_data():
                 edges.append({
                     "source": event_id,
                     "target": type_id,
-                    "type": "BELONGS_TO"
+                    "label": "BELONGS_TO"
                 })
         
-        # 如果没有处理过的数据，从所有数据中取样本
-        if not nodes:
-            cursor = sqlite3.connect("master_state.db").cursor()
-            cursor.execute("""
-                SELECT id, source_text, current_status, assigned_event_type, notes
-                FROM master_state 
-                LIMIT 20
-            """)
-            
-            rows = cursor.fetchall()
-            conn.close()
-            
-            for i, row in enumerate(rows):
-                event_id, source_text, status, event_type, notes = row
-                
-                nodes.append({
-                    "id": event_id,
-                    "type": "Event",
-                    "name": f"Event_{event_id[:8]}",
-                    "level": "low",
-                    "summary": source_text[:100] + "..." if len(source_text) > 100 else source_text
-                })
-                
-                # 简单连接相邻事件
-                if i > 0:
-                    edges.append({
-                        "source": rows[i-1][0],
-                        "target": event_id,
-                        "type": "TEMPORAL_FOLLOWS"
-                    })
-        
-        return {"nodes": nodes, "edges": edges}
+        return {"nodes": nodes, "links": edges}
         
     except Exception as e:
-        print(f"Error fetching graph data: {e}")
-        # 返回默认的示例数据
-        return {
-            "nodes": [
-                {
-                    "id": "event_1",
-                    "type": "Event",
-                    "name": "科创板成立",
-                    "level": "high",
-                    "summary": "科创板正式开市，为科技创新企业提供融资平台"
-                },
-                {
-                    "id": "event_2", 
-                    "type": "Event",
-                    "name": "首批企业上市",
-                    "level": "mid",
-                    "summary": "首批25家科创板企业成功上市交易"
-                },
-                {
-                    "id": "category_1",
-                    "type": "EventCategory",
-                    "name": "市场事件",
-                    "level": "high"
-                }
-            ],
-            "edges": [
-                {
-                    "source": "event_1",
-                    "target": "event_2", 
-                    "type": "TRIGGERS"
-                },
-                {
-                    "source": "event_1",
-                    "target": "category_1",
-                    "type": "BELONGS_TO"
-                }
-            ]
-        }
+        print(f"获取图谱数据时出错: {e}")
+        # 发生错误时返回空的图谱结构，避免前端崩溃
+        return {"nodes": [], "links": []}
+    finally:
+        if conn:
+            conn.close()
 
 @app.post("/api/workflow/{workflow_name}/start")
 async def start_api_workflow(workflow_name: str, params: WorkflowParams = None, background_tasks: BackgroundTasks = None):
@@ -972,49 +895,7 @@ async def reset_system():
         raise HTTPException(status_code=500, detail=error_msg)
 
 
-@app.get("/api/graph-data")
-async def get_graph_data():
-    try:
-        db_manager = DatabaseManager()
-        
-        # 获取处理过的事件数据构建图谱
-        query = """
-        SELECT * FROM master_state 
-        WHERE status IN ('triaged', 'extracted', 'clustered', 'analyzed')
-        LIMIT 100
-        """
-        
-        cursor = db_manager.connection.execute(query)
-        events = cursor.fetchall()
-        columns = [description[0] for description in cursor.description]
-        
-        # 构建节点和边
-        nodes = []
-        edges = []
-        
-        for event in events:
-            event_dict = dict(zip(columns, event))
-            # 创建事件节点
-            nodes.append({
-                "id": event_dict["id"],
-                "type": "Event",
-                "name": f"Event_{event_dict['id'][:8]}",
-                "level": "mid"
-            })
-        
-        # 简单的边连接（可以后续增强）
-        for i in range(len(nodes)-1):
-            edges.append({
-                "source": nodes[i]["id"],
-                "target": nodes[i+1]["id"],
-                "type": "FOLLOWS"
-            })
-        
-        return {"nodes": nodes, "edges": edges}
-        
-    except Exception as e:
-        print(f"获取图谱数据错误: {e}")
-        return {"nodes": [], "edges": []}
+
 
         
 if __name__ == "__main__":

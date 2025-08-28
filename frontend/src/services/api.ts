@@ -158,27 +158,26 @@ export const resetSystem = async (): Promise<any> => {
   }
 };
 
-export const getEvents = async (page: number, pageSize: number): Promise<{ events: EventData[], total: number }> => {
+export const getEvents = async (
+  page: number,
+  pageSize: number
+): Promise<{ rows: EventRowData[]; rowCount: number }> => {
   try {
     const response = await apiClient.get(`/events?page=${page}&page_size=${pageSize}`);
-    return response.data;
+    const data = response.data;
+
+    // 将后端返回的 { events: [], pagination: { total: ... } } 格式
+    // 转换为前端DataGrid期望的 { rows: [], rowCount: ... } 格式
+    return {
+      rows: data.events || [],
+      rowCount: data.pagination?.total || 0,
+    };
   } catch (error) {
     console.error('获取事件数据失败:', error);
-    // 返回模拟数据，避免界面崩溃
-    const mockEvents: EventData[] = Array.from({ length: pageSize }, (_, i) => ({
-      id: `evt_${(page - 1) * pageSize + i + 1}`,
-      event_type: ['合作签约', '产品发布', '技术突破'][i % 3],
-      trigger: ['签署协议', '推出产品', '研发成功'][i % 3],
-      involved_entities: [
-        { entity_name: `公司${String.fromCharCode(65 + (i % 10))}`, entity_type: 'Organization' },
-        { entity_name: `产品${i + 1}`, entity_type: 'Product' }
-      ],
-      event_summary: `公司${String.fromCharCode(65 + (i % 10))} 在 产品${i + 1} 方面取得了重要进展。`
-    }));
-    
+    // 在出错时返回一个清晰的空状态，而不是模拟数据
     return {
-      events: mockEvents,
-      total: 50 // 模拟总数
+      rows: [],
+      rowCount: 0,
     };
   }
 };

@@ -1,0 +1,72 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/27.0.9 Chrome/134.0.6998.205 Electron/35.4.0 Safari/537.36" version="27.0.9">
+  <diagram name="第 1 页" id="BjsocZMiWmZcgxLhUpYA">
+    <mxGraphModel dx="652" dy="457" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="KyE-rH_2OmcD8lsqL2EU-7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="KyE-rH_2OmcD8lsqL2EU-3" target="KyE-rH_2OmcD8lsqL2EU-5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="KyE-rH_2OmcD8lsqL2EU-3" value="&lt;span style=&quot;text-align: left;&quot;&gt;待处理原始文本&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;fontColor=#333333;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="100" y="20" width="110" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="KyE-rH_2OmcD8lsqL2EU-8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="KyE-rH_2OmcD8lsqL2EU-5" target="KyE-rH_2OmcD8lsqL2EU-6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="KyE-rH_2OmcD8lsqL2EU-5" value="&lt;span style=&quot;text-align: left;&quot;&gt;TriageAgent&lt;/span&gt;&lt;div&gt;&lt;span style=&quot;text-align: left;&quot;&gt;快速文本分诊，&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;span style=&quot;text-align: left;&quot;&gt;判断是否属于已知事件类型&lt;/span&gt;&lt;/div&gt;" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="55" y="84" width="200" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="KyE-rH_2OmcD8lsqL2EU-12" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="KyE-rH_2OmcD8lsqL2EU-6" target="KyE-rH_2OmcD8lsqL2EU-11">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="KyE-rH_2OmcD8lsqL2EU-14" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="KyE-rH_2OmcD8lsqL2EU-6" target="KyE-rH_2OmcD8lsqL2EU-13">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="KyE-rH_2OmcD8lsqL2EU-6" value="分诊结果&lt;div&gt;判定&lt;/div&gt;" style="rhombus;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="115" y="182" width="80" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="KyE-rH_2OmcD8lsqL2EU-11" value="&lt;span style=&quot;text-align: left;&quot;&gt;未知事件池&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="22" y="279" width="110" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="KyE-rH_2OmcD8lsqL2EU-26" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="KyE-rH_2OmcD8lsqL2EU-13" target="KyE-rH_2OmcD8lsqL2EU-15">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="KyE-rH_2OmcD8lsqL2EU-13" value="&lt;div style=&quot;text-align: left;&quot;&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;原始文本+事件类型&lt;/span&gt;&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="170" y="279" width="110" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="KyE-rH_2OmcD8lsqL2EU-15" value="&lt;span style=&quot;text-align: left;&quot;&gt;ExtractionAgent&lt;/span&gt;&lt;div&gt;&lt;span style=&quot;text-align: left;&quot;&gt;&lt;br&gt;&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;span style=&quot;text-align: left;&quot;&gt;&lt;br&gt;&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;span style=&quot;text-align: left;&quot;&gt;&lt;br&gt;&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;span style=&quot;text-align: left;&quot;&gt;&lt;br&gt;&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;span style=&quot;text-align: left;&quot;&gt;&lt;br&gt;&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;span style=&quot;text-align: left;&quot;&gt;&lt;br&gt;&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;span style=&quot;text-align: left;&quot;&gt;&lt;br&gt;&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;span style=&quot;text-align: left;&quot;&gt;&lt;br&gt;&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;span style=&quot;text-align: left;&quot;&gt;&lt;br&gt;&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;span style=&quot;text-align: left;&quot;&gt;&lt;br&gt;&lt;/span&gt;&lt;/div&gt;" style="shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="116" y="343.5" width="220" height="176" as="geometry" />
+        </mxCell>
+        <mxCell id="KyE-rH_2OmcD8lsqL2EU-18" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="KyE-rH_2OmcD8lsqL2EU-16">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="116" y="387.5" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="KyE-rH_2OmcD8lsqL2EU-16" value="事件类型&lt;div&gt;Schema库&lt;/div&gt;" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="10" y="347.5" width="60" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="KyE-rH_2OmcD8lsqL2EU-19" value="&lt;span style=&quot;text-align: left;&quot;&gt;加载对应事件类型的 Schema&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFF2CC;" vertex="1" parent="1">
+          <mxGeometry x="146" y="379" width="160" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="KyE-rH_2OmcD8lsqL2EU-22" value="&lt;span style=&quot;text-align: left;&quot;&gt;构建Prompt并调用LLM抽取&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFF2CC;" vertex="1" parent="1">
+          <mxGeometry x="146" y="412.5" width="160" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="KyE-rH_2OmcD8lsqL2EU-24" value="&lt;span style=&quot;text-align: left;&quot;&gt;验证抽取结果&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFF2CC;" vertex="1" parent="1">
+          <mxGeometry x="146" y="445.5" width="160" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="KyE-rH_2OmcD8lsqL2EU-25" value="&lt;span style=&quot;text-align: left;&quot;&gt;输出高质量结构化事件&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFF2CC;" vertex="1" parent="1">
+          <mxGeometry x="146" y="479" width="160" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="KyE-rH_2OmcD8lsqL2EU-27" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;entryPerimeter=0;exitX=0;exitY=0.75;exitDx=0;exitDy=0;" edge="1" parent="1" source="KyE-rH_2OmcD8lsqL2EU-15" target="KyE-rH_2OmcD8lsqL2EU-28">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="115" y="474" as="targetPoint" />
+            <mxPoint x="100" y="580" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="KyE-rH_2OmcD8lsqL2EU-28" value="结构化&lt;div&gt;事件&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;库&lt;/span&gt;&lt;/div&gt;" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="9" y="435" width="60" height="80" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

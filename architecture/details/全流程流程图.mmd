@@ -1,0 +1,26 @@
+flowchart TD
+    %% 前序智能体：分诊与抽取
+    A[原始文本输入] --> B[TriageAgent<br/><small>轻量级LLM分诊</small>]
+    B -->|已知事件| C[ExtractionAgent<br/><small>结构化抽取+实体标准化</small>]
+    B -->|未知事件| D[未知事件池<br/><small>状态：pending_learning</small>]
+    
+    %% 核心流程：上下文重建→关系分析
+    C --> E[master_state.db<br/><small>事件状态：pending_clustering</small>]
+    E --> F[Cortex引擎<br/><small>1.向量化→2.混合DBSCAN粗聚类→3.LLM精炼</small>]
+    F --> G[故事单元生成<br/><small>事件状态：pending_relationship_analysis</small>]
+    G --> H[RelationshipAnalysisAgent<br/><small>关系推理</small>]
+    H -->|请求上下文| I[HybridRetrieverAgent<br/><small>查询核心知识库</small>]
+    I -->|返回背景摘要| H
+    H --> J[StorageAgent<br/><small>存储关系结果</small>]
+    J --> K[核心知识库<br/><small>事件状态：processed</small>]
+    
+    %% 知识迭代闭环：模式学习
+    D -->|数量达阈值/手动触发| L[run_learning_workflow.py<br/><small>事件簇聚类+专家审核</small>]
+    L --> M[定义新事件Schema<br/><small>写入event_schemas.json</small>]
+    %% 反哺Triage和Extraction
+    M -->|同步Schema| B & C
+    M --> N[重新抽取原始未知文档<br/><small>用新Schema调用ExtractionAgent</small>]
+    N -->|成功| O[事件状态：pending_learning→processed]
+    N -->|失败| P[事件状态：pending_learning→pending_review]
+    %% 结果存入核心知识库
+    O & P --> K

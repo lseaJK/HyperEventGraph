@@ -104,3 +104,18 @@ class TriageAgent(autogen.AssistantAgent):
 - **LightweightLLMClient**: 轻量级LLM客户端。
 - **Config**: 全局配置模块。
 - **JSON Parser**: 用于解析LLM响应。
+
+
+```mermaid
+flowchart TD
+    A[输入待处理原始文本] --> B[TriageAgent<br/><small>轻量级LLM + classify_event_type工具<br/>核心原则：速度优先、成本敏感</small>]
+    B --> C{分诊结果判定}
+    C -->|结果1：未知事件| D[日志至.jsonl未知事件池<br/><small>复用jsonl_manager模块逻辑</small>]
+    C -->|结果2：已知事件| E[传递「原始文本+事件类型」结构化数据]
+    E --> F[ExtractionAgent<br/><small>强大LLM + extract_events_from_text工具<br/>核心原则：深度与精度优先</small>]
+    F --> G[步骤1：加载对应事件的JSON Schema]
+    G --> H[步骤2：构建Prompt并调用LLM抽取]
+    H --> I[步骤3：jsonschema验证抽取结果]
+    I --> J[步骤4：调用实体知识库标准化实体]
+    J --> K[输出高质量结构化事件JSON列表<br/><small>失败/无结果时返回空列表</small>]
+```
