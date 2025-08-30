@@ -14,6 +14,7 @@ HyperEventGraph 是一个智能事件图谱系统，包含三个核心组件：
 ```bash
 # 1. 导入测试数据
 python simple_import.py test_import_20.jsonl
+python simple_import.py output/extraction/structured_events_0813.jsonl
 
 # 2. 运行智能聚类
 python run_smart_clustering.py --mode company --max_story_size 15

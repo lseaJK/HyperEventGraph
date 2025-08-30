@@ -12,7 +12,7 @@ const getApiBaseURL = () => {
     port = '8080';
   }
   
-  const baseUrl = `${protocol}//${host}:${port}/api`;
+  const baseUrl = `${protocol}//${host}:${port}`;
   console.log('API Base URL:', baseUrl);
   return baseUrl;
 };
