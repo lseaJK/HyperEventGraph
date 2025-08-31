@@ -343,7 +343,7 @@ def run_smart_clustering_workflow(clustering_mode='company', max_story_size=20):
                 print(f"  ✅ 故事 {story['story_id']}: {story['event_count']} 个事件")
                 print(f"     摘要: {story['summary'][:80]}...")
 
-    # 5. Update database with story information
+    # 5. Update database with story information and generate report
     if not all_stories:
         print("\nNo stories were generated. No database updates to perform.")
     else:
@@ -351,26 +351,48 @@ def run_smart_clustering_workflow(clustering_mode='company', max_story_size=20):
         print(f"  总事件数: {len(events_to_cluster)}")
         print(f"  成功处理: {processed_events}")
         print(f"  生成故事: {len(all_stories)}")
-        print(f"  平均每故事事件数: {processed_events / len(all_stories):.1f}")
+        if len(all_stories) > 0:
+            print(f"  平均每故事事件数: {processed_events / len(all_stories):.1f}")
         
-        print("\nUpdating database...")
+        # Create report directory and file
+        report_dir = project_root / "output" / "clustering_reports"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        report_path = report_dir / f"clustering_report_{timestamp}.jsonl"
+        print(f"📝 Generating clustering report at: {report_path}")
+
+        print("\nUpdating database and writing report...")
         successful_updates = 0
         
-        for i, story in enumerate(all_stories):
-            story_id = story['story_id']
-            event_ids_in_story = story['event_ids']
-            
-            try:
-                db_manager.update_story_info(event_ids_in_story, story_id, 'pending_relationship_analysis')
-                successful_updates += 1
+        with open(report_path, 'a', encoding='utf-8') as f:
+            for i, story in enumerate(all_stories):
+                story_id = story['story_id']
+                event_ids_in_story = story['event_ids']
                 
-                if i % 20 == 0:  # 每20个故事显示一次进度
-                    print(f"  ✅ 已更新 {i+1}/{len(all_stories)} 个故事")
+                # Update database
+                try:
+                    db_manager.update_story_info(event_ids_in_story, story_id, 'pending_relationship_analysis')
+                    successful_updates += 1
                     
-            except Exception as e:
-                print(f"  ❌ 故事 {story_id} 更新失败: {e}")
+                    if i % 20 == 0:
+                        print(f"  ✅ 已更新 {i+1}/{len(all_stories)} 个故事")
+                        
+                    # Write to log file on successful update
+                    log_entry = {
+                        'story_id': story.get('story_id'),
+                        'group_name': story.get('group_name'),
+                        'summary': story.get('summary'),
+                        'event_count': story.get('event_count'),
+                        'event_ids': story.get('event_ids'),
+                        'timestamp': datetime.now().isoformat()
+                    }
+                    f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
+                    
+                except Exception as e:
+                    print(f"  ❌ 故事 {story_id} 更新失败: {e}")
         
-        print(f"\n✅ Database update完成: {successful_updates}/{len(all_stories)} 故事成功更新")
+        print(f"\n✅ Database update complete: {successful_updates}/{len(all_stories)} stories successfully updated.")
+        print(f"✅ Report generation complete.")
 
     print("\n--- Smart Clustering Workflow Finished ---")
 

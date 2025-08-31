@@ -51,6 +51,7 @@ python check_database_status.py
 # 方法A: 智能聚类 (推荐，A组件改进版)
 python run_smart_clustering.py --mode company --max_story_size 15
 python run_smart_clustering.py --mode theme --max_story_size 20
+python run_smart_clustering.py --mode hybrid --max_story_size 20
 
 # 方法B: Cortex简单聚类 (基于事件类型分组)
 # python run_cortex_workflow.py
