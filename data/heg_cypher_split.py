@@ -125,7 +125,21 @@ with open(input_file, 'r', encoding='utf-8') as f:
             row['event_date'] = props.get('event_date', '')
             row['description'] = props.get('description', '')
             row['text'] = props.get('text', '')
-            row['quantitative_data'] = props.get('quantitative_data', '')
+            # Convert quantitative_data to standard JSON format if possible
+            qd_raw = props.get('quantitative_data', '')
+            qd_json = ''
+            if qd_raw:
+                try:
+                    # Try direct JSON
+                    if qd_raw.startswith('{') or qd_raw.startswith('['):
+                        qd_json = json.dumps(json.loads(qd_raw), ensure_ascii=False)
+                    else:
+                        # Try to fix escaped quotes and parse
+                        qd_fixed = qd_raw.replace('\"', '"').replace('"', '"')
+                        qd_json = json.dumps(json.loads(qd_fixed), ensure_ascii=False)
+                except Exception:
+                    qd_json = qd_raw
+            row['quantitative_data'] = qd_json
             row['involved_entities'] = props.get('involved_entities', '')
             # 统一用parse_entities函数提取实体信息
             entities = parse_entities(row['involved_entities'])

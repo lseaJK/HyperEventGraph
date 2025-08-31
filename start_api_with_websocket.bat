@@ -34,10 +34,10 @@ if %ERRORLEVEL% neq 0 (
     )
 )
 
-echo 启动WebSocket兼容API服务，端口8080...
-echo API文档将在此访问: http://localhost:8080/docs
-echo WebSocket端点: ws://localhost:8080/ws/1
+echo 启动WebSocket兼容API服务，端口8081...
+echo API文档将在此访问: http://localhost:8081/docs
+echo WebSocket端点: ws://localhost:8081/ws/1
 
-python start_simple_api.py --port=8080
+python start_simple_api.py --port=8081
 
 pause

@@ -11,21 +11,26 @@ import uuid
 import asyncio
 from pathlib import Path
 import sys
+from dotenv import load_dotenv
 
 # Add project root to sys.path
 project_root = Path(__file__).resolve().parent
 sys.path.insert(0, str(project_root))
 
+# Load environment variables from .env file
+load_dotenv()
+
 from src.core.config_loader import load_config, get_config
 from src.core.database_manager import DatabaseManager
 
-def direct_llm_call(prompt, model="deepseek-ai/DeepSeek-V2.5"):
+def direct_llm_call(prompt, model="alibaba/omni-l-152b-v1"):
     """直接调用API，绕过项目的LLMClient"""
-    api_key = os.getenv('SILICONFLOW_API_KEY')
+    api_key = os.getenv('SILICON_API_KEY')
     if not api_key:
-        raise ValueError("需要SILICONFLOW_API_KEY环境变量")
+        raise ValueError("需要SILICON_API_KEY环境变量")
     
-    url = "https://api.siliconflow.cn/v1/chat/completions"
+    # Switched back to SiliconFlow as requested.
+    url = "https://api.siliconflow.cn/v1/chat/completions" 
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"

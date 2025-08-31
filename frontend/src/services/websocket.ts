@@ -9,7 +9,7 @@ const getWebSocketURL = () => {
   // 否则使用当前页面的端口（适配服务器端口映射）
   let port = window.location.port;
   if (host === 'localhost' || host === '127.0.0.1') {
-    port = '8080';
+    port = '8081';
   }
   
   const wsUrl = `${protocol}//${host}:${port}/ws/1`;

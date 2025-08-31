@@ -97,7 +97,7 @@ storage:
     user: "neo4j"
     password: "neo123456" # IMPORTANT: Please change this to your actual Neo4j password.
   chroma:
-    path: "./chroma_db"
+    path: "./data/chroma_db"
 
 # --- Relationship Analysis Workflow Configuration ---
 relationship_analysis:

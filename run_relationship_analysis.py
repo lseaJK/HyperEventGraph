@@ -46,9 +46,36 @@ def group_events_by_story(events):
     print(f"分组完成，共发现 {len(stories)} 个独立的故事单元。")
     return stories
 
+def enrich_events_with_neo4j_id(events: list) -> list:
+    """
+    解析每个事件的structured_data字段以提取Neo4j的eventId。
+    """
+    print("丰富事件数据，从structured_data中提取Neo4j eventId...")
+    enriched_events = []
+    for event in events:
+        structured_data_str = event.get('structured_data')
+        if structured_data_str:
+            try:
+                structured_data = json.loads(structured_data_str)
+                # 假设eventId存储在顶层
+                event['eventId'] = structured_data.get('event_id')
+            except (json.JSONDecodeError, TypeError):
+                event['eventId'] = None
+        else:
+            event['eventId'] = None
+        enriched_events.append(event)
+    
+    # 打印一些样本以供验证
+    found_ids = sum(1 for e in enriched_events if e.get('eventId'))
+    print(f"丰富完成。在 {len(enriched_events)} 个事件中，有 {found_ids} 个成功提取了Neo4j eventId。")
+    if len(enriched_events) > 0 and found_ids == 0:
+        print("警告：未能从任何事件的structured_data中提取出eventId。关系文件可能仍然无法关联到知识图谱。")
+    
+    return enriched_events
+
 async def run_relationship_analysis_workflow():
     """工作流主函数"""
-    print("--- 开始关系分析与知识存储工作流 (V4 - 知识闭环版) ---")
+    print("--- 开始关系分析与知识存储工作流 (V4.1 - 修复数据留痕) ---")
 
     # --- 1. 加载配置和Agents ---
     # Load configuration first
@@ -105,6 +132,9 @@ async def run_relationship_analysis_workflow():
 
     print(f"发现 {len(events_to_process)} 个新事件需要进行关系分析。")
 
+    # [修复] 丰富事件数据，加入Neo4j eventId
+    events_to_process = enrich_events_with_neo4j_id(events_to_process)
+
     story_groups = group_events_by_story(events_to_process)
     total_groups = len(story_groups)
 
@@ -125,13 +155,22 @@ async def run_relationship_analysis_workflow():
         # 2.2. Pass the context summary into the relationship analysis
         raw_outputs, relationships = await analysis_agent.analyze_relationships(events_in_story, source_context, context_summary)
         
-        # 2.3. [新增] 将原始输出写入日志文件
+        # 2.3. [修复] 将原始输出和可追溯的ID写入日志文件
         raw_output_file = config.get('relationship_analysis', {}).get('raw_output_file')
         if raw_output_file and raw_outputs is not None:
+            # [修复] 创建更详细的事件ID列表，用于留痕
+            event_details = [
+                {
+                    "master_id": e.get('id'),       # SQLite主键
+                    "neo4j_event_id": e.get('eventId') # Neo4j ID
+                }
+                for e in events_in_story
+            ]
+            
             log_entry = {
                 "story_id": story_id,
                 "timestamp": datetime.now().isoformat(),
-                "event_ids_in_story": [e['id'] for e in events_in_story],
+                "event_details": event_details, # [修复] 使用新的详细列表
                 "llm_raw_output": raw_outputs,
                 "parsed_relationships": relationships
             }
@@ -151,7 +190,8 @@ async def run_relationship_analysis_workflow():
             if event_id in processed_event_ids:
                 continue
             try:
-                storage_agent.store_event(event_id, event)
+                # [修复] 传递完整的event对象，而不是id
+                storage_agent.store_event(event.get('eventId', event_id), event)
                 # We still log after the node is stored. If relationship storage fails,
                 # the node won't be re-processed, but relationships can be re-inferred.
                 log_processed_event(event_id, log_file)
