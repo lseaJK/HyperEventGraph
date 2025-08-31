@@ -76,6 +76,27 @@ class StorageAgent:
             self._neo4j_driver.close()
             print("Neo4j connection closed.")
 
+    def clear_neo4j_database(self):
+        """
+        Deletes all nodes and relationships from the Neo4j database.
+        """
+        print("--- Clearing all data from Neo4j database ---")
+        try:
+            with self._neo4j_driver.session() as session:
+                session.execute_write(self._clear_database_tx)
+            print("  (Neo4j) Successfully cleared the database.")
+        except Exception as e:
+            print(f"  (Neo4j) Error clearing the database: {e}")
+            raise
+
+    @staticmethod
+    def _clear_database_tx(tx):
+        """
+        A transaction to delete all nodes and relationships.
+        """
+        query = "MATCH (n) DETACH DELETE n"
+        tx.run(query)
+
     def store_event(self, event_id: str, event_data: Dict[str, Any]):
         """
         Stores a single event and its entities in Neo4j and ChromaDB.
