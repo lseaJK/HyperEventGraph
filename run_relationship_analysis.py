@@ -144,7 +144,7 @@ async def run_relationship_analysis_workflow():
         if story_id == 'unassigned':
             print("警告：该组事件没有分配故事ID，将独立处理。")
         
-        source_context = " ".join(list(set([e.get('text', '') for e in events_in_story])))
+        source_context = " ".join(list(set([e.get('source_text', '') for e in events_in_story])))
         
         # 2.1. Use the Hybrid Retriever to get a context summary
         print("Retrieving relevant context...")

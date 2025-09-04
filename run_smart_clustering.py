@@ -238,7 +238,7 @@ def process_cluster_with_refinement(group_name: str, events: List[Dict], max_sto
         print(f"  📦 {group_name} 事件过多({len(events)})，进行细分...")
         
         # 按时间排序
-        sorted_events = sorted(events, key=lambda x: x.get('last_updated', ''), reverse=True)
+        sorted_events = sorted(events, key=lambda x: x.get('last_updated') or '', reverse=True)
         
         # 分批处理
         for i in range(0, len(sorted_events), max_story_size):

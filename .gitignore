@@ -65,3 +65,9 @@ report/*
 # Task files
 # tasks.json
 # tasks/ 
+
+./data
+data/*
+
+
+chroma_db.tar.gz
