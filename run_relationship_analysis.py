@@ -190,8 +190,18 @@ async def run_relationship_analysis_workflow():
             if event_id in processed_event_ids:
                 continue
             try:
-                # [修复] 传递完整的event对象，而不是id
-                storage_agent.store_event(event.get('eventId', event_id), event)
+                # [修复] 确保我们总有一个有效的ID来存储
+                neo4j_event_id = event.get('eventId')
+                master_id = event.get('id')
+                
+                # 优先使用Neo4j ID，如果不存在，则必须使用主数据库ID作为备用
+                id_to_store = neo4j_event_id if neo4j_event_id is not None else master_id
+                
+                if id_to_store is None:
+                    print(f"严重错误：事件缺少 'eventId' 和 'id'，无法存储。跳过。事件数据: {event}")
+                    continue
+
+                storage_agent.store_event(id_to_store, event)
                 # We still log after the node is stored. If relationship storage fails,
                 # the node won't be re-processed, but relationships can be re-inferred.
                 log_processed_event(event_id, log_file)
