@@ -28,12 +28,14 @@ def repair_missing_event_ids():
         
         storage_config = config.get('storage', {})
         neo4j_config = storage_config.get('neo4j', {})
+        chroma_config = storage_config.get('chroma', {})
         
         # 初始化 StorageAgent 以便访问 Neo4j
         storage_agent = StorageAgent(
             neo4j_uri=neo4j_config.get('uri'),
             neo4j_user=neo4j_config.get('user'),
-            neo4j_password=neo4j_config.get('password')
+            neo4j_password=neo4j_config.get('password'),
+            chroma_db_path=chroma_config.get('path')
         )
         print("成功连接到 SQLite 和 Neo4j 数据库。")
     except Exception as e:
@@ -97,7 +99,7 @@ def repair_missing_event_ids():
                     new_structured_data_str = json.dumps(structured_data, ensure_ascii=False)
                     
                     # 更新主数据库
-                    db_manager.update_structured_data(master_id, new_structured_data_str)
+                    db_manager.update_single_field(master_id, 'structured_data', new_structured_data_str)
                     successful_repairs += 1
                     pbar.set_postfix_str(f"成功 (ID: {master_id[:8]}...)")
                 else:

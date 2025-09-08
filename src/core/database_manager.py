@@ -247,6 +247,37 @@ class DatabaseManager:
         except sqlite3.Error as e:
             print(f"Error bulk updating status for records: {e}")
 
+    def update_single_field(self, record_id: str, field_name: str, new_value: Any):
+        """
+        Updates a single field for a specific record.
+        WARNING: This method uses string formatting to build the query, so the
+        `field_name` should NEVER come from user input to avoid SQL injection.
+        It is safe here because we control the field names internally.
+        """
+        # Basic validation for field_name to ensure it's a valid column name
+        # This is a simple safeguard against accidental SQL injection.
+        cursor = self._get_connection().cursor()
+        cursor.execute("PRAGMA table_info(master_state)")
+        valid_columns = {info[1] for info in cursor.fetchall()}
+        if field_name not in valid_columns:
+            print(f"Error: Column '{field_name}' does not exist in the master_state table.")
+            return
+
+        query = f"""
+            UPDATE master_state
+            SET {field_name} = ?, last_updated = ?
+            WHERE id = ?
+        """
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, (new_value, datetime.now().isoformat(), record_id))
+                conn.commit()
+                if cursor.rowcount == 0:
+                    print(f"Warning: No record found with ID '{record_id}' to update field '{field_name}'.")
+        except sqlite3.Error as e:
+            print(f"Error updating field '{field_name}' for record '{record_id}': {e}")
+
 # It can also be useful to have a standalone function for one-off initialization
 def initialize_database(db_path: str | Path):
     """
