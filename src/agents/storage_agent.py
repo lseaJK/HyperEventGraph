@@ -303,6 +303,51 @@ class StorageAgent:
         except Exception as e:
             print(f"  (ChromaDB) Error storing vectors for event {event_id}: {e}")
 
+    def find_event_id_by_description(self, description: str) -> str | None:
+        """
+        Finds an eventId in Neo4j by its exact description.
+        Returns the eventId if a unique match is found, otherwise None.
+        """
+        if not description:
+            return None
+        
+        try:
+            with self._neo4j_driver.session() as session:
+                result = session.execute_read(self._find_event_by_desc_tx, description)
+                return result
+        except Exception as e:
+            print(f"Error finding event by description in Neo4j: {e}")
+            return None
+
+    @staticmethod
+    def _find_event_by_desc_tx(tx, description: str):
+        """
+        Transaction to find an event by its description property.
+        """
+        # We look for the 'description' property inside the JSON-stringified 'structured_data'
+        # This is based on how the data was originally stored.
+        # A more robust way would be to have 'description' as a direct property.
+        # For now, we adapt to the existing structure.
+        
+        query = """
+        MATCH (e:Event)
+        WHERE e.description = $description
+        RETURN e.eventId AS eventId
+        LIMIT 2 
+        """
+        
+        records = tx.run(query, description=description).data()
+        
+        if len(records) == 1:
+            return records[0]['eventId']
+        elif len(records) > 1:
+            # If more than one event has the same description, we can't be sure which is correct.
+            print(f"Warning: Found multiple events with the same description. Cannot reliably determine event ID for: '{description[:50]}...'")
+            return None
+        else:
+            # No event found
+            return None
+
 if __name__ == '__main__':
     # Example usage for testing
     print("Testing StorageAgent initialization...")

@@ -1,108 +1,128 @@
-import sqlite3
+
 import json
+import sys
 from pathlib import Path
-import uuid
+from tqdm import tqdm
 
-# Define the path to the database based on the script's location
-DB_PATH = Path(__file__).resolve().parent / "master_state.db"
+# Add project root to sys.path
+project_root = Path(__file__).resolve().parent
+sys.path.insert(0, str(project_root))
 
-def repair_event_data_final():
+from src.core.config_loader import load_config, get_config
+from src.core.database_manager import DatabaseManager
+from src.agents.storage_agent import StorageAgent
+
+def repair_missing_event_ids():
     """
-    Reads 'completed' items from master_state using the CORRECT schema,
-    and creates the corresponding entries in the event_data table.
-    This is the definitive repair script based on the diagnosed schema.
+    修复主数据库中缺少 Neo4j event_id 的事件。
     """
-    print(f"Connecting to database: {DB_PATH.resolve()}")
-    conn = None
+    print("--- 缺失 Event ID 修复工具 ---")
+
+    # --- 1. 加载配置和初始化 ---
     try:
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
-        print("Searching for completed items missing from event_data...")
-        # The query now uses the correct column 'structured_data'
-        cursor.execute("""
-            SELECT
-                ms.id,
-                ms.source_text,
-                ms.assigned_event_type,
-                ms.structured_data,
-                ms.involved_entities
-            FROM
-                master_state ms
-            LEFT JOIN
-                event_data ed ON ms.id = ed.source_id
-            WHERE
-                (ms.current_status = 'completed' OR ms.current_status = 'extraction_completed')
-                AND ed.id IS NULL
-        """)
+        config_path = project_root / "config.yaml"
+        load_config(config_path)
+        config = get_config()
         
-        items_to_process = cursor.fetchall()
+        db_manager = DatabaseManager(config.get('database', {}).get('path'))
         
-        if not items_to_process:
-            print("No completed items are missing from the event_data table. The database is consistent.")
-            return
-
-        print(f"Found {len(items_to_process)} completed items to repair.")
+        storage_config = config.get('storage', {})
+        neo4j_config = storage_config.get('neo4j', {})
         
-        processed_count = 0
-        for item in items_to_process:
-            try:
-                # Use a deterministic UUID to prevent duplicates if the script is run more than once
-                event_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, item['id']))
-                
-                event_type = item['assigned_event_type'] or "General Event"
-                summary = item['source_text'][:300] # Default summary
-                
-                entities = []
-                trigger = "N/A"
-                
-                # Try to parse the 'structured_data' column for detailed information
-                if item['structured_data']:
-                    try:
-                        data = json.loads(item['structured_data'])
-                        summary = data.get('event_summary', data.get('summary', summary))
-                        trigger = data.get('trigger', data.get('event_trigger', "N/A"))
-                        entities = data.get('entities', data.get('involved_entities', []))
-                    except (json.JSONDecodeError, TypeError):
-                        print(f"  - Warning: Could not parse 'structured_data' for item {item['id']}. Using defaults.")
-                
-                # If 'entities' is empty, try parsing the 'involved_entities' column as a fallback
-                if not entities and item['involved_entities']:
-                     try:
-                        entities = json.loads(item['involved_entities'])
-                     except (json.JSONDecodeError, TypeError):
-                        print(f"  - Warning: Could not parse 'involved_entities' for item {item['id']}.")
-
-
-                # Insert the repaired, structured data into event_data
-                cursor.execute("""
-                    INSERT INTO event_data (id, event_type, trigger, entities, summary, source_id, processed)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    event_id,
-                    event_type,
-                    trigger,
-                    json.dumps(entities), # Ensure entities are stored as a valid JSON string
-                    summary,
-                    item['id'],
-                    1 # Mark as processed and ready for the API
-                ))
-                processed_count += 1
-            except sqlite3.IntegrityError:
-                print(f"  - Info: Item {item['id']} already has a corresponding event. Skipping.")
-            except Exception as e:
-                print(f"  - Error: An unexpected error occurred while processing item {item['id']}: {e}")
-
-        conn.commit()
-        print(f"\nSuccessfully repaired and inserted {processed_count} records into the event_data table.")
-
+        # 初始化 StorageAgent 以便访问 Neo4j
+        storage_agent = StorageAgent(
+            neo4j_uri=neo4j_config.get('uri'),
+            neo4j_user=neo4j_config.get('user'),
+            neo4j_password=neo4j_config.get('password')
+        )
+        print("成功连接到 SQLite 和 Neo4j 数据库。")
     except Exception as e:
-        print(f"An error occurred during the database operation: {e}")
-    finally:
-        if conn:
-            conn.close()
-        print("Repair script finished.")
+        print(f"初始化数据库连接时发生严重错误: {e}")
+        return
+
+    # --- 2. 查找需要修复的事件 ---
+    print("正在从主数据库中查找所有缺少 event_id 的待处理事件...")
+    events_to_fix_df = db_manager.get_records_by_status_as_df('pending_relationship_analysis')
+    
+    if events_to_fix_df.empty:
+        print("没有找到状态为 'pending_relationship_analysis' 的事件。无需修复。")
+        storage_agent.close()
+        return
+
+    events_to_fix = []
+    for _, row in events_to_fix_df.iterrows():
+        event = row.to_dict()
+        structured_data_str = event.get('structured_data', '{}')
+        try:
+            structured_data = json.loads(structured_data_str)
+            if 'event_id' not in structured_data or not structured_data.get('event_id'):
+                events_to_fix.append(event)
+        except (json.JSONDecodeError, TypeError):
+            # 如果JSON解析失败，也视为需要修复
+            events_to_fix.append(event)
+            
+    if not events_to_fix:
+        print("所有待处理的事件都已包含 event_id。无需修复。")
+        storage_agent.close()
+        return
+
+    print(f"发现 {len(events_to_fix)} 个事件需要修复 event_id。")
+
+    # --- 3. 逐个修复事件 ---
+    successful_repairs = 0
+    failed_repairs = 0
+    
+    print("开始修复流程...")
+    with tqdm(total=len(events_to_fix), desc="修复进度") as pbar:
+        for event in events_to_fix:
+            master_id = event['id']
+            structured_data_str = event.get('structured_data', '{}')
+            
+            try:
+                structured_data = json.loads(structured_data_str)
+                description = structured_data.get('description')
+
+                if not description:
+                    pbar.set_postfix_str(f"失败 (ID: {master_id[:8]}...): 缺少description无法匹配")
+                    failed_repairs += 1
+                    pbar.update(1)
+                    continue
+
+                # 在 Neo4j 中通过 description 查找 event_id
+                neo4j_event_id = storage_agent.find_event_id_by_description(description)
+
+                if neo4j_event_id:
+                    # 找到了，更新 structured_data
+                    structured_data['event_id'] = neo4j_event_id
+                    new_structured_data_str = json.dumps(structured_data, ensure_ascii=False)
+                    
+                    # 更新主数据库
+                    db_manager.update_structured_data(master_id, new_structured_data_str)
+                    successful_repairs += 1
+                    pbar.set_postfix_str(f"成功 (ID: {master_id[:8]}...)")
+                else:
+                    # 在 Neo4j 中没找到
+                    pbar.set_postfix_str(f"失败 (ID: {master_id[:8]}...): Neo4j中未找到匹配项")
+                    failed_repairs += 1
+
+            except (json.JSONDecodeError, TypeError):
+                pbar.set_postfix_str(f"失败 (ID: {master_id[:8]}...): JSON解析错误")
+                failed_repairs += 1
+            except Exception as e:
+                pbar.set_postfix_str(f"失败 (ID: {master_id[:8]}...): 意外错误 {e}")
+                failed_repairs += 1
+            
+            pbar.update(1)
+
+    # --- 4. 总结报告 ---
+    print("\n--- 修复完成 ---")
+    print(f"成功修复: {successful_repairs} 个事件")
+    print(f"失败修复: {failed_repairs} 个事件")
+    if failed_repairs > 0:
+        print("修复失败的事件可能是因为它们的'description'在Neo4j中不是唯一的，或者对应的节点根本不存在。")
+        print("您可以重新运行事件抽取工作流来处理这些失败的事件。")
+
+    storage_agent.close()
 
 if __name__ == "__main__":
-    repair_event_data_final()
+    repair_missing_event_ids()

@@ -16,7 +16,7 @@ database:
 llm:
   providers:
     siliconflow:
-      base_url: "https://api.siliconflow.cn/v1"
+      base_url: "https://api.siliconflow.cn/v1/"
       # API key is read from the SILICON_API_KEY environment variable.
 
   models:
