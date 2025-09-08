@@ -10,6 +10,7 @@ import sqlite3
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
+from typing import Any
 
 class DatabaseManager:
     """A class to manage all database operations."""

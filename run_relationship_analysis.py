@@ -83,6 +83,9 @@ async def run_relationship_analysis_workflow():
     load_config(config_path)
     config = get_config()
     
+    # Get the chunk_size to use as the maximum story size limit
+    analysis_chunk_size = config.get('relationship_analysis', {}).get('chunk_size', 100)
+    
     db_manager = DatabaseManager(config.get('database', {}).get('path'))
     llm_client = LLMClient()
     
@@ -99,7 +102,6 @@ async def run_relationship_analysis_workflow():
             chroma_db_path=chroma_config.get('path')
         )
         
-        analysis_chunk_size = config.get('relationship_analysis', {}).get('chunk_size', 100)
         analysis_agent = RelationshipAnalysisAgent(llm_client, "relationship_analysis", chunk_size=analysis_chunk_size)
         # 正确注入依赖
         retriever_agent = HybridRetrieverAgent(storage_agent)
@@ -141,6 +143,20 @@ async def run_relationship_analysis_workflow():
     for i, (story_id, events_in_story) in enumerate(story_groups.items()):
         print(f"\n--- 正在处理故事 {i+1}/{total_groups}: {story_id} ---")
         
+        # Story Size Sanity Checks
+        if len(events_in_story) < 2:
+            print(f"故事 '{story_id}' 只包含 {len(events_in_story)} 个事件，无法进行关系分析。跳过。")
+            for event in events_in_story:
+                db_manager.update_status_and_schema(event['id'], "completed_no_relations", "", "Skipped: single-event story.")
+            continue
+        
+        if len(events_in_story) > analysis_chunk_size:
+            print(f"警告: 故事 '{story_id}' 包含 {len(events_in_story)} 个事件，超过了设定的最大处理上限 {analysis_chunk_size}。")
+            print("将跳过此故事以防止潜在的性能问题或API错误。")
+            for event in events_in_story:
+                db_manager.update_status_and_schema(event['id'], "deferred_too_large", "", f"Skipped: story size ({len(events_in_story)}) exceeds limit ({analysis_chunk_size}).")
+            continue
+
         if story_id == 'unassigned':
             print("警告：该组事件没有分配故事ID，将独立处理。")
         

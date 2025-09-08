@@ -27,7 +27,7 @@ class RelationshipAnalysisAgent:
         events_in_story: List[Dict[str, Any]], 
         source_context: str, 
         retrieved_context: str
-    ) -> Tuple[str, List[Dict[str, Any]] | None]:
+    ) -> Tuple[str, str, List[Dict[str, Any]] | None]:
         """
         Analyzes relationships between events in a story, enhanced with retrieved context.
 
@@ -37,10 +37,10 @@ class RelationshipAnalysisAgent:
             retrieved_context: The context summary retrieved from the knowledge base.
 
         Returns:
-            A tuple containing the raw LLM response and the parsed list of relationship dictionaries.
+            A tuple containing the prompt, the raw LLM response, and the parsed list of relationship dictionaries.
         """
         if not events_in_story:
-            return "", []
+            return "", "", []
 
         # Prepare the event block for the prompt
         event_block = ""
@@ -80,7 +80,7 @@ class RelationshipAnalysisAgent:
 
             if not raw_response:
                 print("Warning: LLM returned an empty response for relationship analysis.")
-                return "", None
+                return prompt, "", None
 
             # Use the client's robust JSON parsing for the response
             parsed_json = await self.llm_client.get_json_response(
@@ -89,13 +89,13 @@ class RelationshipAnalysisAgent:
             )
 
             if isinstance(parsed_json, list):
-                return raw_response, parsed_json
+                return prompt, raw_response, parsed_json
             else:
                 print(f"Warning: Failed to parse relationships into a list. Parsed data: {parsed_json}")
-                return raw_response, None
+                return prompt, raw_response, None
 
         except Exception as e:
             print(f"An error occurred during relationship analysis: {e}")
             import traceback
             traceback.print_exc()
-            return str(e), None
+            return prompt, str(e), None
